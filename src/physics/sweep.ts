@@ -159,16 +159,21 @@ export function sweepVsArc(
 ): boolean {
   let best = Infinity;
   let bnx = 0, bny = 0;
+  const startRadius = Math.hypot(px - cx, py - cy);
 
-  // Outer wall.
-  if (sweepVsDisc(px, py, vx, vy, R, cx, cy, r + w, dtMax, tmp)) {
+  // An arc is an annular stroke, not a filled disc. Testing its outer boundary
+  // while the ball is on the inner side can report a false t=0 collision from
+  // anywhere inside the outer radius. Concentric arcs then return opposing
+  // normals until the solver exhausts its iteration budget without advancing.
+  if (startRadius >= r && sweepVsDisc(px, py, vx, vy, R, cx, cy, r + w, dtMax, tmp)) {
     const hx = px + vx * tmp.t - cx, hy = py + vy * tmp.t - cy;
     if (angleInArc(Math.atan2(hy, hx), a0, a1) && tmp.t < best) {
       best = tmp.t; bnx = tmp.nx; bny = tmp.ny;
     }
   }
   // Inner wall (only exists if the arc has a hole big enough for the ball).
-  if (r - w - R > EPS && sweepVsRing(px, py, vx, vy, R, cx, cy, r - w, dtMax, tmp)) {
+  if (startRadius < r && r - w - R > EPS
+      && sweepVsRing(px, py, vx, vy, R, cx, cy, r - w, dtMax, tmp)) {
     const hx = px + vx * tmp.t - cx, hy = py + vy * tmp.t - cy;
     if (angleInArc(Math.atan2(hy, hx), a0, a1) && tmp.t < best) {
       best = tmp.t; bnx = tmp.nx; bny = tmp.ny;

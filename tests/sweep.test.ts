@@ -122,6 +122,18 @@ describe('swept circle vs arc', () => {
     expect(o.ny).toBeCloseTo(-1, 10);
   });
 
+  it('does not treat the hollow side as part of the outer wall', () => {
+    const o = out();
+    const a = Math.PI * 0.75;
+    const ux = Math.cos(a), uy = Math.sin(a);
+    // The ball is well inside the annular stroke and moving farther inward.
+    // A filled-disc outer test reports a false t=0 hit here.
+    expect(sweepVsArc(
+      ux * 5, uy * 5, -ux * 10, -uy * 10,
+      1, 0, 0, 10, 0, HALF, 1, true, 1, o,
+    )).toBe(false);
+  });
+
   it('catches the rounded end cap of the arc', () => {
     const o = out();
     // End cap sits at (10, 0) with radius 1; ball r=1 approaching along -x from x=20.

@@ -3,6 +3,8 @@ import { World } from '../src/physics/world';
 import { makeBall, resetBallIds } from '../src/physics/ball';
 import { polyline, segment, MATERIALS, resetColliderIds } from '../src/physics/colliders';
 import { makeRng } from '../src/core/rng';
+import { buildTable } from '../src/game/table/schema';
+import { AURORA } from '../src/game/table/tables/aurora';
 
 const W = 1024, H = 1408;
 
@@ -100,5 +102,56 @@ describe('determinism', () => {
 
   it('diverges for a different seed', () => {
     expect(run(1234).hash).not.toBe(run(9999).hash);
+  });
+});
+
+describe('Aurora orbit corner', () => {
+  it('does not starve the solver between the concentric upper-left arcs', () => {
+    resetColliderIds();
+    resetBallIds();
+    const table = buildTable(AURORA);
+    const world = new World({ width: AURORA.width, height: AURORA.height }, makeRng(0x5eed));
+    world.add(table.colliders);
+    world.reindex();
+
+    // Reproduced shot that used to alternate between the outer cabinet arc and
+    // the inner orbit arc eight times per frame without advancing the ball.
+    const ball = makeBall(
+      362.20156892202795, 1055.8351447316818, 19,
+      -1722.8494800627232, 1556.6178703680634,
+    );
+    world.addBall(ball);
+
+    let enteredCorner = false;
+    let exitedCorner = false;
+    let frozenHighSpeedSteps = 0;
+    let maxFrozenHighSpeedSteps = 0;
+    let prevX = ball.p.x, prevY = ball.p.y;
+
+    for (let step = 0; step < 720; step++) {
+      world.step(1 / 240);
+
+      expect(Number.isFinite(ball.p.x) && Number.isFinite(ball.p.y)).toBe(true);
+      expect(Number.isFinite(ball.v.x) && Number.isFinite(ball.v.y)).toBe(true);
+
+      const cornerDistance = Math.hypot(ball.p.x - 196, ball.p.y - 1214);
+      if (cornerDistance < 130) enteredCorner = true;
+      if (enteredCorner && cornerDistance > 160) exitedCorner = true;
+
+      const moved = Math.hypot(ball.p.x - prevX, ball.p.y - prevY);
+      const speed = Math.hypot(ball.v.x, ball.v.y);
+      if (moved < 1e-7 && speed > 100) {
+        frozenHighSpeedSteps++;
+        maxFrozenHighSpeedSteps = Math.max(maxFrozenHighSpeedSteps, frozenHighSpeedSteps);
+      } else {
+        frozenHighSpeedSteps = 0;
+      }
+      prevX = ball.p.x;
+      prevY = ball.p.y;
+    }
+
+    expect(enteredCorner).toBe(true);
+    expect(exitedCorner).toBe(true);
+    expect(maxFrozenHighSpeedSteps).toBeLessThan(5);
   });
 });
