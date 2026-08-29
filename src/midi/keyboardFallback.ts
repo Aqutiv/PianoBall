@@ -87,12 +87,22 @@ export class KeyboardFallback {
     e.preventDefault();
   }
 
+  /**
+   * Releases are honoured even while disabled.
+   *
+   * Input can be switched off between a key going down and coming up — focus
+   * moving to an on-screen control does exactly that — and dropping the release
+   * would leave the note sounding with nothing able to stop it. Every branch
+   * below already checks that the state it is clearing was actually held, so
+   * an unmatched release does nothing.
+   */
   private onUp(e: KeyboardEvent): void {
-    if (!this.enabled) return;
     const now = performance.now();
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
-      this.bendTarget = 0;
-      this.opts.emit({ type: 'bend', value: 0, time: now, source: 'keyboard' });
+      if (this.bendTarget !== 0) {
+        this.bendTarget = 0;
+        this.opts.emit({ type: 'bend', value: 0, time: now, source: 'keyboard' });
+      }
       return;
     }
     if (e.code === 'Space') {

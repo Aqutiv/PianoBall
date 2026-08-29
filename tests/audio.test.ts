@@ -54,19 +54,21 @@ describe('MIDI audio controls', () => {
 describe('switching the bed on', () => {
   function harness() {
     const pads: number[][] = [];
+    const audible: boolean[] = [];
     const engine = {
       running: true,
       now: 0,
       settings: { bed: true },
       pad: (notes: number[]) => { pads.push(notes); },
+      setBedAudible: (on: boolean) => { audible.push(on); },
     };
     const music = new MusicState({ ...AURORA.music });
     const bed = new ChordBed(engine as never, music);
-    return { pads, engine, bed };
+    return { pads, audible, engine, bed };
   }
 
   it('plays on the next tick rather than on the next bar', () => {
-    const { pads, engine, bed } = harness();
+    const { pads, audible, engine, bed } = harness();
 
     // A bar goes out, leaving the clock pointing at the one after it.
     (bed as never as { schedule(): void }).schedule();
@@ -81,10 +83,12 @@ describe('switching the bed on', () => {
     bed.setEnabled(true);
     (bed as never as { schedule(): void }).schedule();
     expect(pads.length, 'sounds as soon as it is asked for').toBe(4);
+    // And the bus follows, so what was already ringing stopped on the way out.
+    expect(audible).toEqual([false, true]);
   });
 
   it('does nothing when asked for a state it is already in', () => {
-    const { pads, engine, bed } = harness();
+    const { pads, audible, engine, bed } = harness();
     (bed as never as { schedule(): void }).schedule();
     engine.now = 1;
 
@@ -93,5 +97,6 @@ describe('switching the bed on', () => {
     (bed as never as { schedule(): void }).schedule();
 
     expect(pads.length).toBe(2);
+    expect(audible).toEqual([]);
   });
 });

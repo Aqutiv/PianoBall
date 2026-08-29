@@ -7,6 +7,20 @@ const STORAGE_KEY = 'music';
 /** What the player picked in settings: a `MODES` id, or 'random'. */
 export const RANDOM = 'random';
 
+/**
+ * The nearest place a pitch class sits to a given note.
+ *
+ * Moving the key by a semitone should move the music by a semitone. Folding
+ * the interval to 0..11 and always subtracting sends everything above the
+ * tonic down an octave instead — from D, that is D# through G landing eleven
+ * semitones below where they were asked for.
+ */
+function nearestRoot(base: number, pitchClass: number): number {
+  const want = ((pitchClass % 12) + 12) % 12;
+  const up = ((want - base) % 12 + 12) % 12;
+  return up <= 6 ? base + up : base + up - 12;
+}
+
 export interface MusicStateEvents {
   /** The key, scale or tempo changed. Modes retune on this. */
   change: ActiveMusic;
@@ -57,7 +71,7 @@ export class MusicState {
     const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: null });
     this.choice = stored.mode;
     if (stored.key !== null && stored.key >= 0 && stored.key < 12) {
-      this.root = defaults.root - ((defaults.root - stored.key) % 12 + 12) % 12;
+      this.root = nearestRoot(defaults.root, stored.key);
     }
     this.set(this.resolve(), true);
   }
@@ -87,9 +101,7 @@ export class MusicState {
    * written around rather than leaping an octave to reach it.
    */
   setRoot(pitchClass: number): void {
-    const want = ((pitchClass % 12) + 12) % 12;
-    const base = this.defaults.root;
-    const root = base - ((base - want) % 12 + 12) % 12;
+    const root = nearestRoot(this.defaults.root, pitchClass);
     if (root === this.root) return;
     this.root = root;
     this.persist();
@@ -119,6 +131,21 @@ export class MusicState {
     this.root = root;
     this.bpm = bpm;
     this.bus.emit('change', this.active);
+  }
+
+  /**
+   * Forget the key and the scale together.
+   *
+   * `setChoice` alone would write the current key straight back out, so a
+   * "reset everything" that went through it left the tonic exactly where the
+   * player had put it.
+   */
+  resetSettings(): void {
+    this.choice = RANDOM;
+    this.root = this.defaults.root;
+    this.bpm = this.defaults.bpm;
+    this.persist();
+    this.set(this.resolve());
   }
 
   /** Back to the tonic and tempo the app starts in. */

@@ -94,6 +94,15 @@ export class AudioEngine {
   private master!: GainNode;
   private limiter!: DynamicsCompressorNode;
   private musicBus!: GainNode;
+  /**
+   * Everything the chord bed makes, on its own fader.
+   *
+   * Pads are one-shot oscillators rather than tracked voices, so there is no
+   * note to release when the bed is switched off. Giving them a bus means the
+   * bed can actually stop — and stop its own reverb tail with it — without
+   * touching a single note the player is holding.
+   */
+  private padBus!: GainNode;
   private fxBus!: GainNode;
   private reverbSend!: GainNode;
   private reverbWet!: GainNode;
@@ -212,6 +221,13 @@ export class AudioEngine {
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
 
+    this.padBus = ctx.createGain();
+    this.padBus.gain.value = 1;
+    this.padBus.connect(this.musicBus);
+    const padReverb = ctx.createGain();
+    padReverb.gain.value = 0.6;
+    this.padBus.connect(padReverb).connect(this.reverbSend);
+
     this.noise = makeNoise(ctx, 1.2);
 
     // Pitch bend, in cents, fanned out to every voice's detune.
@@ -282,6 +298,15 @@ export class AudioEngine {
   }
 
   resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
+
+  /**
+   * Fade the chord bed in or out. A fade rather than a cut, because a pad
+   * stopping dead sounds like a fault rather than like a decision.
+   */
+  setBedAudible(on: boolean): void {
+    if (!this.ready || !this.ctx) return;
+    this.padBus.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.08);
+  }
 
   get now(): number { return this.ctx ? this.ctx.currentTime : 0; }
 
@@ -587,9 +612,7 @@ export class AudioEngine {
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
         osc.connect(f).connect(g).connect(pannerNode);
-        pannerNode.connect(this.musicBus);
-        const rev = ctx.createGain(); rev.gain.value = 0.6;
-        pannerNode.connect(rev).connect(this.reverbSend);
+        pannerNode.connect(this.padBus);
         osc.start(t);
         osc.stop(t + seconds + 0.1);
       }

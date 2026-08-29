@@ -91,6 +91,9 @@ export class ChordBed {
   setEnabled(value: boolean): void {
     if (value === this.on) return;
     this.on = value;
+    // Switching off silences what is already ringing; switching on lets it
+    // through again and puts the next bar at the front of the queue.
+    this.engine.setBedAudible(value);
     if (value) this.align();
   }
 

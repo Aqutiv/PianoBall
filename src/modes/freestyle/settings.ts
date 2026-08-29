@@ -26,3 +26,9 @@ export function setFreestyleSettings(patch: Partial<FreestyleSettings>): void {
   current = { ...current, ...patch };
   save(KEY, current);
 }
+
+/** Part of the panel's "reset everything": these are preferences like any other. */
+export function resetFreestyleSettings(): void {
+  current = { ...DEFAULT_FREESTYLE };
+  save(KEY, current);
+}
