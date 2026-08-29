@@ -46,7 +46,7 @@ export default defineConfig({
     shotSink(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png', 'favicon.svg'],
+      includeAssets: ['icons/*.png', 'favicon.png'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         cleanupOutdatedCaches: true,
