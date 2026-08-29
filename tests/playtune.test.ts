@@ -32,6 +32,32 @@ describe('the tune library', () => {
     }
   });
 
+  it('never asks for two notes closer than the judge calls being in time', () => {
+    // The difficulty field says a tune is harder; it does not make it so, and
+    // the two came apart. Greensleeves wrote its dotted figure as 1.5 and 0.5
+    // beats in a six-eight whose beat is already the eighth, which put two
+    // onsets 179ms apart in the seventh tune of the chain — tighter than
+    // anything in the Canon or the Bach, at difficulty 3.
+    //
+    // The floor is the good window's own width, because that is the game's
+    // statement of what counts as in time: notes closer together than that ask
+    // the player to place a press finer than the judge will ever reward them
+    // for. Minuet in G sits 7ms above it, which is the real edge of the
+    // library — a tune that wants to be quicker than that needs a slower bpm
+    // and more beats, not shorter note values.
+    const floor = 2 * WINDOWS.good;
+    for (const tune of LIBRARY) {
+      const beatSeconds = 60 / tune.bpm;
+      // By onset, not by note: a chord is several notes on one beat, and the
+      // gap that matters is the one to the next thing the player has to move to.
+      const onsets = [...new Set(tune.melody.map((n) => n.beat))].sort((a, b) => a - b);
+      for (let i = 1; i < onsets.length; i++) {
+        const gap = (onsets[i] - onsets[i - 1]) * beatSeconds;
+        expect(gap, `${tune.id} at beat ${onsets[i]}`).toBeGreaterThanOrEqual(floor);
+      }
+    }
+  });
+
   it('resolves every chord degree inside its own scale', () => {
     for (const tune of LIBRARY) {
       const scale = SCALES[tune.scaleId];
