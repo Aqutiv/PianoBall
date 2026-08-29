@@ -47,7 +47,7 @@ export class ChordBed {
    * starts silent underneath because the player came to make their own sound,
    * while the table wants its harmony from the first ball.
    */
-  enabled = true;
+  private on = true;
 
   private readonly engine: AudioEngine;
   private readonly music: MusicState;
@@ -78,11 +78,33 @@ export class ChordBed {
 
   get running(): boolean { return this.timer !== 0; }
 
+  get enabled(): boolean { return this.on; }
+
+  /**
+   * Turn the bed on or off.
+   *
+   * Switching it on puts the next bar at the front of the queue. Without that
+   * the first chord waits for whatever bar the last mode left on the clock —
+   * up to five seconds at the table's tempo, which reads as a button that does
+   * nothing rather than as a bed about to start.
+   */
+  setEnabled(value: boolean): void {
+    if (value === this.on) return;
+    this.on = value;
+    if (value) this.align();
+  }
+
   /** Begin scheduling. Safe to call repeatedly; only the first one takes. */
   start(): void {
     if (this.timer) return;
-    this.nextBar = this.engine.now + 0.1;
+    this.align();
     this.timer = window.setInterval(() => this.schedule(), TICK_MS);
+  }
+
+  /** Put the next bar at the front of the queue, with nothing to lead from. */
+  private align(): void {
+    this.nextBar = this.engine.now;
+    this.lastVoicing = [];
   }
 
   stop(): void {
@@ -113,8 +135,8 @@ export class ChordBed {
   reset(): void {
     this.chordIndex = 0;
     this.barsLeft = this.barsPerChord;
-    this.lastVoicing = [];
     this.trackCursor = 0;
+    this.align();
     this.groove.reset();
   }
 
@@ -139,7 +161,7 @@ export class ChordBed {
 
   /** Bar-level lookahead. The only place in the app that schedules ahead. */
   private schedule(): void {
-    if (!this.engine.running || !this.enabled) return;
+    if (!this.engine.running || !this.on) return;
     if (this.track && this.clock) { this.scheduleTrack(this.track, this.clock); return; }
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;

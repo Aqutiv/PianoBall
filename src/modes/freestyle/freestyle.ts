@@ -41,8 +41,10 @@ export class FreestyleMode extends ModeBase implements GameMode {
 
   /** Start or silence the bed to match what the player last chose. */
   applyBed(): void {
-    this.ctx.bed.enabled = freestyleSettings().bed;
-    if (!this.ctx.bed.enabled) this.ctx.audio.allNotesOff();
+    // Deliberately no allNotesOff here: the bed's pads are not key voices, so
+    // it would not silence them — it would only cut the note the player is
+    // holding, which is not what switching off a backing track should do.
+    this.ctx.bed.setEnabled(freestyleSettings().bed);
   }
 
   enter(): void {
@@ -62,7 +64,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   exit(): void {
     this.release();
     // Leave the bed as the next mode expects to find it.
-    this.ctx.bed.enabled = true;
+    this.ctx.bed.setEnabled(true);
     this.ctx.audio.resetExpression();
     this.deck.allOff();
     this.field.reset();
