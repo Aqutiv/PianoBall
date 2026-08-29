@@ -6,7 +6,11 @@ import { AudioEngine } from '../src/audio/engine';
 import { MusicState } from '../src/audio/musicState';
 import { ChordBed } from '../src/audio/bed';
 import { PinballAudio } from '../src/modes/pinball/audio';
-import { ModeBase } from '../src/app/mode';
+import { ModeBase, type ModeContext } from '../src/app/mode';
+import { PlayTuneMode } from '../src/modes/playtune/playtune';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../src/audio/voices';
+import type { Stage } from '../src/render/stage';
+import type { Hud } from '../src/ui/hud';
 
 /**
  * Nothing in this codebase used to be torn down, because nothing was ever left.
@@ -59,6 +63,103 @@ describe('mode teardown', () => {
     game.bus.emit('drain', { x: 0, y: 0, ballId: 1, saved: false });
 
     expect(bed.groove.streak).toBe(4);
+  });
+});
+
+/**
+ * A tune's instruments are the tune's, the way Freestyle's are Freestyle's.
+ *
+ * `setLeadVoice` and `setBedVoice` are global engine state, so a mode that
+ * picks one and walks away leaves the next mode playing it — which is how a
+ * pipe organ ends up on a pinball table.
+ */
+describe('playtune instruments', () => {
+  /** Just enough panel for `TuneHud` to mount into; nothing here is asserted. */
+  function fakeHud(): Hud {
+    const node = { textContent: '', innerHTML: '', style: {} };
+    const panel = () => ({ innerHTML: '', querySelector: () => node });
+    return {
+      left: panel(), right: panel(),
+      banner: () => {}, clearPanels: () => {},
+    } as unknown as Hud;
+  }
+
+  function playtune() {
+    const input = new InputHub();
+    const engine = new AudioEngine();
+    const music = new MusicState({ ...AURORA.music });
+    const bed = new ChordBed(engine, music);
+    // The mode never draws in this test, so the camera is only ever configured.
+    const stage = {
+      cam: { configure: () => {} }, resize: () => {},
+      cssW: 800, cssH: 600, dpr: 1,
+    } as unknown as Stage;
+    const ctx: ModeContext = {
+      stage, input, audio: engine, bed, music, hud: fakeHud(),
+      openScreen: () => {}, setResult: () => {},
+    };
+    return { mode: new PlayTuneMode(ctx), engine };
+  }
+
+  it('plays a tune on the instruments it names', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+
+    expect(mode.start('fur-elise')).toBe(true);
+    expect(engine.leadVoice).toBe('felt-piano');
+    expect(engine.bedVoice).toBe('bed-felt-piano');
+    mode.exit();
+  });
+
+  it('leaves the app its own sound on a tune that names none', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    expect(mode.start('first-light')).toBe(true);
+
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
+    mode.exit();
+  });
+
+  it('hands the instruments back on the way out', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    mode.start('fur-elise');
+    mode.exit();
+
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
+  });
+
+  it('lets go of a held note before the next tune takes the instrument', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    mode.start('jesu-joy');
+
+    // A voice keeps the spec it was struck with, so the pipe organ under a key
+    // still down when the next tune is chosen would play on through its
+    // count-in. Counted rather than heard: the engine has no context here.
+    let cleared = 0;
+    const real = engine.allNotesOff.bind(engine);
+    engine.allNotesOff = () => { cleared++; real(); };
+
+    mode.start('twinkle');
+
+    expect(cleared).toBe(1);
+    expect(engine.leadVoice).toBe('music-box');
+    mode.exit();
+  });
+
+  it('swaps them when one tune follows another', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    mode.start('fur-elise');
+    mode.start('twinkle');
+
+    expect(engine.leadVoice).toBe('music-box');
+    expect(engine.bedVoice).toBe('bed-harp');
+    mode.exit();
   });
 });
 

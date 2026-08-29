@@ -12,6 +12,9 @@ import { APPROACH_BPM_CAP, Transport } from '../src/modes/playtune/transport';
 import { DEFAULT_PLAYTUNE, LEAD_BEAT_CHOICES } from '../src/modes/playtune/settings';
 import { loadProgress, recordRun, resetProgress, unlockedBy } from '../src/modes/playtune/progress';
 import { SCALES, degreeToNote, inScale } from '../src/audio/music';
+import {
+  BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, LEAD_VOICES,
+} from '../src/audio/voices';
 
 describe('the tune library', () => {
   it('has no chart problems', () => {
@@ -118,6 +121,31 @@ describe('the tune library', () => {
       // A pickup only means anything if the tune really does start off the bar.
       if (pickup) expect(tune.melody[0].beat, tune.id).toBe(0);
     }
+  });
+
+  it('names only instruments that are in the bank', () => {
+    // `validate` already reports this and the first test would catch it, but a
+    // typo in a voice id is a silent fault everywhere else in the app — the
+    // lookups fall back to the default on purpose — so it gets said out loud.
+    for (const tune of LIBRARY) {
+      if (tune.voiceId !== undefined) {
+        expect(LEAD_VOICES.map((v) => v.id), tune.id).toContain(tune.voiceId);
+      }
+      if (tune.bedVoiceId !== undefined) {
+        expect(BED_VOICES.map((b) => b.id), tune.id).toContain(tune.bedVoiceId);
+      }
+    }
+  });
+
+  it('leaves the app its own sound on the tunes that name no instrument', () => {
+    // The rule the library is written to: a tune sounds like something else
+    // only when the piece itself names it. The two that name nothing are the
+    // originals with no performance tradition to answer to, and they are what
+    // stops the library reading as a costume box.
+    const plain = LIBRARY.filter((t) => !t.voiceId && !t.bedVoiceId);
+    expect(plain.map((t) => t.id)).toEqual(['first-light', 'two-hands']);
+    expect(DEFAULT_LEAD_VOICE).toBe('signature');
+    expect(DEFAULT_BED_VOICE).toBe('warm');
   });
 
   it('keeps the chord bed running under the whole melody', () => {

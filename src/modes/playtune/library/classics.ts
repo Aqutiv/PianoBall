@@ -21,6 +21,14 @@ import { line, progression, merge, harmonise, shift } from './notation';
  * moves where the tune moves, which is very often inside the bar and almost
  * always at a cadence, and a chord held for a whole bar of six or nine stops
  * sounding like accompaniment and starts sounding like a drone.
+ *
+ * `voiceId` and `bedVoiceId` are declared only where the piece itself names an
+ * instrument. Für Elise is a piano and Twinkle is a music box; the Minuet gets
+ * the clavinet because it is the nearest thing in the bank to a harpsichord,
+ * and Amazing Grace gets the organ it is sung over. Where two tunes are the
+ * same instrument they say the same thing — Für Elise and the Gymnopédie are
+ * both solo piano, and inventing a difference between them would be dressing
+ * them up rather than playing them.
  */
 
 const E4 = 64, F4 = 65, Fs4 = 66, G4 = 67, Gs4 = 68, A4 = 69, B4 = 71;
@@ -44,6 +52,7 @@ export const ODE_TO_JOY: Tune = {
   root: C4,
   scaleId: 'mixolydian',
   accompaniment: 'march',
+  bedVoiceId: 'strings',
   borrows: LEADING,
   pass: 0.65,
   melody: line([
@@ -86,6 +95,8 @@ export const TWINKLE: Tune = {
   root: C4,
   scaleId: 'mixolydian',
   accompaniment: 'march',
+  voiceId: 'music-box',
+  bedVoiceId: 'bed-harp',
   borrows: LEADING,
   pass: 0.65,
   melody: line([
@@ -129,6 +140,8 @@ export const AMAZING_GRACE: Tune = {
   root: G4,
   scaleId: 'mixolydian',
   accompaniment: 'waltz',
+  voiceId: 'pipe-organ',
+  bedVoiceId: 'bed-choir',
   borrows: LEADING,
   pass: 0.65,
   melody: line([
@@ -180,6 +193,8 @@ export const SCARBOROUGH_FAIR: Tune = {
   root: A4,
   scaleId: 'dorian',
   accompaniment: 'waltz',
+  voiceId: 'breath-flute',
+  bedVoiceId: 'nylon-guitar',
   pass: 0.68,
   melody: line([
     [A4, 1], [A4, 1], [E5, 1],
@@ -252,6 +267,8 @@ export const GREENSLEEVES: Tune = {
   root: A4,
   scaleId: 'aeolian',
   accompaniment: 'compound',
+  voiceId: 'harp',
+  bedVoiceId: 'nylon-guitar',
   // The raised seventh. Greensleeves is the standard example of a minor tune
   // that borrows a major dominant, and it does it at the end of every phrase.
   borrows: LEADING,
@@ -306,6 +323,8 @@ export const FUR_ELISE: Tune = {
   // The left hand of the piece is a broken chord and nothing else, which is
   // why this is the tune the pattern exists for.
   accompaniment: 'broken',
+  voiceId: 'felt-piano',
+  bedVoiceId: 'bed-felt-piano',
   borrows: LEADING,
   pass: 0.7,
   melody: line([
@@ -352,6 +371,8 @@ export const LONDONDERRY_AIR: Tune = {
   root: C4,
   scaleId: 'mixolydian',
   accompaniment: 'arpeggio',
+  voiceId: 'choir',
+  bedVoiceId: 'bed-harp',
   borrows: LEADING,
   pass: 0.7,
   melody: line([
@@ -391,6 +412,8 @@ export const MINUET_IN_G: Tune = {
   root: G4,
   scaleId: 'mixolydian',
   accompaniment: 'broken',
+  voiceId: 'clavinet',
+  bedVoiceId: 'bed-harp',
   borrows: LEADING,
   pass: 0.72,
   melody: line([
@@ -430,6 +453,8 @@ export const GYMNOPEDIE: Tune = {
   // Bass on one, chord on two and three, once a bar and never hurried. That is
   // not an arrangement of the piece; it *is* the piece's left hand.
   accompaniment: 'waltz',
+  voiceId: 'felt-piano',
+  bedVoiceId: 'bed-felt-piano',
   borrows: LEADING,
   pass: 0.72,
   melody: line([
@@ -505,6 +530,8 @@ export const CANON_IN_D: Tune = {
   root: D4,
   scaleId: 'mixolydian',
   accompaniment: 'arpeggio',
+  voiceId: 'choir',
+  bedVoiceId: 'strings',
   borrows: LEADING,
   pass: 0.75,
   melody: merge(CANON_LONG, CANON_RUN),
@@ -551,6 +578,8 @@ export const JESU_JOY: Tune = {
   root: G4,
   scaleId: 'mixolydian',
   accompaniment: 'compound',
+  voiceId: 'pipe-organ',
+  bedVoiceId: 'bed-organ',
   borrows: LEADING,
   pass: 0.75,
   melody: merge(

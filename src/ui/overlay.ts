@@ -10,6 +10,8 @@ import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../mod
 import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
 import { loadProgress, resetProgress } from '../modes/playtune/progress';
 import { TUNE_ORDER } from '../modes/playtune/library';
+import type { Tune } from '../modes/playtune/chart';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice } from '../audio/voices';
 
 export type Screen =
   | 'home'
@@ -218,6 +220,21 @@ export class Overlay {
 
   // ------------------------------------------------------------ playtune ---
 
+  /**
+   * The instruments a tune brings with it, as one line.
+   *
+   * Resolved rather than read, so a tune that names no instrument still says
+   * what it will sound like rather than going quiet where every other card
+   * answers. Collapsed to a single name when keys and bed are the same thing: a
+   * solo piano work *is* a felt piano, and saying it twice reads as a fault
+   * rather than as an arrangement.
+   */
+  private voiceLine(tune: Tune): string {
+    const lead = findLeadVoice(tune.voiceId ?? DEFAULT_LEAD_VOICE).name;
+    const bed = findBedVoice(tune.bedVoiceId ?? DEFAULT_BED_VOICE).name;
+    return lead === bed ? lead : `${lead} over ${bed}`;
+  }
+
   private renderSongs(): void {
     const mode = this.shell.playtune;
     if (!mode) { this.show('home'); return; }
@@ -244,7 +261,7 @@ export class Overlay {
           ${unlocked && fits ? '' : 'disabled'}>
           <span class="song-name">${tune.title}</span>
           <span class="pips">${pips}</span>
-          <span class="song-by">${tune.composer}</span>
+          <span class="song-by">${tune.composer} <i>${this.voiceLine(tune)}</i></span>
           <span class="song-teaches">${tune.teaches}</span>
           ${state}
         </button>`;

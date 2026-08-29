@@ -465,6 +465,11 @@ kbd {
 
 .song-name { grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 650; }
 .song-by { grid-column: 1; grid-row: 2; font-size: 11px; color: var(--dim); }
+/* On the composer's line rather than a line of its own. Fourteen cards share a
+   46vh window, and who wrote it and what it sounds like are the same kind of
+   fact — the same pairing the in-run panel makes of the composer and the tempo. */
+.song-by i { font-style: normal; color: var(--dim); opacity: 0.75; }
+.song-by i::before { content: '·'; margin: 0 5px; opacity: 0.6; }
 .song-teaches { grid-column: 1 / -1; grid-row: 3; font-size: 11.5px; color: #9aa8d0; margin-top: 3px; }
 .song-best {
   grid-column: 2; grid-row: 1;

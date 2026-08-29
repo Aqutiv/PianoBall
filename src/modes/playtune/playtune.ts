@@ -3,6 +3,7 @@ import { KeyDeck } from '../../game/keys';
 import { drawKeys } from '../../render/keys';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
@@ -164,6 +165,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.endsAt = t.timeOf(lastBeat(tune) + tune.beatsPerBar);
     this.phase = 'countin';
 
+    // Before the bed is wired, not after: an instrument only takes effect on
+    // the next note the engine builds, and the bed schedules ahead of itself.
+    this.applyVoices(tune);
+
     // The bed plays the tune's own harmony, in the tune's own key, without
     // disturbing whatever scale the player picked in settings.
     this.ctx.bed.setTrack(
@@ -177,6 +182,30 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     return true;
   }
 
+  /**
+   * Hand the engine the instruments this tune is written for.
+   *
+   * A tune that names neither gets the sound the app makes everywhere else,
+   * which is most of what keeps the library from turning into a costume box.
+   *
+   * `stopPads` rather than trusting the bed to have cleared: `ChordBed.stop`
+   * fades the pad *bus*, and `start` turns it back up. A chord already handed
+   * to the engine is still ringing behind that fade — Drift's swell is nearly
+   * four seconds — so choosing another tune quickly would raise the last one's
+   * tail back up, in the last one's timbre, under the new one's first bar.
+   *
+   * The tempo goes with them because the delay is tempo-locked and PlayTune has
+   * never pointed it anywhere: it kept whatever the previous mode left, which
+   * at Für Elise's 168 is a smear rather than a dotted eighth.
+   */
+  private applyVoices(tune: Tune): void {
+    const { audio } = this.ctx;
+    audio.setLeadVoice(tune.voiceId ?? DEFAULT_LEAD_VOICE);
+    audio.setBedVoice(tune.bedVoiceId ?? DEFAULT_BED_VOICE);
+    audio.stopPads();
+    audio.setTempo(tune.bpm);
+  }
+
   private stopRun(): void {
     this.transport.stop();
     this.ctx.bed.setTrack(null, null);
@@ -184,6 +213,24 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // back onto the current scale's own loop, which then plays over whatever
     // screen comes next.
     this.ctx.bed.stop();
+    // Anything still down was struck as the last tune's instrument and keeps it:
+    // a voice holds the spec it was built with, and the setters below only reach
+    // the next note. A player holding a key while the results screen is up — the
+    // last note of a tune that ended under their hand — would otherwise ring on
+    // through the next tune's count-in in the wrong timbre, and an organ, whose
+    // envelope never decays, would still be there at the first bar.
+    this.ctx.audio.allNotesOff();
+    this.deck.allOff();
+    // A tune's instruments are the tune's, the way Freestyle's are Freestyle's.
+    // Deliberately not done in `finish`, which does not come through here: the
+    // keys still sound on the results screen, and a tune you have just played
+    // should still sound like itself while you read what you scored. Nothing
+    // escapes the mode by it — the only ways out of `finished` are `start`,
+    // which sets them again, and `exit`, which calls this.
+    const { audio, music } = this.ctx;
+    audio.setLeadVoice(DEFAULT_LEAD_VOICE);
+    audio.setBedVoice(DEFAULT_BED_VOICE);
+    audio.setTempo(music.bpm);
     this.judge = null;
     this.phase = 'idle';
   }

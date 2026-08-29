@@ -67,9 +67,11 @@ their own rates, and the Rhodes tine is one oscillator bending another. The
 first entry in each list is the sound the app has always made, and it is where
 both start.
 
-This is Freestyle's alone, for now. Pick a choir here and Pinball and PlayTune
-still sound exactly as they did: the mode hands the instruments to the synth on
-its way in and puts the originals back on its way out.
+**Choosing** is Freestyle's alone. Pick a choir here and Pinball still sounds
+exactly as it did, and so does every tune in PlayTune — which has instruments of
+its own, authored into the charts rather than picked. Either way the rule is the
+same: a mode hands the instruments to the synth on its way in and puts the
+originals back on its way out, so nothing you choose here follows you anywhere.
 
 ## Pinball
 
@@ -128,6 +130,22 @@ mechanic has to be introduced on something you have no expectations about.
 Charts are written around middle C and **transposed by whole octaves onto
 whatever keyboard is plugged in** — a tune too wide for your controller says so
 on its card rather than failing when you press play.
+
+**Each tune brings its own instruments**, and the song card names them before
+you start. Für Elise is a felt piano playing both hands, Twinkle is a music box
+over a harp, Amazing Grace is a pipe organ with a choir under it, and the Minuet
+gets the clavinet because it is the nearest thing in the bank to a harpsichord.
+The rule is that a tune sounds like something else only when the piece itself
+names an instrument — which is why First Light and Two Hands, PianoBall's own
+tunes with no tradition to answer to, still sound exactly like PianoBall. Where
+two tunes are the same instrument they say so: Für Elise and the Gymnopédie are
+both solo piano, and inventing a difference between them would be dressing them
+up rather than playing them.
+
+The *rhythm* was already theirs. Each chart says how the bed plays its chords —
+a waltz in three, the lilting six of Greensleeves, Bach's nine, the broken left
+hand Für Elise and the Minuet run on — and none of it is a drum machine. There
+are no drums in PlayTune, because a kick under a Gymnopédie is a costume.
 
 Passing a tune (accuracy above its own mark) unlocks the next and records your
 best. **Settings → PlayTune → Audio offset** exists because output latency is real.
