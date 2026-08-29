@@ -435,10 +435,13 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
 
 /**
  * The bed's voice is deliberately shorter on knobs than a key voice, because
- * its envelope is not its own: `pad` is handed a length and an attack by
- * whoever scheduled the chord, and that is what lets one timbre serve the
- * sustained bed, the struck comp chords and the bass alike. A bed spec says
- * what it is made of and how its filter moves — never how long it lasts.
+ * its timing is not its own: `pad` is handed a length and an attack by whoever
+ * scheduled the chord, and that is what lets one timbre serve the sustained
+ * bed, the struck comp chords and the bass alike.
+ *
+ * A bed spec never decides how long a note *occupies* — only what it is made
+ * of, how its filter moves, and, if it is a plucked thing, how much of that
+ * length it actually *sounds* for.
  */
 export interface BedLayer {
   type: OscillatorType;
@@ -459,6 +462,16 @@ export interface BedSpec {
     peak: number; peakStruck: number;
     end: number; q: number;
   };
+  /**
+   * Seconds to fall silent, for a voice that is struck rather than swelled.
+   *
+   * The length of a bed note belongs to whoever scheduled it, and that does
+   * not change here — but a string is not a pad, and no choice of partials
+   * rescues one that fades in over a third of a bar and back out again. Left
+   * out, the voice swells and fades with the attack it was handed; set, it
+   * arrives at once and decays inside the length it was given.
+   */
+  pluck?: number;
   gain: number;
 }
 
@@ -571,26 +584,35 @@ export const BED_VOICES: readonly BedDef[] = [
   },
 
   // ------------------------------------------------------------- plucked ---
+  // Every voice here strikes and decays. Without `pluck` they were pads with
+  // plucked names — a nylon guitar that swelled in over a third of the bar.
   {
     id: 'bed-harp', name: 'Harp', family: 'Plucked',
+    // Bright at the edge and ringing a long time, on a nearly harmonic stack.
     spec: bed({
       layers: [
-        { type: 'sawtooth', ratio: 1, level: 1 },
-        { type: 'triangle', ratio: 2, level: 0.45 },
-        { type: 'sine', ratio: 3, level: 0.18 },
+        { type: 'triangle', ratio: 1, level: 1 },
+        { type: 'sine', ratio: 2, level: 0.5 },
+        { type: 'sine', ratio: 4, level: 0.24 },
+        { type: 'sine', ratio: 6, level: 0.12 },
       ],
-      filter: { start: 700, startStruck: 1500, peak: 1900, peakStruck: 2600, end: 500, q: 1.4 },
+      filter: { start: 700, startStruck: 1600, peak: 1900, peakStruck: 2800, end: 480, q: 1.1 },
+      pluck: 2.4,
     }),
   },
   {
     id: 'nylon-guitar', name: 'Nylon Guitar', family: 'Plucked',
+    // A gut string is a strong fundamental with a couple of quiet harmonics
+    // over it, and nothing else. The saw and its five cents of detune that
+    // used to sit here were a chorus, which is what made it read as a pad.
     spec: bed({
       layers: [
-        { type: 'triangle', ratio: 1, level: 1.05 },
-        { type: 'sawtooth', ratio: 1, level: 0.4, detune: 5 },
-        { type: 'sine', ratio: 3, level: 0.22 },
+        { type: 'triangle', ratio: 1, level: 1.15 },
+        { type: 'sine', ratio: 2, level: 0.5 },
+        { type: 'sine', ratio: 3, level: 0.26 },
       ],
-      filter: { start: 500, startStruck: 1200, peak: 1500, peakStruck: 2200, end: 420, q: 1.6 },
+      filter: { start: 460, startStruck: 1150, peak: 1400, peakStruck: 1900, end: 340, q: 1 },
+      pluck: 1.7,
     }),
   },
   {
@@ -602,6 +624,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 5.02, level: 0.2 },
       ],
       filter: { start: 900, startStruck: 1800, peak: 2600, peakStruck: 3400, end: 800, q: 0.8 },
+      pluck: 1.3,
     }),
   },
 

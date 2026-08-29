@@ -105,6 +105,21 @@ describe('the instrument bank', () => {
     }
   });
 
+  it('makes everything in the plucked family actually pluck', () => {
+    // The bed's length belongs to whoever scheduled the chord, so a voice that
+    // does not say it strikes gets the swell-and-fade every pad gets. Naming a
+    // family Plucked and leaving that in place is how the first pass shipped a
+    // nylon guitar that faded in over a third of the bar.
+    for (const v of BED_VOICES) {
+      const plucks = v.spec.pluck !== undefined;
+      expect(plucks, `${v.id} is ${v.family} but does not pluck`).toBe(v.family === 'Plucked');
+      if (plucks) {
+        expect(v.spec.pluck, `${v.id} pluck`).toBeGreaterThan(0.2);
+        expect(v.spec.pluck, `${v.id} rings longer than a bar`).toBeLessThanOrEqual(4);
+      }
+    }
+  });
+
   it('falls back rather than throwing on an id it no longer has', () => {
     expect(findLeadVoice('a-voice-we-dropped').id).toBe(DEFAULT_LEAD_VOICE);
     expect(findBedVoice('a-bed-we-dropped').id).toBe(DEFAULT_BED_VOICE);
@@ -156,6 +171,8 @@ describe('the sound the app has always made', () => {
       start: 420, startStruck: 900, peak: 1100, peakStruck: 1700, end: 500, q: 1.4,
     });
     expect(spec.gain).toBe(1);
+    // A pad, not a pluck: it swells and fades with the attack it is handed.
+    expect(spec.pluck).toBeUndefined();
   });
 });
 

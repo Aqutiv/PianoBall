@@ -801,10 +801,13 @@ export class AudioEngine {
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     const rise = clamp(attack, 0.004, seconds * 0.9);
+    const spec = this.bedSpec;
+    // A plucked thing is struck by definition, whatever attack it was handed:
+    // the string is already moving before the pad it replaced had begun.
+    const fall = spec.pluck ? Math.max(0.02, Math.min(spec.pluck, seconds)) : 0;
     // A struck chord opens brighter and faster than a swell; without this the
     // filter is still on its way up by the time a short stab has gone.
-    const struck = rise < seconds * 0.2;
-    const spec = this.bedSpec;
+    const struck = fall > 0 || rise < seconds * 0.2;
     const cut = spec.filter;
     const share = (gain / notes.length) * spec.gain;
     for (let i = 0; i < notes.length; i++) {
@@ -819,14 +822,23 @@ export class AudioEngine {
         f.frequency.setValueAtTime(struck ? cut.startStruck : cut.start, t);
         f.frequency.linearRampToValueAtTime(
           struck ? cut.peakStruck : cut.peak,
-          t + (struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
+          t + (fall ? Math.min(fall * 0.1, 0.02) : struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
         );
-        f.frequency.linearRampToValueAtTime(cut.end, t + seconds);
+        // Brightness dies with the note, not with the bar it was given.
+        f.frequency.linearRampToValueAtTime(cut.end, t + (fall || seconds));
         f.Q.value = cut.q;
         const g = ctx.createGain();
+        const peak = share * layer.level;
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(share * layer.level, t + rise);
-        g.gain.linearRampToValueAtTime(0.0001, t + seconds);
+        if (fall) {
+          // Struck and left to ring. The caller still owns how long the note
+          // occupies — a plucked voice only decides what happens inside it.
+          g.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.006, fall * 0.2));
+          g.gain.exponentialRampToValueAtTime(0.0001, t + fall);
+        } else {
+          g.gain.linearRampToValueAtTime(peak, t + rise);
+          g.gain.linearRampToValueAtTime(0.0001, t + seconds);
+        }
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
         osc.connect(f).connect(g).connect(pannerNode);
