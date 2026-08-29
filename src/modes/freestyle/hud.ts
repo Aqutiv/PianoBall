@@ -5,6 +5,9 @@ import type { RhythmBox } from '../../audio/rhythmBox';
 import { MODES } from '../../audio/music';
 import { MAX_BPM, MIN_BPM, RANDOM } from '../../audio/musicState';
 import { PATTERNS, PATTERN_FAMILIES, findPattern } from '../../audio/patterns';
+import {
+  BED_FAMILIES, BED_VOICES, LEAD_FAMILIES, LEAD_VOICES,
+} from '../../audio/voices';
 import { NOTE_NAMES, noteName } from '../../midi/notes';
 import { freestyleSettings, setFreestyleSettings } from './settings';
 import { rhythmSettings, setRhythmSettings } from './rhythmSettings';
@@ -12,9 +15,9 @@ import { rhythmSettings, setRhythmSettings } from './rhythmSettings';
 /**
  * Everything the player might want to change mid-phrase, on screen.
  *
- * Key, scale, rhythm, tempo, bed and room all live here rather than behind
- * Escape, because having to leave what you are playing to change what you are
- * playing in is the opposite of freestyle.
+ * Key, scale, instrument, rhythm, tempo, bed and room all live here rather
+ * than behind Escape, because having to leave what you are playing to change
+ * what you are playing it on is the opposite of freestyle.
  */
 export class FreestyleHud {
   private chordEl!: HTMLElement;
@@ -23,6 +26,8 @@ export class FreestyleHud {
   private rollEl!: HTMLButtonElement;
   private nowEl!: HTMLElement;
   private bedEl!: HTMLButtonElement;
+  private voiceEl!: HTMLSelectElement;
+  private bedVoiceEl!: HTMLSelectElement;
   private reverbEl!: HTMLInputElement;
   private wheelsEl!: HTMLElement;
   private rhythmEl!: HTMLButtonElement;
@@ -51,6 +56,7 @@ export class FreestyleHud {
     const scales = `<option value="${RANDOM}">random</option>`
       + MODES.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
     const r = rhythmSettings();
+    const s = freestyleSettings();
 
     this.hud.left.innerHTML = `
       <div class="score-block">
@@ -59,6 +65,11 @@ export class FreestyleHud {
           <select id="fs-key" aria-label="Key">${keys}</select>
           <select id="fs-scale" aria-label="Scale">${scales}</select>
           <button id="fs-roll" title="Draw a scale at random">&#9860;</button>
+        </div>
+        <div class="hud-controls">
+          <select class="hud-select" id="fs-voice" aria-label="Instrument">
+            ${this.grouped(LEAD_VOICES, LEAD_FAMILIES, s.voiceId)}
+          </select>
         </div>
         <div class="score-sub" id="fs-now"></div>
       </div>
@@ -70,14 +81,19 @@ export class FreestyleHud {
           <span class="rhythm-bpm"><b id="fs-bpm">${this.music.bpm}</b> bpm</span>
         </div>
         <select class="hud-select" id="fs-pattern" aria-label="Rhythm pattern">
-          ${this.patternOptions(r.patternId)}
+          ${this.grouped(PATTERNS, PATTERN_FAMILIES, r.patternId)}
         </select>
         ${this.knob('fs-tempo', 'tempo', MIN_BPM, MAX_BPM, this.music.bpm)}
         ${this.knob('fs-swing', 'swing', 0, 100, Math.round(r.swing * 100))}
         ${this.knob('fs-level', 'level', 0, 100, Math.round(r.level * 100))}
         <div class="steps" id="fs-steps"></div>
       </div>
-      <button class="hud-toggle" id="fs-bed">Backing bed</button>
+      <div class="bed">
+        <button class="hud-toggle" id="fs-bed">Backing bed</button>
+        <select class="hud-select" id="fs-bed-voice" aria-label="Backing bed sound">
+          ${this.grouped(BED_VOICES, BED_FAMILIES, s.bedVoiceId)}
+        </select>
+      </div>
       <div class="wheel"><b>room</b><input type="range" id="fs-reverb" min="0" max="1" step="0.01"></div>
       <div class="wheels" id="fs-wheels"></div>
     `;
@@ -90,6 +106,8 @@ export class FreestyleHud {
     this.rollEl = q<HTMLButtonElement>('#fs-roll');
     this.nowEl = q('#fs-now');
     this.bedEl = q<HTMLButtonElement>('#fs-bed');
+    this.voiceEl = q<HTMLSelectElement>('#fs-voice');
+    this.bedVoiceEl = q<HTMLSelectElement>('#fs-bed-voice');
     this.reverbEl = q<HTMLInputElement>('#fs-reverb');
     this.wheelsEl = q('#fs-wheels');
     this.rhythmEl = q<HTMLButtonElement>('#fs-rhythm');
@@ -109,6 +127,17 @@ export class FreestyleHud {
       setFreestyleSettings({ bed: !freestyleSettings().bed });
       this.onBedChange();
     });
+    // Neither cuts what is already sounding: a held note finishes as the
+    // voice it was struck as, and the bed changes at the next chord.
+    this.voiceEl.addEventListener('change', () => {
+      this.engine.setLeadVoice(this.voiceEl.value);
+      setFreestyleSettings({ voiceId: this.engine.leadVoice });
+    });
+    this.bedVoiceEl.addEventListener('change', () => {
+      this.engine.setBedVoice(this.bedVoiceEl.value);
+      setFreestyleSettings({ bedVoiceId: this.engine.bedVoice });
+    });
+
     this.reverbEl.addEventListener('input', () => {
       this.engine.setSettings({ reverb: Number(this.reverbEl.value) });
       this.paintReverb();
@@ -167,6 +196,8 @@ export class FreestyleHud {
     this.levelEl.value = String(Math.round(this.box.level * 100));
     this.paintKnob(this.levelEl, 0, 100);
     this.patternEl.value = this.box.pattern.id;
+    this.voiceEl.value = this.engine.leadVoice;
+    this.bedVoiceEl.value = this.engine.bedVoice;
     if (this.stepPips.length !== this.box.pattern.steps) this.buildSteps();
   }
 
@@ -198,9 +229,18 @@ export class FreestyleHud {
     this.reverbEl.style.setProperty('--fill', `${Number(this.reverbEl.value) * 100}%`);
   }
 
-  private patternOptions(selected: string): string {
-    return PATTERN_FAMILIES.map((family) => {
-      const options = PATTERNS.filter((p) => p.family === family)
+  /**
+   * A picker grouped by family, which all three of the long lists want: the
+   * rhythms, the instrument and the bed. Families come from the library rather
+   * than from here, so a new one appears in the list by being written.
+   */
+  private grouped(
+    items: readonly { id: string; name: string; family: string }[],
+    families: readonly string[],
+    selected: string,
+  ): string {
+    return families.map((family) => {
+      const options = items.filter((p) => p.family === family)
         .map((p) => `<option value="${p.id}"${p.id === selected ? ' selected' : ''}>${p.name}</option>`)
         .join('');
       return `<optgroup label="${family}">${options}</optgroup>`;

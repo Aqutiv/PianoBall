@@ -52,12 +52,24 @@ waves it as it opens the filter. Range and destination are in Settings.
 key belongs to the pinball table; Freestyle plays exactly what you press, so a
 note from outside the scale is a note from outside the scale.
 
-Key, scale, the backing bed and the size of the room are all on screen, because
-having to leave what you are playing in order to change what you are playing in
-is the opposite of freestyle. **Random** is one of the scales, and the die beside
-it draws again; whatever it lands on is named underneath. **The bed starts off** —
-you came here to make your own sound, so the backing is offered rather than
-assumed.
+Key, scale, instrument, the backing bed and the size of the room are all on
+screen, because having to leave what you are playing in order to change what you
+are playing it on is the opposite of freestyle. **Random** is one of the scales,
+and the die beside it draws again; whatever it lands on is named underneath.
+**The bed starts off** — you came here to make your own sound, so the backing is
+offered rather than assumed.
+
+**Twenty-four instruments and fourteen backings**, grouped the way the rhythms
+are. The keys can be a Rhodes, a drawbar organ, a choir, a music box, a tubular
+bell or a supersaw; the bed under them can be strings, a nylon guitar, an organ
+or a glass pad. None of it is sampled — a bell is inharmonic partials dying at
+their own rates, and the Rhodes tine is one oscillator bending another. The
+first entry in each list is the sound the app has always made, and it is where
+both start.
+
+This is Freestyle's alone, for now. Pick a choir here and Pinball and PlayTune
+still sound exactly as they did: the mode hands the instruments to the synth on
+its way in and puts the originals back on its way out.
 
 ## Pinball
 
@@ -219,6 +231,14 @@ as the hardware allows (~10 ms measured). Bend and modulation are a
 means expression costs no per-frame JavaScript at all. Only the chord bed is
 scheduled ahead, one bar at a time.
 
+**Instruments are data, not code.** A voice is a few oscillator layers — a wave,
+a ratio to the fundamental, a level, sometimes a decay of its own or a second
+operator bending the first — over one filter and one envelope. That is the same
+bargain the drum bank and the rhythm library already struck: thirty-eight
+patterns and thirty-eight instruments between them, and one synthesis routine
+each, because the character lives in a table you can read rather than in forty
+branches you cannot.
+
 **Two clocks, and only one of them is trusted for timing.** The game clock is
 driven by requestAnimationFrame and multiplied by slow motion; the audio clock is
 a hardware sample counter. Every PlayTune judgement is made against the audio
@@ -237,7 +257,8 @@ src/
   core/      loop, event bus, seeded RNG, storage, math
   physics/   vec2, colliders, swept collision, spatial grid, world solver
   midi/      Web MIDI, note→lane mapping, velocity curves, keyboard fallback
-  audio/     engine (graph + voices), music theory, shared state, chord bed
+  audio/     engine (graph + synthesis), instrument and drum banks, rhythm
+             patterns and box, music theory, shared state, chord bed
   game/      pinball state, key deck, keybed, key layout, scoring, tilt, table
   render/    stage, raked camera, keys, empty field, particles, bloom, theme
   modes/     pinball/  freestyle/  playtune/ (+ its chart, judge, library)

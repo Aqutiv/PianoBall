@@ -176,6 +176,18 @@ button:hover, select:hover { background: rgba(255,255,255,0.11); border-color: r
  * select's pale ink onto a white background — legible only once highlighted.
  */
 select option { background: #10162c; color: var(--ink); }
+/*
+ * An optgroup label is a row of that list too, and the rule above is exactly
+ * why it needs saying: styling an option background stops the browser painting
+ * the popup natively, and an unstyled optgroup keeps the light default it just
+ * opted out of — a pale label on white, which is no label at all.
+ */
+select optgroup {
+  background: #080d1e;
+  color: var(--dim);
+  font-style: normal;
+  font-weight: 600;
+}
 
 /*
  * Range inputs are drawn from scratch rather than sharing the button styling
@@ -371,8 +383,9 @@ kbd {
 /* ---------------------------------------------------- freestyle rhythm --- */
 
 /* A column of its own: the rest of .hud-right is right-aligned readouts, and
-   controls that flush right are much harder to aim at than ones that line up. */
-.rhythm {
+   controls that flush right are much harder to aim at than ones that line up.
+   The bed is the same block with less in it, so it shares the rule. */
+.rhythm, .bed {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
@@ -387,6 +400,11 @@ kbd {
 .rhythm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rhythm-bpm { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.08em; }
 .rhythm-bpm b { color: var(--ink); font-weight: 600; }
+
+/* The instrument sits under key and scale rather than beside them: it is a
+   long list with long names, and a third control on that row would squeeze all
+   three. Full width on its own line reads as what it is. */
+.hud-controls .hud-select { flex: 1; }
 
 .hud-select {
   pointer-events: auto;

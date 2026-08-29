@@ -10,6 +10,7 @@ import { AURORA } from '../src/game/table/tables/aurora';
 import { loadScores, saveBest } from '../src/modes/pinball/pinball';
 import { DEFAULT_PLAYTUNE, playTuneSettings, setPlayTuneSettings } from '../src/modes/playtune/settings';
 import { DEFAULT_FREESTYLE, freestyleSettings, setFreestyleSettings } from '../src/modes/freestyle/settings';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../src/audio/voices';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -77,6 +78,19 @@ describe('settings persistence', () => {
     expect(DEFAULT_FREESTYLE.bed).toBe(false);
     setFreestyleSettings({ bed: true });
     expect(freestyleSettings().bed).toBe(true);
+  });
+
+  it('starts Freestyle on the sound the app has always made', () => {
+    expect(DEFAULT_FREESTYLE.voiceId).toBe(DEFAULT_LEAD_VOICE);
+    expect(DEFAULT_FREESTYLE.bedVoiceId).toBe(DEFAULT_BED_VOICE);
+  });
+
+  it('remembers the instrument and the bed Freestyle was left on', () => {
+    setFreestyleSettings({ voiceId: 'electric-piano', bedVoiceId: 'strings' });
+
+    expect(freestyleSettings()).toMatchObject({
+      voiceId: 'electric-piano', bedVoiceId: 'strings',
+    });
   });
 
   it('remembers the room', () => {

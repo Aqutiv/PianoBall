@@ -7,6 +7,7 @@ import type { InputEvent } from '../../midi/types';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { RhythmBox } from '../../audio/rhythmBox';
 import { findPattern } from '../../audio/patterns';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
 import { Field } from './field';
 import { FreestyleHud } from './hud';
 import { freestyleSettings } from './settings';
@@ -70,6 +71,14 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.ctx.bed.setEnabled(freestyleSettings().bed);
   }
 
+  /** Hand the engine the instruments this mode remembers being set to. */
+  private applyVoices(): void {
+    const s = freestyleSettings();
+    const { audio } = this.ctx;
+    audio.setLeadVoice(s.voiceId);
+    audio.setBedVoice(s.bedVoiceId);
+  }
+
   /** Put the rhythm box back in step with the remembered settings. */
   private applyRhythm(): void {
     const r = rhythmSettings();
@@ -83,11 +92,13 @@ export class FreestyleMode extends ModeBase implements GameMode {
    * Re-read every preference this mode owns.
    *
    * The settings panel's "reset everything" calls this on whichever mode is
-   * running: the bed, the rhythm and the tempo are all read once on the way in
-   * and would otherwise sit on values the player has just cleared.
+   * running: the bed, the instruments, the rhythm and the tempo are all read
+   * once on the way in and would otherwise sit on values the player has just
+   * cleared.
    */
   applySettings(): void {
     this.applyBed();
+    this.applyVoices();
     this.applyRhythm();
     const { music, audio } = this.ctx;
     music.setBpm(rhythmSettings().bpm);
@@ -117,6 +128,10 @@ export class FreestyleMode extends ModeBase implements GameMode {
     music.setBpm(rhythmSettings().bpm);
     audio.setTempo(music.bpm);
 
+    // Before the panel is built, not after: the controls sync themselves from
+    // the engine on the way up, and the engine is still holding the defaults
+    // this mode put back the last time it exited.
+    this.applyVoices();
     this.panel.mount();
     this.applyBed();
     this.ctx.bed.start();
@@ -130,8 +145,11 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.running = false;
     this.box.stop();
     const { audio, music } = this.ctx;
-    // Leave the bed as the next mode expects to find it.
+    // Leave the bed, and the sound of the thing, as the next mode expects to
+    // find them: a choir chosen here is Freestyle's, not the app's.
     this.ctx.bed.setEnabled(true);
+    audio.setLeadVoice(DEFAULT_LEAD_VOICE);
+    audio.setBedVoice(DEFAULT_BED_VOICE);
     if (this.enteredBpm) music.setBpm(this.enteredBpm);
     audio.setTempo(music.bpm);
     audio.resetExpression();

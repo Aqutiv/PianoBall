@@ -137,6 +137,11 @@ export class Shell {
     // Whatever the last mode left behind stops here.
     this.input.releaseAll();
     this.audio.allNotesOff();
+    // Including a chord still in the air. `reset` only moves the progression
+    // on; the pads already sounding belong to the mode that scheduled them,
+    // and since Freestyle can pick its own they are no longer a timbre the
+    // next mode would have chosen.
+    this.audio.stopPads();
     this.bed.reset();
     this.stage.reset();
     this.hud.clearPanels();
