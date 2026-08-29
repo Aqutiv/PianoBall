@@ -132,6 +132,25 @@ describe('playtune instruments', () => {
     expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
   });
 
+  it('lets go of a held note before the next tune takes the instrument', () => {
+    const { mode, engine } = playtune();
+    mode.enter();
+    mode.start('jesu-joy');
+
+    // A voice keeps the spec it was struck with, so the pipe organ under a key
+    // still down when the next tune is chosen would play on through its
+    // count-in. Counted rather than heard: the engine has no context here.
+    let cleared = 0;
+    const real = engine.allNotesOff.bind(engine);
+    engine.allNotesOff = () => { cleared++; real(); };
+
+    mode.start('twinkle');
+
+    expect(cleared).toBe(1);
+    expect(engine.leadVoice).toBe('music-box');
+    mode.exit();
+  });
+
   it('swaps them when one tune follows another', () => {
     const { mode, engine } = playtune();
     mode.enter();

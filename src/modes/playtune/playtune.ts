@@ -211,6 +211,14 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // back onto the current scale's own loop, which then plays over whatever
     // screen comes next.
     this.ctx.bed.stop();
+    // Anything still down was struck as the last tune's instrument and keeps it:
+    // a voice holds the spec it was built with, and the setters below only reach
+    // the next note. A player holding a key while the results screen is up — the
+    // last note of a tune that ended under their hand — would otherwise ring on
+    // through the next tune's count-in in the wrong timbre, and an organ, whose
+    // envelope never decays, would still be there at the first bar.
+    this.ctx.audio.allNotesOff();
+    this.deck.allOff();
     // A tune's instruments are the tune's, the way Freestyle's are Freestyle's.
     // Deliberately not done in `finish`, which does not come through here: the
     // keys still sound on the results screen, and a tune you have just played
