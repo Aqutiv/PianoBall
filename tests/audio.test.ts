@@ -13,6 +13,18 @@ function wired(): { input: InputHub; engine: AudioEngine } {
   return { input, engine };
 }
 
+describe('cutting the pads short', () => {
+  it('is safe before the graph exists', () => {
+    // The shell enters a mode at boot to put something behind the home screen,
+    // and that switch stops whatever the last mode left ringing — long before
+    // a user gesture has unlocked any audio to stop.
+    const engine = new AudioEngine();
+
+    expect(engine.ready).toBe(false);
+    expect(() => engine.stopPads()).not.toThrow();
+  });
+});
+
 describe('MIDI audio controls', () => {
   it('maps channel volume CC 7 to master volume', () => {
     const { input, engine } = wired();

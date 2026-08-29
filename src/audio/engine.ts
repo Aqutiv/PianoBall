@@ -77,13 +77,13 @@ const dottedEighth = (bpm: number) => clamp((60 / bpm) * 0.75, 0.02, DELAY_MAX);
 interface KeyVoice {
   note: number;
   startedAt: number;
-  /** Every oscillator the voice owns: its layers first, then any FM operator. */
-  oscs: OscillatorNode[];
   /**
-   * Only the layer oscillators, which are the ones expression is wired into.
-   * An FM operator runs at its own ratio and must not be bent with them.
+   * Every oscillator the voice owns, layers and FM operators alike. They are
+   * one list because expression has to reach all of them: an operator sits at
+   * a ratio to its carrier, and bending only the carrier would slide the two
+   * apart and detune the timbre instead of transposing the note.
    */
-  voiced: OscillatorNode[];
+  oscs: OscillatorNode[];
   filter: BiquadFilterNode;
   amp: GainNode;
   /**
@@ -123,6 +123,14 @@ export class AudioEngine {
    * touching a single note the player is holding.
    */
   private padBus!: GainNode;
+  /**
+   * The pads currently allowed to ring, as one swappable node in front of the
+   * bus. A pad is fire-and-forget — it schedules its own stop and is never
+   * tracked — so there is nothing to release when a chord has to be cut short.
+   * Fading this and putting a fresh one in its place ends every pad already
+   * sounding, in one operation, without touching what comes next.
+   */
+  private padGen!: GainNode;
   private fxBus!: GainNode;
   private reverbSend!: GainNode;
   private reverbWet!: GainNode;
@@ -265,6 +273,8 @@ export class AudioEngine {
     const padReverb = ctx.createGain();
     padReverb.gain.value = 0.6;
     this.padBus.connect(padReverb).connect(this.reverbSend);
+    this.padGen = ctx.createGain();
+    this.padGen.connect(this.padBus);
 
     this.noise = makeNoise(ctx, 1.2);
 
@@ -382,6 +392,28 @@ export class AudioEngine {
    * Fade the chord bed in or out. A fade rather than a cut, because a pad
    * stopping dead sounds like a fault rather than like a decision.
    */
+  /**
+   * End every pad already sounding, without silencing the ones to come.
+   *
+   * A mode that hands the bed back on its way out has only changed which voice
+   * the *next* chord is built from; the one in the air keeps its own timbre for
+   * the rest of its bar, which is how a nylon guitar ends up ringing over a
+   * pinball table. Short enough not to click, quick enough to be gone before
+   * the next mode has drawn a frame.
+   */
+  stopPads(fade = 0.12): void {
+    if (!this.ready || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const old = this.padGen;
+    old.gain.cancelScheduledValues(t);
+    old.gain.setValueAtTime(old.gain.value, t);
+    old.gain.linearRampToValueAtTime(0.0001, t + fade);
+    // The faded node is left to its sources, which stop themselves; what
+    // matters is that nothing new is put through it.
+    this.padGen = this.ctx.createGain();
+    this.padGen.connect(this.padBus);
+  }
+
   setBedAudible(on: boolean): void {
     if (!this.ready || !this.ctx) return;
     this.padBus.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.08);
@@ -419,10 +451,8 @@ export class AudioEngine {
     filter.frequency.setValueAtTime(clamp(freq * (f.base + v * v * f.track), 180, 15000), t);
     filter.Q.value = f.q + v * f.qVel;
 
-    // Every layer of the instrument, and every operator modulating one. The
-    // two lists differ only in what expression is allowed to bend.
+    // Every layer of the instrument, and every operator modulating one.
     const oscs: OscillatorNode[] = [];
-    const voiced: OscillatorNode[] = [];
     for (const layer of spec.layers) {
       const osc = ctx.createOscillator();
       osc.type = layer.type;
@@ -451,7 +481,6 @@ export class AudioEngine {
       osc.connect(g).connect(filter);
       osc.start(t);
       oscs.push(osc);
-      voiced.push(osc);
     }
 
     // Breath, or the knock of the key itself: a slice of the shared buffer,
@@ -472,10 +501,13 @@ export class AudioEngine {
       src.start(t, Math.random() * 0.9, n.decay + 0.02);
     }
 
-    // Expression rides on top of whatever the envelopes below are doing. Only
-    // the layers: an operator runs at its own ratio and bending it would move
-    // the timbre rather than the pitch.
-    for (const osc of voiced) {
+    // Expression rides on top of whatever the envelopes below are doing, and
+    // it reaches the operators too. Cents are a ratio, so detuning carrier and
+    // operator by the same amount slides the whole spectrum together and keeps
+    // the ratio the timbre is made of. (The deviation itself is fixed at the
+    // strike, so bending an octave leaves the tine fractionally duller — worth
+    // far less than the sidebands staying where they belong.)
+    for (const osc of oscs) {
       this.bendSource.connect(osc.detune);
       this.lfoVibrato.connect(osc.detune);
     }
@@ -503,7 +535,7 @@ export class AudioEngine {
       clamp(freq * (f.settle + v * f.settleVel), 160, 12000), t + f.settleTime);
 
     const voice: KeyVoice = {
-      note, startedAt: t, oscs, voiced, filter, amp, release: env.release, releasing: false,
+      note, startedAt: t, oscs, filter, amp, release: env.release, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -530,8 +562,7 @@ export class AudioEngine {
     for (const osc of voice.oscs) osc.stop(stop);
     // The expression sources are permanent and hold a reference to every param
     // they feed, so a voice that is not explicitly unhooked never goes away.
-    // Only what was hooked up: an FM operator was never wired to either.
-    for (const osc of voice.voiced) {
+    for (const osc of voice.oscs) {
       this.bendSource.disconnect(osc.detune);
       this.lfoVibrato.disconnect(osc.detune);
     }
@@ -842,7 +873,7 @@ export class AudioEngine {
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
         osc.connect(f).connect(g).connect(pannerNode);
-        pannerNode.connect(this.padBus);
+        pannerNode.connect(this.padGen);
         osc.start(t);
         osc.stop(t + seconds + 0.1);
       }
