@@ -7,9 +7,26 @@ export interface Windows { perfect: number; good: number; ok: number }
 
 export const WINDOWS: Windows = { perfect: 0.055, good: 0.11, ok: 0.17 };
 
-/** How much of a note each verdict is worth towards accuracy. */
-const WORTH: Record<Verdict, number> = {
-  perfect: 1, good: 0.75, ok: 0.4, miss: 0, wrong: 0,
+/**
+ * How much of a note each verdict is worth towards accuracy.
+ *
+ * `good` used to be 0.75, which made a run that hit every note in the good
+ * window worth exactly 75% — the same number Canon in D and Jesu, Joy ask to
+ * pass, decided on the last bit of a float. Worse, once the long notes took
+ * the hold floor, playing Greensleeves correctly and detached scored 68.9%
+ * against its 70% mark: every key right, and a fail. A mode for learning a
+ * melody should not do that, so a competent run now clears every pass mark in
+ * the library with room, and perfect is still 20% better than good.
+ *
+ * `ok` used to be 0.4, so one millisecond either side of the good window more
+ * than halved what a note was worth. The ladder should slope, not cliff: the
+ * gaps are now 20% and 31% rather than 25% and 47%.
+ *
+ * Exported because the tests should assert against the ladder rather than
+ * restate its numbers and quietly disagree with it later.
+ */
+export const WORTH: Record<Verdict, number> = {
+  perfect: 1, good: 0.8, ok: 0.55, miss: 0, wrong: 0,
 };
 
 /**
