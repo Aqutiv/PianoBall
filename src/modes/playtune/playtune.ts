@@ -149,7 +149,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // for whatever it does not account for.
     t.offset = this.ctx.audio.latencyMs / 1000 + settings.offsetMs / 1000;
 
-    const countIn = tune.beatsPerBar;
+    // Long enough that the first aura gets the whole lane to fall down, which
+    // a bar on its own is not whenever the bar is shorter than the approach.
+    const countIn = t.countInBeats(settings.leadBeats);
     t.start(this.ctx.audio.now, countIn);
 
     // The release deadline is baked alongside the onset, for the same reason:

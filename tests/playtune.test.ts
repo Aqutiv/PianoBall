@@ -569,6 +569,29 @@ describe('the transport', () => {
     expect(t.approachSeconds(999)).toBe(t.approachSeconds(high));
   });
 
+  it('counts in for at least as long as the lane takes to fall', () => {
+    // The judge and the auras are built by start(), so a count-in shorter than
+    // the approach puts the first aura on screen already partway down — making
+    // the opening note the one note that gets less warning than was asked for.
+    // A one-bar count-in was three beats against a lead of four on every tune
+    // in three, so this was already true of Gymnopedie by a full second before
+    // the approach floor widened it.
+    const t = new Transport();
+    for (const tune of LIBRARY) {
+      t.bpm = tune.bpm;
+      t.beatsPerBar = tune.beatsPerBar;
+      for (const lead of LEAD_BEAT_CHOICES) {
+        const beats = t.countInBeats(lead);
+        const where = `${tune.id}, ${lead} beats`;
+        expect(beats * t.beatSeconds, where)
+          .toBeGreaterThanOrEqual(t.approachSeconds(lead) - 1e-9);
+        // A whole number of beats, and never less than the bar it used to be.
+        expect(Number.isInteger(beats), where).toBe(true);
+        expect(beats, where).toBeGreaterThanOrEqual(tune.beatsPerBar);
+      }
+    }
+  });
+
   it('rules the tail against the same lane the heads fall down', () => {
     // The head falls on a ruler of seconds and the tail is drawn on a ruler of
     // beats; `AuraStage` derives the second from the first. They describe one

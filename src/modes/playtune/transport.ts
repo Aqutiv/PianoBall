@@ -69,6 +69,25 @@ export class Transport {
       * Math.max(this.beatSeconds, 60 / APPROACH_BPM_CAP);
   }
 
+  /**
+   * Beats of count-in: a bar at least, and never less than the approach.
+   *
+   * The judge and the auras only exist once the run has started, so a count-in
+   * shorter than the lane means the first aura is created already partway down
+   * it. That made the opening note the one note in the tune to get less warning
+   * than the setting promises — worst on the tunes in three, where a one-bar
+   * count-in was three beats against a lead of four, so Gymnopedie's first note
+   * was a second short of its own approach.
+   *
+   * Rounded up to a whole beat rather than a whole bar: it only has to cover
+   * the lane, and buying that in bars would leave Gymnopedie staring at two
+   * seconds of empty lane before the first aura even appeared. A bar remains
+   * the floor, so nothing gets a shorter count-in than it used to have.
+   */
+  countInBeats(leadBeats: number): number {
+    return Math.max(this.beatsPerBar, Math.ceil(this.approachSeconds(leadBeats) / this.beatSeconds));
+  }
+
   /** Start such that beat 0 falls `countIn` beats after `now`. */
   start(now: number, countIn = 4): void {
     this.zero = now + countIn * this.beatSeconds;
