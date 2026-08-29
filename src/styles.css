@@ -1,4 +1,8 @@
 :root {
+  /* Tells the browser to draw its own widgets — select popups, scrollbars — to
+     match the app instead of defaulting to a light palette. */
+  color-scheme: dark;
+
   --void: #04050d;
   --ink: #e3ebff;
   --dim: #8593c4;
@@ -149,7 +153,7 @@ html, body {
 .row + .row { border-top: 1px solid rgba(255,255,255,0.05); }
 .row label { color: #c3cdec; }
 
-button, select, input[type="range"] {
+button, select {
   font-family: inherit;
   font-size: 13px;
   color: var(--ink);
@@ -161,6 +165,64 @@ button, select, input[type="range"] {
   transition: background 130ms ease, border-color 130ms ease, transform 90ms ease;
 }
 button:hover, select:hover { background: rgba(255,255,255,0.11); border-color: rgba(132,148,207,0.44); }
+
+/*
+ * The dropdown list is drawn by the browser, not by us. Without a declared
+ * colour scheme it comes up light, and the unselected options inherit the
+ * select's pale ink onto a white background — legible only once highlighted.
+ */
+select option { background: #10162c; color: var(--ink); }
+
+/*
+ * Range inputs are drawn from scratch rather than sharing the button styling
+ * above: that padding and border inset the track by twenty-odd pixels, so a
+ * slider at full volume still looked like it had somewhere left to go. The
+ * fill is a gradient stopping at --fill, which the settings panel sets from
+ * the value, so both ends of the travel read as genuinely full and empty.
+ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 176px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    var(--neon) 0 var(--fill, 0%), rgba(255, 255, 255, 0.13) var(--fill, 0%) 100%);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  /* Centres a 14px thumb on a 6px track. */
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    var(--neon) 0 var(--fill, 0%), rgba(255, 255, 255, 0.13) var(--fill, 0%) 100%);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--neon); outline-offset: 3px; }
 button:active { transform: translateY(1px); }
 button.primary {
   background: linear-gradient(96deg, rgba(87,220,255,0.22), rgba(166,120,255,0.22));

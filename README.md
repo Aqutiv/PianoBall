@@ -34,6 +34,33 @@ No hardware? The computer keyboard and touch both work — see *Controls*.
 - **Clear the scale-degree bank** — the five drop targets, one per note of the
   scale — to start multiball.
 
+## The music
+
+Everything is in **D**; what changes is which D. Settings → Audio → **Scale**
+picks from eight — minor and major pentatonic, dorian, natural minor, lydian,
+mixolydian, blues and kumoi — or **Random each game**, which draws a fresh one
+every time you start. Whatever is playing is named under the score.
+
+Three things follow from the choice:
+
+- **The playfield retunes.** The bumpers, targets, rollovers and spinner are
+  tuned by hand as a *contour* rather than as fixed pitches, so each is carried
+  into the new scale by scale degree instead of by pitch. The low slings stay
+  low and the five drop targets stay five distinct notes, whatever you pick: the
+  bank reads D F G A C in minor pentatonic and D E G# A C# in lydian, and no
+  element moves more than two semitones from where it was authored.
+- **The chord bed follows.** Each scale carries its own eight-chord loop written
+  in its own degrees, so the backing is idiomatic to the mode rather than
+  transposed into it.
+- **Assist snaps to it.** With *Snap off-scale notes into the table's key* on,
+  anything you play is pulled to the nearest tone of whichever scale is running.
+
+The bed changes chord every two bars — five seconds at the table's 96 bpm — and
+completing an objective pushes it on early. Each chord is re-voiced into the
+octave nearest the one before it, so the progression walks by a semitone or two
+instead of leaping most of an octave, while the bass still plays the true root
+underneath.
+
 ## Controls
 
 | | MIDI | Computer keyboard | Touch |

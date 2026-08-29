@@ -223,9 +223,17 @@ export class Overlay {
     $<HTMLSelectElement>('#mode').addEventListener('change', (e) =>
       game.setModeChoice((e.target as HTMLSelectElement).value));
 
-    const bindSlider = (sel: string, key: 'master' | 'music' | 'effects') =>
-      $<HTMLInputElement>(sel).addEventListener('input', (e) =>
-        audio.engine.setSettings({ [key]: Number((e.target as HTMLInputElement).value) }));
+    const bindSlider = (sel: string, key: 'master' | 'music' | 'effects') => {
+      const el = $<HTMLInputElement>(sel);
+      // The track's fill is painted from this, so it needs setting on the way in
+      // as well as on every move.
+      const paint = () => el.style.setProperty('--fill', `${Number(el.value) * 100}%`);
+      el.addEventListener('input', () => {
+        audio.engine.setSettings({ [key]: Number(el.value) });
+        paint();
+      });
+      paint();
+    };
     bindSlider('#vol-master', 'master');
     bindSlider('#vol-music', 'music');
     bindSlider('#vol-fx', 'effects');
