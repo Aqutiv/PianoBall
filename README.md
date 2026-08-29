@@ -1,5 +1,7 @@
 # PianoBall
 
+**[Play PianoBall online →](https://aqutiv.github.io/PianoBall/)**
+
 Pinball with thirty-two flippers.
 
 Your MIDI keyboard *is* the bottom of the table. Every key is a paddle: how hard
