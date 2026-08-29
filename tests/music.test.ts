@@ -68,6 +68,92 @@ describe('chords', () => {
   });
 });
 
+describe('chord vocabulary', () => {
+  const C = 60;
+  /** Build a voicing from intervals above middle C. */
+  const on = (...iv: number[]) => iv.map((i) => C + i);
+
+  it('names every seventh chord in common use', () => {
+    expect(identifyChord(on(0, 4, 7, 11))).toBe('Cmaj7');
+    expect(identifyChord(on(0, 3, 7, 10))).toBe('Cmin7');
+    expect(identifyChord(on(0, 4, 7, 10))).toBe('C7');
+    expect(identifyChord(on(0, 3, 6, 10))).toBe('Cmin7b5');
+    expect(identifyChord(on(0, 3, 6, 9))).toBe('Cdim7');
+    expect(identifyChord(on(0, 3, 7, 11))).toBe('CminMaj7');
+    expect(identifyChord(on(0, 4, 8, 10))).toBe('C7#5');
+    expect(identifyChord(on(0, 4, 8, 11))).toBe('Cmaj7#5');
+    expect(identifyChord(on(0, 5, 7, 10))).toBe('C7sus4');
+  });
+
+  it('names sixths, and does not confuse one with a minor seventh', () => {
+    // The same four pitch classes either way round; the bass decides.
+    expect(identifyChord(on(0, 4, 7, 9))).toBe('C6');
+    expect(identifyChord([57, 60, 64, 67])).toBe('Amin7');
+    expect(identifyChord(on(0, 3, 7, 9))).toBe('Cmin6');
+  });
+
+  it('names extensions rather than giving up on them', () => {
+    expect(identifyChord(on(0, 4, 7, 11, 14))).toBe('Cmaj9');
+    expect(identifyChord(on(0, 3, 7, 10, 14))).toBe('Cmin9');
+    expect(identifyChord(on(0, 4, 7, 10, 14))).toBe('C9');
+    expect(identifyChord(on(0, 4, 7, 10, 14, 21))).toBe('C13');
+    expect(identifyChord(on(0, 3, 7, 10, 14, 17))).toBe('Cmin11');
+    expect(identifyChord(on(0, 4, 7, 9, 14))).toBe('C6/9');
+    expect(identifyChord(on(0, 2, 4, 7))).toBe('Cadd9');
+    expect(identifyChord(on(0, 2, 3, 7))).toBe('Cmin(add9)');
+  });
+
+  it('names altered dominants', () => {
+    expect(identifyChord(on(0, 4, 7, 10, 13))).toBe('C7(b9)');
+    expect(identifyChord(on(0, 4, 7, 10, 15))).toBe('C7(#9)');
+    expect(identifyChord(on(0, 4, 7, 10, 18))).toBe('C7(#11)');
+    expect(identifyChord(on(0, 4, 7, 10, 20))).toBe('C7(b13)');
+  });
+
+  it('reads a voicing with the fifth left out', () => {
+    expect(identifyChord(on(0, 4, 10))).toBe('C7');
+    expect(identifyChord(on(0, 4, 11))).toBe('Cmaj7');
+    expect(identifyChord(on(0, 3, 10))).toBe('Cmin7');
+  });
+
+  it('will not drop a tone that defines the chord', () => {
+    // Without its flat fifth this is not half-diminished, and there is no
+    // reading of two notes plus a tension that is worth a name.
+    expect(identifyChord([60, 63, 70])).not.toBe('Cmin7b5');
+    // An altered fifth is never optional the way a perfect fifth is.
+    expect(identifyChord(on(0, 4, 11))).not.toBe('Cmaj7#5');
+  });
+
+  it('lets the bass name a symmetrical chord', () => {
+    // A diminished seventh has four identical faces; whichever is underneath
+    // is the one being played.
+    expect(identifyChord([60, 63, 66, 69])).toBe('Cdim7');
+    expect(identifyChord([63, 66, 69, 72])).toBe('D#dim7');
+    expect(identifyChord([60, 64, 68])).toBe('Caug');
+    expect(identifyChord([64, 68, 72])).toBe('Eaug');
+  });
+
+  it('prefers a whole chord to a gapped one, even against the bass', () => {
+    // C, E, A with C underneath is A minor in first inversion — not a sixth
+    // chord that happens to be missing its fifth.
+    expect(identifyChord([60, 64, 69])).toBe('Amin');
+    // Same argument for a quartal stack: F sus4 over C is complete, whereas
+    // C7sus4 would be missing its fifth.
+    expect(identifyChord([60, 65, 70])).toBe('Fsus4');
+  });
+
+  it('still refuses a cluster', () => {
+    expect(identifyChord([60, 61, 62])).toBeNull();
+    expect(identifyChord([60, 61, 62, 63])).toBeNull();
+    expect(identifyChord([60, 67])).toBeNull();
+  });
+
+  it('is unmoved by octave doubling and spread', () => {
+    expect(identifyChord([60, 64, 67, 72, 76, 79])).toBe('C');
+    expect(identifyChord([36, 64, 79, 91])).toBe('C');
+  });
+});
+
 describe('groove', () => {
   const g = new Groove(120);   // 0.5 s per beat, 0.25 s per eighth
 
