@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SCALES, MODES, findMode, chordNotes, snapToScale, inScale, scaleDegree, degreeToNote,
-  identifyChord, retuneNote, voiceLead, Groove,
+  identifyChord, retuneNote, voiceLead, Groove, chordLabel,
 } from '../src/audio/music';
 import { pitchClass } from '../src/midi/notes';
 import { buildTable } from '../src/game/table/schema';
@@ -65,6 +65,28 @@ describe('chords', () => {
   it('returns null for things that are not chords', () => {
     expect(identifyChord([60, 61])).toBeNull();
     expect(identifyChord([60, 61, 62])).toBeNull();
+  });
+});
+
+describe('naming a chord that was written down', () => {
+  it('spells it the way it is written, matching what identifyChord returns', () => {
+    expect(chordLabel(60, 'maj')).toBe('C');
+    expect(chordLabel(62, 'min')).toBe('Dmin');
+    expect(chordLabel(67, 'maj7')).toBe('Gmaj7');
+    expect(chordLabel(69, 'min7')).toBe('Amin7');
+    expect(chordLabel(64, 'dom7')).toBe('E7');
+    expect(chordLabel(65, 'sus4')).toBe('Fsus4');
+    // Octave is not part of a chord name.
+    expect(chordLabel(48, 'maj')).toBe(chordLabel(72, 'maj'));
+  });
+
+  it('follows the key when it is given one', () => {
+    // The sixth degree of D minor is a B flat, whatever the MIDI number says.
+    expect(chordLabel(70, 'maj', 62)).toBe('B♭');
+    expect(chordLabel(70, 'maj')).toBe('A#');
+    // And a sharp stays a sharp where the key has sharps in it.
+    expect(chordLabel(66, 'min', 62)).toBe('F#min');
+    expect(chordLabel(63, 'maj', 60)).toBe('E♭');
   });
 });
 

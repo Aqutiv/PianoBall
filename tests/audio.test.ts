@@ -87,6 +87,34 @@ describe('switching the bed on', () => {
     expect(audible).toEqual([false, true]);
   });
 
+  it('silences what is already ringing when it stops', () => {
+    const { pads, audible, bed } = harness();
+    (bed as never as { schedule(): void }).schedule();
+    expect(pads.length).toBe(2);
+
+    // Those pads are already in the engine's hands and will ring for their
+    // whole length — nearly four seconds of a slow swell. Dropping the queue
+    // does not reach them; only the bus does.
+    bed.stop();
+    expect(audible).toEqual([false]);
+
+    // And starting again brings them back, so a stop is not a one-way trip.
+    bed.start();
+    expect(audible).toEqual([false, true]);
+    bed.stop();
+  });
+
+  it('comes back only as loud as the mode asked for', () => {
+    const { audible, bed } = harness();
+    // A mode that wants no bed of its own must not get one back just because
+    // something stopped and started the scheduler around it.
+    bed.setEnabled(false);
+    bed.stop();
+    bed.start();
+    expect(audible).toEqual([false, false, false]);
+    bed.stop();
+  });
+
   it('does nothing when asked for a state it is already in', () => {
     const { pads, audible, engine, bed } = harness();
     (bed as never as { schedule(): void }).schedule();

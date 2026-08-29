@@ -689,15 +689,25 @@ export class AudioEngine {
     src.stop(t + seconds + 0.05);
   }
 
-  /** Pad for the backing bed: long, soft, and behind everything else. */
   /**
-   * A sustained chord. `at` is an audio-clock time, so a scheduler with a
-   * lookahead can place a chord on a downbeat that has not arrived yet.
+   * A chord from the backing bed. `at` is an audio-clock time, so a scheduler
+   * with a lookahead can place one on a downbeat that has not arrived yet.
+   *
+   * `attack` is what makes this one voice serve both jobs the bed has: left at
+   * its default the chord swells, which is the sustained bed; shortened to a
+   * few milliseconds the same voice is a struck chord, which is what an
+   * accompaniment pattern comps with. A separate percussive voice would have
+   * meant a second timbre, and `mallet` in particular feeds a delay whose time
+   * is pinned to 96 bpm.
    */
-  pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0): void {
+  pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0, attack = seconds * 0.35): void {
     if (!this.running || !this.ctx || !this.settings.bed) return;
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
+    const rise = clamp(attack, 0.004, seconds * 0.9);
+    // A struck chord opens brighter and faster than a swell; without this the
+    // filter is still on its way up by the time a short stab has gone.
+    const struck = rise < seconds * 0.2;
     for (let i = 0; i < notes.length; i++) {
       const freq = noteToFreq(notes[i]);
       for (const detune of [-6, 6]) {
@@ -707,13 +717,16 @@ export class AudioEngine {
         osc.detune.value = detune;
         const f = ctx.createBiquadFilter();
         f.type = 'lowpass';
-        f.frequency.setValueAtTime(420, t);
-        f.frequency.linearRampToValueAtTime(1100, t + seconds * 0.5);
+        f.frequency.setValueAtTime(struck ? 900 : 420, t);
+        f.frequency.linearRampToValueAtTime(
+          struck ? 1700 : 1100,
+          t + (struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
+        );
         f.frequency.linearRampToValueAtTime(500, t + seconds);
         f.Q.value = 1.4;
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(gain / notes.length, t + seconds * 0.35);
+        g.gain.linearRampToValueAtTime(gain / notes.length, t + rise);
         g.gain.linearRampToValueAtTime(0.0001, t + seconds);
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;

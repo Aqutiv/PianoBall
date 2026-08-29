@@ -23,7 +23,15 @@ export function line(steps: readonly Step[], start = 0): ChartNote[] {
   return out;
 }
 
-/** `[degree, quality, length in beats]`, laid end to end. */
+/**
+ * `[degree, quality, length in beats]`, laid end to end.
+ *
+ * Lengths rather than bars, and deliberately so. There used to be a `bars`
+ * helper that laid one chord per bar, and every tune in the library used it —
+ * which meant no tune ever changed harmony inside a bar, and the ones in six
+ * and nine changed it once every few seconds. Writing the length out forces the
+ * question of where the harmony actually moves.
+ */
 export type ChordStep = readonly [number, ChordQuality, number];
 
 export function progression(steps: readonly ChordStep[], start = 0): ChartChord[] {
@@ -34,11 +42,6 @@ export function progression(steps: readonly ChordStep[], start = 0): ChartChord[
     beat += len;
   }
   return out;
-}
-
-/** Lay the same chord bar after bar, one entry per bar. */
-export function bars(steps: readonly (readonly [number, ChordQuality])[], perBar: number, start = 0): ChartChord[] {
-  return progression(steps.map(([d, q]) => [d, q, perBar] as ChordStep), start);
 }
 
 /** Everything moved later by `beats`. */
