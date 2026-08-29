@@ -268,36 +268,174 @@ export function voiceLead(prev: readonly number[], notes: readonly number[]): nu
     .sort((a, b) => a - b);
 }
 
-const TRIADS: { name: string; intervals: number[] }[] = [
-  { name: 'maj', intervals: [0, 4, 7] },
-  { name: 'min', intervals: [0, 3, 7] },
-  { name: 'dim', intervals: [0, 3, 6] },
-  { name: 'aug', intervals: [0, 4, 8] },
-  { name: 'sus4', intervals: [0, 5, 7] },
-  { name: 'sus2', intervals: [0, 2, 7] },
-  { name: 'min7', intervals: [0, 3, 7, 10] },
-  { name: 'maj7', intervals: [0, 4, 7, 11] },
-  { name: 'dom7', intervals: [0, 4, 7, 10] },
+/** A chord shape, written as intervals above its own root. */
+interface ChordShape {
+  /** Printed after the root name. Major is bare, as musicians write it. */
+  name: string;
+  /** Core tones, including the root at 0. */
+  intervals: number[];
+  /**
+   * Whether extensions may stack on it.
+   *
+   * Extended harmony is built on a seventh: a triad can take one added note —
+   * that is what `add9` and `6/9` are — but a triad carrying two or more
+   * tensions is a handful of notes with a name forced onto it.
+   */
+  stackable: boolean;
+  /** Nudge for the shape that should win an otherwise exact tie. */
+  weight: number;
+}
+
+/**
+ * The vocabulary.
+ *
+ * Ordered loosely by how often each turns up, though `weight` rather than
+ * position is what settles a tie. Everything beyond these is reached by adding
+ * tensions to one of them rather than by adding another entry: a thirteenth is
+ * a dominant seventh with two notes on top, not a shape of its own.
+ */
+const SHAPES: ChordShape[] = [
+  { name: '', intervals: [0, 4, 7], stackable: false, weight: 3 },
+  { name: 'min', intervals: [0, 3, 7], stackable: false, weight: 3 },
+  { name: 'maj7', intervals: [0, 4, 7, 11], stackable: true, weight: 3 },
+  { name: 'min7', intervals: [0, 3, 7, 10], stackable: true, weight: 3 },
+  { name: '7', intervals: [0, 4, 7, 10], stackable: true, weight: 3 },
+  { name: 'sus4', intervals: [0, 5, 7], stackable: false, weight: 2 },
+  { name: 'sus2', intervals: [0, 2, 7], stackable: false, weight: 1 },
+  { name: '6', intervals: [0, 4, 7, 9], stackable: false, weight: 2 },
+  { name: 'min6', intervals: [0, 3, 7, 9], stackable: false, weight: 2 },
+  { name: '7sus4', intervals: [0, 5, 7, 10], stackable: true, weight: 2 },
+  { name: 'min7b5', intervals: [0, 3, 6, 10], stackable: true, weight: 2 },
+  { name: 'dim', intervals: [0, 3, 6], stackable: false, weight: 1 },
+  { name: 'dim7', intervals: [0, 3, 6, 9], stackable: true, weight: 1 },
+  { name: 'minMaj7', intervals: [0, 3, 7, 11], stackable: true, weight: 1 },
+  { name: '7#5', intervals: [0, 4, 8, 10], stackable: true, weight: 1 },
+  { name: 'aug', intervals: [0, 4, 8], stackable: false, weight: 0 },
+  { name: 'maj7#5', intervals: [0, 4, 8, 11], stackable: true, weight: 0 },
 ];
+
+/**
+ * Notes that colour a chord rather than change which chord it is.
+ *
+ * Anything outside this list appearing on top of a shape means the shape is
+ * simply the wrong one, so the match is thrown away rather than explained.
+ */
+const TENSIONS: Record<number, string> = {
+  1: 'b9', 2: '9', 3: '#9', 5: '11', 6: '#11', 8: 'b13', 9: '13',
+};
+
+/**
+ * Most notes a shape may carry on top of itself.
+ *
+ * Three, because a full thirteenth chord is a seventh with a ninth, an
+ * eleventh and a thirteenth stacked above it. What keeps that from also
+ * admitting clusters is the adjacency rule below rather than the count.
+ */
+const MAX_TENSIONS = 3;
+
+/** The natural stack. A chord is named for the highest step it reaches. */
+const NATURAL_STACK = ['9', '11', '13'];
+
+/**
+ * Weakest explanation worth asserting.
+ *
+ * A reading that is missing a chord tone *and* carrying tensions *and* does not
+ * own the bass is a guess, and it will still win if it is the only match — so
+ * there has to be a point below which no name beats a bad one. Twelve sits
+ * between such a guess (nine, for a gapped shape with two tensions and no bass)
+ * and the thinnest real voicing (fifteen, for a ninth chord with the fifth left
+ * out and the third in the bass).
+ */
+const MIN_SCORE = 12;
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
+/** Conventional single names for a shape once a ninth is stacked on it. */
+function withNinth(shape: string): string {
+  switch (shape) {
+    case '7': return '9';
+    case 'min7': return 'min9';
+    case 'maj7': return 'maj9';
+    case '6': return '6/9';
+    case '': return 'add9';
+    default: return `${shape}(add9)`;
+  }
+}
+
+function suffixFor(shape: string, tensions: readonly string[]): string {
+  if (!tensions.length) return shape;
+  if (shape === 'maj7' && tensions.join(' ') === '9 #11') return 'maj9#11';
+  // A ninth, an eleventh and a thirteenth stack: reaching the thirteenth is
+  // called a thirteenth chord, not a seventh with three things bolted on. The
+  // stack has to start at the ninth — a lone eleventh is an added note.
+  if (tensions[0] === '9' && tensions.every((t) => NATURAL_STACK.includes(t))) {
+    const top = tensions[tensions.length - 1];
+    if (top === '9') return withNinth(shape);
+    if (shape === '7') return top;
+    if (shape === 'min7') return `min${top}`;
+    if (shape === 'maj7') return `maj${top}`;
+  }
+  return `${shape}(${tensions.join(',')})`;
+}
+
 /**
- * Name a set of simultaneously held notes, trying every inversion.
+ * Name a set of simultaneously held notes.
+ *
+ * Every sounding pitch class is tried as the root against every shape, and the
+ * best explanation wins rather than the first one found. Three things decide
+ * "best": how much of the shape is actually present, how much is left over, and
+ * whether the root is the note in the bass — which is what separates C6 from
+ * Amin7, and which of a diminished seventh's four identical faces is the one
+ * being played.
+ *
+ * A fifth may be missing, because leaving it out is a voicing rather than a
+ * different chord; nothing else may be. Notes above the shape are named as
+ * tensions, so a ninth or a sharp eleventh colours the name instead of
+ * defeating it.
+ *
  * Returns null when the notes do not form a recognised chord.
  */
 export function identifyChord(notes: readonly number[]): string | null {
   const pcs = [...new Set(notes.map(pitchClass))].sort((a, b) => a - b);
   if (pcs.length < 3) return null;
-  for (let inv = 0; inv < pcs.length; inv++) {
-    const root = pcs[inv];
-    const rel = pcs.map((p) => ((p - root) % 12 + 12) % 12).sort((a, b) => a - b);
-    for (const t of TRIADS) {
-      if (t.intervals.length !== rel.length) continue;
-      if (t.intervals.every((v, i) => v === rel[i])) return `${NAMES[root]}${t.name === 'maj' ? '' : t.name}`;
+  const bass = pitchClass(Math.min(...notes));
+
+  let best: { score: number; root: number; shape: string; tensions: string[] } | null = null;
+  for (const root of pcs) {
+    const rel = new Set(pcs.map((p) => ((p - root) % 12 + 12) % 12));
+    for (const shape of SHAPES) {
+      const missing = shape.intervals.filter((i) => !rel.has(i));
+      // The perfect fifth is the only tone a voicing may drop. An altered fifth
+      // is what makes the chord what it is, and is never optional.
+      if (missing.length > 1 || (missing.length === 1 && missing[0] !== 7)) continue;
+      const matched = shape.intervals.length - missing.length;
+      if (matched < 3) continue;
+
+      const extras = [...rel].filter((i) => !shape.intervals.includes(i)).sort((a, b) => a - b);
+      if (extras.length > MAX_TENSIONS) continue;
+      if (extras.some((i) => TENSIONS[i] === undefined)) continue;
+      // Two tensions a semitone apart are a cluster, not a stack: a chord has
+      // a flat ninth or a natural ninth, never both.
+      if (extras.some((i, k) => k > 0 && i - extras[k - 1] === 1)) continue;
+      if (extras.length > 1 && !shape.stackable) continue;
+
+      // Order of precedence, and the reason for these numbers: a complete
+      // shape beats an incomplete one even when the incomplete one owns the
+      // bass, so the missing-tone penalty has to outweigh the bass bonus.
+      // Between two complete readings, the bass decides.
+      const score = matched * 10
+        - missing.length * 14
+        - extras.length * 4
+        + (root === bass ? 12 : 0)
+        + shape.weight;
+      if (score < MIN_SCORE) continue;
+      if (!best || score > best.score) {
+        best = { score, root, shape: shape.name, tensions: extras.map((i) => TENSIONS[i]) };
+      }
     }
   }
-  return null;
+  if (!best) return null;
+  return NAMES[best.root] + suffixFor(best.shape, best.tensions);
 }
 
 /**

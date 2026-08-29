@@ -122,10 +122,20 @@ export class Field {
     for (const col of this.columns.values()) col.held = false;
   }
 
+  /**
+   * The figure is drawn from the notes themselves and only *labelled* from the
+   * name, so a chord the vocabulary cannot name still draws. Tying the two
+   * together meant a lush voicing made the field go quieter than a plain
+   * triad, which is exactly backwards for a mode about playing freely.
+   */
   setChord(name: string | null, notes: readonly number[]): void {
-    if (name && name !== this.chordName) this.chordAt = this.t;
+    const pcs = [...new Set(notes.map(pitchClass))].sort((a, b) => a - b);
+    const held = pcs.length >= 3 ? pcs : [];
+    const changed = held.length !== this.chordPcs.length
+      || held.some((p, i) => p !== this.chordPcs[i]);
+    if (changed && held.length) this.chordAt = this.t;
     this.chordName = name;
-    this.chordPcs = name ? [...new Set(notes.map(pitchClass))].sort((a, b) => a - b) : [];
+    this.chordPcs = held;
   }
 
   /** The whole field pulses when a hit lands on the beat. */
@@ -164,7 +174,7 @@ export class Field {
     this.bend = bend;
     this.mod = mod;
     this.density = Math.max(0, this.density - dt * 1.4);
-    this.chordFade = this.chordName
+    this.chordFade = this.chordPcs.length >= 3
       ? Math.min(1, this.chordFade + dt * 5)
       : Math.max(0, this.chordFade - dt * 3.5);
 

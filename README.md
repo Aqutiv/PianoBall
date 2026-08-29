@@ -25,10 +25,19 @@ Play for the sound of it. No ball, no score, nothing to lose.
 The playfield is given over to what your hands are doing. A note throws a bloom
 off its key and a ribbon up the table, sized by how hard you hit it and coloured
 by its pitch. Hold a key and a column of light stands over it, breathing at the
-tempo. **A recognised chord draws itself**: a polygon whose corners are its
-pitch classes, turned to where its root sits on the circle of fifths, with every
-interval in the chord drawn as a line between two corners. The same chord always
-draws the same figure, because the figure *is* the chord.
+tempo. **A chord draws itself**: a polygon whose corners are its pitch classes,
+turned to where its root sits on the circle of fifths, with every interval in
+the chord drawn as a line between two corners. The same chord always draws the
+same figure, because the figure *is* the chord — and it draws whether or not the
+app can put a name to it. Three notes are enough; a cluster nobody has a word
+for still gets its shape, just without a label.
+
+Naming covers the vocabulary you would expect to find on a lead sheet: triads,
+sixths, all seven of the common sevenths, and extensions up to the thirteenth
+including the altered dominants. A fifth left out of a voicing is understood
+rather than fatal, and the note in the bass decides the readings that pitch
+classes alone cannot — which is what separates C6 from Amin7, or names which of
+a diminished seventh's four identical faces you are playing.
 
 Repetition sharpens everything. Hit the same note twice inside half a second and
 the bloom grows spokes and tightens; keep insisting and it goes from a soft ring
