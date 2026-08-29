@@ -228,7 +228,22 @@ export const GREENSLEEVES: Tune = {
   origin: 'classic',
   difficulty: 3,
   teaches: 'A lilting six, and a note from outside the key.',
-  bpm: 168,
+  // Dotted-quarter 44, which is slow for Greensleeves and deliberately so.
+  //
+  // 168 is the defensible tempo for *playing* the tune, and it is what this
+  // asked for until it turned out the mode is not asking anyone to play a tune
+  // they know: it is asking them to meet each note as it arrives. At 168 that
+  // is 2.11 notes a second held up for eighteen seconds with almost no rest —
+  // denser than the Canon, which is difficulty 5 and six places later, and a
+  // step up from the 1.5 that nothing before this tune in the chain exceeds.
+  // The tune before it is Drift, at 0.2.
+  //
+  // The count of beats is the other half of it. `leadBeats` is four *beats*,
+  // so tempo buys the approach as well: 168 gave 1.4s of warning where
+  // everything earlier in the chain gives 2.4 to 3.8. At 132 the rate is 1.66
+  // and the warning 1.8s, which puts this between Scarborough Fair and Für
+  // Elise instead of past the end of the library.
+  bpm: 132,
   beatsPerBar: 6,
   pickup: 1,
   root: A4,
@@ -240,12 +255,13 @@ export const GREENSLEEVES: Tune = {
   pass: 0.7,
   // The upper neighbour in each group — the F, the A, the G sharp — is
   // traditionally a snap: a dotted eighth answered by a sixteenth. Here the
-  // beat already *is* the eighth, so writing that literally as 1.5 and 0.5 put
-  // two notes 179ms apart in the seventh tune of the chain, tighter than
-  // anything in the Canon or the Bach and inside the perfect window's own
-  // width. Evened out, it is three notes to the group and 357ms, which is what
-  // Für Elise asks two tunes later. The library flattens ornaments elsewhere
-  // for the same reason; this was the one that kept one.
+  // beat already *is* the eighth, so writing that literally as 1.5 and 0.5
+  // subdivides below the beat, and at the tempo this used to carry it put two
+  // notes 179ms apart — inside the width of the perfect window itself. Evened
+  // out to three to the group it is one note per beat, which is what the
+  // library does with Für Elise's sixteenths too; this was the one chart that
+  // kept an ornament. That is a separate fix from the tempo above, and it
+  // would be right at any tempo.
   melody: line([
     [A4, 1],
     [C5, 2], [D5, 1], [E5, 1], [F5, 1], [E5, 1],
