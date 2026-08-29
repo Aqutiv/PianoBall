@@ -238,15 +238,23 @@ export const GREENSLEEVES: Tune = {
   // that borrows a major dominant, and it does it at the end of every phrase.
   borrows: LEADING,
   pass: 0.7,
+  // The upper neighbour in each group — the F, the A, the G sharp — is
+  // traditionally a snap: a dotted eighth answered by a sixteenth. Here the
+  // beat already *is* the eighth, so writing that literally as 1.5 and 0.5 put
+  // two notes 179ms apart in the seventh tune of the chain, tighter than
+  // anything in the Canon or the Bach and inside the perfect window's own
+  // width. Evened out, it is three notes to the group and 357ms, which is what
+  // Für Elise asks two tunes later. The library flattens ornaments elsewhere
+  // for the same reason; this was the one that kept one.
   melody: line([
     [A4, 1],
-    [C5, 2], [D5, 1], [E5, 1.5], [F5, 0.5], [E5, 1],
-    [D5, 2], [B4, 1], [G4, 1.5], [A4, 0.5], [B4, 1],
-    [C5, 2], [A4, 1], [A4, 1.5], [Gs4, 0.5], [A4, 1],
+    [C5, 2], [D5, 1], [E5, 1], [F5, 1], [E5, 1],
+    [D5, 2], [B4, 1], [G4, 1], [A4, 1], [B4, 1],
+    [C5, 2], [A4, 1], [A4, 1], [Gs4, 1], [A4, 1],
     [B4, 2], [Gs4, 1], [E4, 3],
-    [C5, 2], [D5, 1], [E5, 1.5], [F5, 0.5], [E5, 1],
-    [D5, 2], [B4, 1], [G4, 1.5], [A4, 0.5], [B4, 1],
-    [C5, 2], [B4, 1], [A4, 1.5], [Gs4, 0.5], [A4, 1],
+    [C5, 2], [D5, 1], [E5, 1], [F5, 1], [E5, 1],
+    [D5, 2], [B4, 1], [G4, 1], [A4, 1], [B4, 1],
+    [C5, 2], [B4, 1], [A4, 1], [Gs4, 1], [A4, 1],
     [B4, 2], [Gs4, 1], [A4, 3],
   ]),
   // Two chords to a bar of six, which is what six-eight actually is: two
