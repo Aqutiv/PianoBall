@@ -82,6 +82,25 @@ export class Particles {
     }
   }
 
+  /**
+   * Shatter: a fan of spinning fragments. A missed note in PlayTune breaks
+   * this way, which is why it reads as a loss rather than just an absence.
+   */
+  shatter(x: number, y: number, z: number, hue: number, count = 10, spread = 260): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+      const sp = spread * (0.4 + Math.random() * 0.8);
+      this.spawn('shard', x, y, z, {
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: 90 + Math.random() * 220,
+        maxLife: 0.5 + Math.random() * 0.45,
+        size: 9 + Math.random() * 13,
+        hue,
+        angle: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 14,
+      });
+    }
+  }
+
   /** Expanding ring, used for note hits and energised elements. */
   ring(x: number, y: number, z: number, hue: number, size = 40, life = 0.42): void {
     this.spawn('ring', x, y, z, { maxLife: life, size, hue });
@@ -113,6 +132,37 @@ export class Particles {
       const t = p.life / p.maxLife;
       cam.project(p.x, p.y, p.z, pt);
       const scale = cam.scaleAt(p.x, p.y, p.z);
+
+      if (p.kind === 'shard') {
+        // Drawn as an outline rather than a glow: a fragment should read as a
+        // hard edge, which is what makes it the opposite of a bloom.
+        const r = p.size * scale * (0.4 + t * 0.8);
+        ctx.globalAlpha = t * t * 0.9;
+        ctx.strokeStyle = `hsl(${p.hue} 40% ${45 + t * 30}%)`;
+        ctx.lineWidth = Math.max(1, 1.6 * scale);
+        ctx.beginPath();
+        for (let v = 0; v < 3; v++) {
+          const a = p.angle + (v / 3) * Math.PI * 2;
+          const px = pt.x + Math.cos(a) * r, py = pt.y + Math.sin(a) * r * 0.66;
+          if (v === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        continue;
+      }
+
+      if (p.kind === 'note') {
+        // A soft bar, for anything that should read as a sounding note rather
+        // than as a spark.
+        const w = p.size * scale * 0.5;
+        const h = p.size * scale * (0.4 + t * 1.6);
+        ctx.globalAlpha = t * t * 0.8;
+        ctx.fillStyle = `hsl(${p.hue} 92% 68%)`;
+        ctx.beginPath();
+        ctx.roundRect(pt.x - w / 2, pt.y - h / 2, w, h, w / 2);
+        ctx.fill();
+        continue;
+      }
 
       if (p.kind === 'ring') {
         const r = p.size * (1.9 - t * 1.5) * scale;

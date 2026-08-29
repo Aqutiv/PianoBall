@@ -275,3 +275,157 @@ kbd {
   background: rgba(0,0,0,0.4); padding: 5px 8px; border-radius: 7px;
   white-space: pre; line-height: 1.45; pointer-events: none;
 }
+
+/* ------------------------------------------------------------ home menu --- */
+
+.mode-grid { display: grid; gap: 9px; margin: 16px 0 4px; }
+
+.mode-card {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  gap: 1px 14px;
+  align-items: center;
+  text-align: left;
+  padding: 13px 16px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--stroke);
+  position: relative;
+}
+.mode-card:hover { background: rgba(255, 255, 255, 0.085); }
+/* The highlighted card is the one Enter plays, so it has to read as chosen
+   rather than merely hovered. */
+.mode-card.on {
+  background: linear-gradient(96deg, rgba(87, 220, 255, 0.16), rgba(166, 120, 255, 0.16));
+  border-color: rgba(87, 220, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(87, 220, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.mode-glyph {
+  grid-row: 1 / 3;
+  font-size: 30px;
+  line-height: 1;
+  text-align: center;
+  color: var(--neon);
+  text-shadow: 0 0 18px rgba(87, 220, 255, 0.55);
+}
+.mode-card.on .mode-glyph { color: var(--ink); text-shadow: 0 0 22px rgba(166, 120, 255, 0.7); }
+
+.mode-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mode-key {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--dim);
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.mode-tag { font-size: 12.5px; color: var(--dim); line-height: 1.4; }
+.mode-last {
+  position: absolute;
+  top: 10px; right: 12px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.hud-left { display: flex; flex-direction: column; gap: 2px; }
+
+/* -------------------------------------------------------- freestyle HUD --- */
+
+.chord {
+  font-size: clamp(26px, 4.6vh, 52px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  min-height: 1em;
+  color: var(--ink);
+  text-shadow: 0 0 30px rgba(166, 120, 255, 0.5);
+  transition: opacity 140ms ease;
+}
+
+.hud-toggle {
+  pointer-events: auto;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  color: var(--dim);
+}
+.hud-toggle.on {
+  color: var(--ink);
+  border-color: rgba(87, 220, 255, 0.5);
+  background: linear-gradient(96deg, rgba(87, 220, 255, 0.2), rgba(166, 120, 255, 0.2));
+}
+
+.wheels { display: flex; flex-direction: column; gap: 5px; width: 132px; }
+.wheel { display: flex; align-items: center; gap: 7px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.wheel b { font-weight: 500; width: 30px; text-align: right; }
+.wheel span { flex: 1; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.09); overflow: hidden; display: block; }
+.wheel i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--neon2), var(--neon)); }
+
+/* ------------------------------------------------------------ song list --- */
+
+.song-list { display: grid; gap: 7px; margin: 14px 0 4px; max-height: 46vh; overflow: auto; padding-right: 4px; }
+
+.song-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--stroke);
+}
+.song-card:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); }
+/* A locked card still shows everything about the tune: what is behind the
+   next unlock is part of why you would want to reach it. */
+.song-card.locked { opacity: 0.42; cursor: default; }
+.song-card.locked:hover { background: rgba(255, 255, 255, 0.045); }
+
+.song-name { grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 650; }
+.song-by { grid-column: 1; grid-row: 2; font-size: 11px; color: var(--dim); }
+.song-teaches { grid-column: 1 / -1; grid-row: 3; font-size: 11.5px; color: #9aa8d0; margin-top: 3px; }
+.song-best {
+  grid-column: 2; grid-row: 1;
+  font-family: var(--mono); font-size: 11px; color: var(--accent); text-align: right;
+}
+.song-best.song-new { color: var(--neon); }
+.song-locked {
+  grid-column: 2; grid-row: 1;
+  font-size: 10px; color: var(--dim); text-align: right; max-width: 140px; line-height: 1.35;
+}
+
+.pips { grid-column: 2; grid-row: 2; display: flex; gap: 3px; align-items: center; justify-content: flex-end; }
+.pips i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+.pips i.on { background: var(--neon); box-shadow: 0 0 5px var(--neon); }
+
+/* ------------------------------------------------------- playtune HUD --- */
+
+.tune-title { font-size: clamp(18px, 3vh, 30px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+.tune-bar { width: 190px; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-top: 7px; overflow: hidden; }
+.tune-bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--neon), var(--neon2)); transition: width 120ms linear; }
+
+.accuracy {
+  font-size: clamp(22px, 3.6vh, 40px);
+  font-weight: 750;
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(87, 220, 255, 0.4);
+}
+.tally { display: flex; gap: 6px; font-family: var(--mono); font-size: 11px; justify-content: flex-end; }
+.tally span::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.t-perfect { color: #9be7ff; } .t-perfect::before { background: #9be7ff; }
+.t-good { color: #7fe0b0; } .t-good::before { background: #7fe0b0; }
+.t-ok { color: var(--accent); } .t-ok::before { background: var(--accent); }
+.t-miss { color: #ff7a92; } .t-miss::before { background: #ff7a92; }

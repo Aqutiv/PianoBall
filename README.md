@@ -2,13 +2,7 @@
 
 **[Play PianoBall online →](https://aqutiv.github.io/PianoBall/)**
 
-Pinball with thirty-two flippers.
-
-Your MIDI keyboard *is* the bottom of the table. Every key is a paddle: how hard
-you press decides how far the ball flies, and **where on the key you hit it**
-decides where it goes. Pitch bend tilts the table. Sustain slows time. Every
-surface on the playfield is tuned to a note, so a good run is also a piece of
-music.
+Your MIDI keyboard, three ways.
 
 ```bash
 npm install
@@ -18,7 +12,43 @@ npm run dev
 Then open http://localhost:5173 in **Chrome or Edge** (Safari has no Web MIDI).
 No hardware? The computer keyboard and touch both work — see *Controls*.
 
-## How it plays
+Everything shares one machine: the same synth, the same eight scales, the same
+raked 2.5D table, the same thirty-two keys along its near edge. What changes is
+what the keys are *for*.
+
+---
+
+## Freestyle
+
+Play for the sound of it. No ball, no score, nothing to lose.
+
+The playfield is given over to what your hands are doing. A note throws a bloom
+off its key and a ribbon up the table, sized by how hard you hit it and coloured
+by its pitch. Hold a key and a column of light stands over it, breathing at the
+tempo. **A recognised chord draws itself**: a polygon whose corners are its
+pitch classes, turned to where its root sits on the circle of fifths, with every
+interval in the chord drawn as a line between two corners. The same chord always
+draws the same figure, because the figure *is* the chord.
+
+Repetition sharpens everything. Hit the same note twice inside half a second and
+the bloom grows spokes and tightens; keep insisting and it goes from a soft ring
+to a star. Playing on the beat flashes the whole field. None of it is scored —
+it is just that the field can tell the difference.
+
+This is also the one mode where **pitch bend and the mod wheel do what their
+names say**. Bend shears the field sideways as it bends the sound; the mod wheel
+waves it as it opens the filter. Range and destination are in Settings.
+
+The backing chord bed can be switched off from the HUD.
+
+## Pinball
+
+Pinball with thirty-two flippers, unchanged.
+
+Every key is a paddle: how hard you press decides how far the ball flies, and
+**where on the key you hit it** decides where it goes. Pitch bend tilts the
+table. Sustain slows time. Every surface on the playfield is tuned to a note, so
+a good run is also a piece of music.
 
 - **The keybed is a crown.** A ball that lands on it always rolls towards an
   outlane; you get between 1.2 and 3 seconds to find the right key, depending on
@@ -28,59 +58,95 @@ No hardware? The computer keyboard and touch both work — see *Controls*.
   the 25° lean that the outer keys already have towards the middle.
 - **Everything is tuned.** Bumpers, targets, rollovers and the spinner each own a
   note from the table's scale. Hitting one sounds it. *Playing* that note
-  energises it for a moment: it glows, kicks harder and scores double. Play a
-  chord and three of them light at once.
+  energises it for a moment: it glows, kicks harder and scores double.
 - **Multipliers reward musicianship.** Groove (landing hits on the beat),
-  Resonance (hitting energised elements), Combo (chaining without returning to
-  the keybed) and Multiball all stack.
+  Resonance (hitting energised elements), Combo and Multiball all stack.
 - **Clear the scale-degree bank** — the five drop targets, one per note of the
   scale — to start multiball.
+
+## PlayTune
+
+Learn a melody. The game plays the chords; you owe it the tune on top.
+
+Auras fall down the lane belonging to the key they are due on. Press the key as
+one arrives: on time it bursts into light, late or early it still counts for
+less, and one you never reach **shatters**. There is no failing — a tune always
+plays to its last bar, because the point is to have played it.
+
+Fourteen tunes, unlocked in order, from three notes on the beat to Bach in
+continuous quavers:
+
+| | Tune | Teaches |
+|---|---|---|
+| 1 | First Light | Three notes, one to a beat |
+| 2 | Ode to Joy | Neighbouring keys, one step at a time |
+| 3 | Twinkle, Twinkle | Jumping a fifth and landing on it |
+| 4 | Amazing Grace | Counting in three, starting before the bar |
+| 5 | Scarborough Fair | A minor mode that is not quite minor |
+| 6 | Drift | Holding a key for the whole tail |
+| 7 | Greensleeves | A lilting six, and a note from outside the key |
+| 8 | Für Elise | Alternating semitones at speed |
+| 9 | Londonderry Air | A phrase spanning more than an octave |
+| 10 | Minuet in G | Running quavers between the beats |
+| 11 | Gymnopédie No. 1 | Waiting, and coming in exactly on time |
+| 12 | Two Hands | Two notes at once, on a tune you already know |
+| 13 | Canon in D | Holding a long form as it doubles in speed |
+| 14 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
+
+The classics are public-domain melodies; the three originals sit where a new
+mechanic has to be introduced on something you have no expectations about.
+Charts are written around middle C and **transposed by whole octaves onto
+whatever keyboard is plugged in** — a tune too wide for your controller says so
+on its card rather than failing when you press play.
+
+Passing a tune (accuracy above its own mark) unlocks the next and records your
+best. **Settings → PlayTune → Audio offset** exists because output latency is real.
+You play in time with what you *hear*, and what you hear has already happened,
+so an honest player lands late — raise the offset to compensate for that, lower
+it if you are landing early.
+
+---
 
 ## The music
 
 Everything is in **D**; what changes is which D. Settings → Audio → **Scale**
 picks from eight — minor and major pentatonic, dorian, natural minor, lydian,
-mixolydian, blues and kumoi — or **Random each game**, which draws a fresh one
-every time you start. Whatever is playing is named under the score.
+mixolydian, blues and kumoi — or **Random each game**. The choice follows you
+across all three modes.
 
-Three things follow from the choice:
-
-- **The playfield retunes.** The bumpers, targets, rollovers and spinner are
-  tuned by hand as a *contour* rather than as fixed pitches, so each is carried
-  into the new scale by scale degree instead of by pitch. The low slings stay
-  low and the five drop targets stay five distinct notes, whatever you pick: the
-  bank reads D F G A C in minor pentatonic and D E G# A C# in lydian, and no
-  element moves more than two semitones from where it was authored.
+- **The pinball playfield retunes.** Its bumpers, targets, rollovers and spinner
+  are tuned by hand as a *contour* rather than as fixed pitches, so each is
+  carried into the new scale by scale degree instead of by pitch. The bank reads
+  D F G A C in minor pentatonic and D E G# A C# in lydian, and no element moves
+  more than two semitones from where it was authored.
 - **The chord bed follows.** Each scale carries its own eight-chord loop written
   in its own degrees, so the backing is idiomatic to the mode rather than
-  transposed into it.
-- **Assist snaps to it.** With *Snap off-scale notes into the table's key* on,
-  anything you play is pulled to the nearest tone of whichever scale is running.
-
-The bed changes chord every two bars — five seconds at the table's 96 bpm — and
-completing an objective pushes it on early. Each chord is re-voiced into the
-octave nearest the one before it, so the progression walks by a semitone or two
-instead of leaping most of an octave, while the bass still plays the true root
-underneath.
+  transposed into it. PlayTune replaces that loop with the tune's own harmony,
+  in the tune's own key, without disturbing what you picked.
+- **Assist snaps to it.** With *Snap off-scale notes into the key* on, anything
+  you play is pulled to the nearest tone of whichever scale is running. PlayTune
+  deliberately ignores this: the chart is the authority on what the note should
+  be, and quietly correcting you would defeat the mode.
 
 ## Controls
 
 | | MIDI | Computer keyboard | Touch |
 |---|---|---|---|
 | Play a key | any key, velocity sensitive | `Z`–`M`, `Q`–`P` (`Shift` harder, `Alt` softer) | tap a key; nearer its front lip hits harder |
-| Tilt the table | pitch bend | `←` `→` | — |
-| Slow time | sustain pedal / button | `Space` | — |
+| Bend | pitch bend | `←` `→` | — |
+| Modulate | mod wheel (CC 1) | `↑` `↓` | — |
+| Slow time (Pinball) | sustain pedal | `Space` | — |
 | Shift an octave | your controller's octave buttons | `[` `]` | Settings |
 
-`Esc` opens settings, `F3` shows the frame budget.
+On the home screen, `1` `2` `3` pick a mode and `Enter` plays the highlighted
+one. `Esc` steps back — out of a screen, out of play, out to the menu. `F3`
+shows the frame budget.
 
 ## Your controller
 
 The app makes no assumptions about what your hardware sends. It enumerates Web
 MIDI devices, and **Settings → MIDI monitor** shows the raw message stream so you
 can see exactly what your octave, bend and sustain controls transmit.
-
-Two details worth knowing:
 
 - **Octave buttons transpose silently.** Most controllers just send different
   note numbers. A note arriving outside the mapped window re-latches it by whole
@@ -91,9 +157,17 @@ Two details worth knowing:
   play, so the curve can be matched to you rather than guessed.
 
 Calibration (press your lowest key, then your highest) supports anything from 25
-to 88 keys; the keybed rebuilds around whatever you have.
+to 88 keys; every mode's keyboard rebuilds around whatever you have.
 
 ## Design notes
+
+**One shell, three modes.** `Shell` owns the canvas, the audio graph, the input
+hub and the single 240 Hz loop for the life of the page, and lends them to
+whichever mode is running. A mode may subscribe to anything it likes in `enter`
+and must release all of it in `exit`; `ModeBase` makes that one line, and a test
+enters and leaves each mode ten times and asserts the listener counts come back
+to where they started. Nothing in the original build was ever torn down, because
+nothing was ever left.
 
 **Physics is custom, and continuous.** Balls are the only dynamic bodies, and
 everything they touch is a capsule, a disc or an arc — which is all a pinball
@@ -101,32 +175,32 @@ table needs. The solver advances to the earliest time of impact and never past
 it, so tunnelling is impossible by construction rather than by tuning. The test
 suite fires 400 balls at up to 46,000 units/s at a one-unit-thick wall and drives
 another 200 through a half-unit plate at 625 units per step; none get through.
-Fixed 240 Hz stepping with a seeded RNG makes runs reproducible, which the
-determinism test checks over 10,000 steps.
 
 **Every key gets its own slice of the keybed.** Black keys own their width and
 the white keys either side own what is left, so the 32 striking slots tile the
-table exactly — the ball's x position always names one specific key to press.
-The keys are drawn as a real piano on top of that, blacks raised and flush at
-the front.
-
-**Friction has two regimes.** Sliding friction scales with how hard the contact
-is; a ball merely resting on a surface is rolling, and rolling resistance is
-almost nothing. Without that split the ball welds itself to the keybed instead
-of rolling down the crown.
+table exactly. `KeyDeck` is that piano on its own; the pinball `Keybed` extends
+it and adds the paddle each key drives, which is why Freestyle and PlayTune get
+a real keyboard without a physics world behind it.
 
 **Rendering is flat 2D lit as 2.5D.** The simulation never leaves the plane; a
-pinhole camera raked to 62° is the only place depth exists. Objects with height
-draw their own extruded side walls through that projection. The playfield is
-baked once into an offscreen canvas, emissive work goes to its own layer, and
-bloom is two cheap downscales rather than a real blur — about 4.6 ms a frame at
-2560×1440@2×, 8 ms with six balls and full particles.
+pinhole camera raked to 62° is the only place depth exists. `Stage` owns that
+camera, the layered canvases, the particle pool and the bloom — two cheap
+downscales rather than a real blur — so all three modes composite identically. A
+PlayTune aura four beats away is small and dim because it genuinely is further
+up the table.
 
 **Audio is hand-built Web Audio**, scheduled straight against `currentTime` with
 no lookahead queue, so the gap between pressing a key and hearing it is as short
-as the hardware allows (~10 ms measured). Velocity drives loudness *and*
-brightness; the reverb is a procedurally generated impulse; only the slow chord
-bed is scheduled ahead.
+as the hardware allows (~10 ms measured). Bend and modulation are a
+`ConstantSourceNode` and an LFO wired into every live voice's `detune`, which
+means expression costs no per-frame JavaScript at all. Only the chord bed is
+scheduled ahead, one bar at a time.
+
+**Two clocks, and only one of them is trusted for timing.** The game clock is
+driven by requestAnimationFrame and multiplied by slow motion; the audio clock is
+a hardware sample counter. Every PlayTune judgement is made against the audio
+clock, and losing focus pauses the run rather than letting it carry on without
+you.
 
 **Impacts are never quantised.** Only the *bonus* is judged against the beat
 grid, so the sound stays locked to what is on screen while still rewarding
@@ -136,20 +210,23 @@ playing in time.
 
 ```
 src/
+  app/       shell, mode contract, registry, debug hook
   core/      loop, event bus, seeded RNG, storage, math
   physics/   vec2, colliders, swept collision, spatial grid, world solver
   midi/      Web MIDI, note→lane mapping, velocity curves, keyboard fallback
-  audio/     engine (graph + voices), music theory, director
-  game/      game state, keybed, key layout, scoring, tilt, table + elements
-  render/    raked camera, baked playfield, elements, particles, bloom
-  ui/        HUD, overlay, settings, MIDI monitor
-tests/       sweep math, tunnelling, determinism, key layout, mapping, music
+  audio/     engine (graph + voices), music theory, shared state, chord bed
+  game/      pinball state, key deck, keybed, key layout, scoring, tilt, table
+  render/    stage, raked camera, keys, empty field, particles, bloom, theme
+  modes/     pinball/  freestyle/  playtune/ (+ its chart, judge, library)
+  ui/        HUD chrome, overlay screens
+tests/       sweep math, tunnelling, determinism, key layout, music,
+             mode teardown, charts, judging, progression
 ```
 
 ## Scripts
 
 ```bash
-npm run dev        # dev server
+npm run dev        # dev server (set PORT to run a second one)
 npm test           # vitest
 npm run typecheck  # tsc --noEmit
 npm run build      # typecheck + production build (installable PWA)
@@ -162,3 +239,5 @@ npm run icons      # regenerate app icons
   a nicety, and the app says so up front.
 - The playfield is portrait. On a landscape display the margins become the
   cabinet, with a piano roll of your own playing scrolling up both sides.
+- PlayTune restarts a tune from the top rather than resuming mid-phrase. A tune
+  picked up halfway through is not a tune you have played.

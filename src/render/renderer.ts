@@ -1,48 +1,13 @@
-import { TableCamera } from './project';
-import { Particles } from './particles';
+import type { TableCamera } from './project';
 import { tracePath, arcPoints, circlePoints, extrudeStroke, fillPoly } from './geom';
-import { mix, withAlpha, pitchColor, pitchHue, pitchHueSafe, LIGHT } from './palette';
-import { shadowSprite, glowSprite } from './sprites';
+import { mix, withAlpha, pitchColor } from './palette';
+import type { Stage, RenderQuality } from './stage';
+import { drawKeys } from './keys';
 import type { Game } from '../game/game';
 import type { WallStyle, TablePalette } from '../game/table/schema';
 import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
-import { load, save } from '../core/storage';
-
-export interface RenderQuality {
-  bloom: boolean;
-  particles: number;
-  shadows: boolean;
-  labels: boolean;
-  reducedMotion: boolean;
-  colorBlind: boolean;
-}
-
-export const DEFAULT_QUALITY: RenderQuality = {
-  bloom: true,
-  particles: 1400,
-  shadows: true,
-  labels: true,
-  reducedMotion: false,
-  colorBlind: false,
-};
-
-function defaultQuality(): RenderQuality {
-  return {
-    ...DEFAULT_QUALITY,
-    reducedMotion: typeof window !== 'undefined'
-      && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
-  };
-}
-
-function makeLayer(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, w);
-  canvas.height = Math.max(1, h);
-  const ctx = canvas.getContext('2d', { alpha: true })!;
-  return { canvas, ctx };
-}
 
 /** Bottom and top colours of each extruded wall style. */
 function wallColors(style: WallStyle, pal: TablePalette): [string, string] {
@@ -57,125 +22,40 @@ function wallColors(style: WallStyle, pal: TablePalette): [string, string] {
 }
 
 /**
- * Layered Canvas 2D renderer.
+ * The pinball table, drawn onto a shared Stage.
  *
- * The playfield is baked once into an offscreen canvas and blitted; only balls,
- * keys and effects are redrawn. Emissive work goes to its own layer so the
- * bloom pass can be a couple of cheap downscales rather than a real blur.
+ * The playfield is baked once into the Stage's static layer and blitted; only
+ * balls, keys and effects are redrawn. Emissive work goes to the Stage's own
+ * layer so the bloom pass can be a couple of cheap downscales rather than a
+ * real blur.
  */
-export class Renderer {
-  readonly cam = new TableCamera();
-  readonly particles = new Particles();
-  quality: RenderQuality;
-  private qualityPreference: RenderQuality;
+export class PinballRenderer {
+  constructor(readonly stage: Stage) {}
 
-  private ctx: CanvasRenderingContext2D;
-  private baked = makeLayer(1, 1);
-  private emissive = makeLayer(1, 1);
-  private bloomA = makeLayer(1, 1);
-  private bloomB = makeLayer(1, 1);
-  private dpr = 1;
-  private cssW = 1;
-  private cssH = 1;
-  private bakedFor = '';
-  /** Projected screen bounds of the table, for laying out the cabinet. */
-  private bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-  /** Rolling record of what the player has played, drawn as a piano roll. */
-  private roll: { note: number; at: number; end: number; force: number }[] = [];
-  private rollRange = { low: 48, high: 79 };
-  /** Screen shake, decaying. */
-  private shake = 0;
-  private shakeX = 0;
-  private shakeY = 0;
-  private t = 0;
-
-  constructor(readonly canvas: HTMLCanvasElement) {
-    this.ctx = canvas.getContext('2d', { alpha: false })!;
-    this.qualityPreference = {
-      ...defaultQuality(),
-      ...load<Partial<RenderQuality>>('quality', {}),
-    };
-    this.quality = { ...this.qualityPreference };
-    this.particles.budget = this.quality.particles;
-  }
-
-  resize(cssW: number, cssH: number, dpr: number): void {
-    this.cssW = cssW;
-    this.cssH = cssH;
-    this.dpr = dpr;
-    this.canvas.width = Math.round(cssW * dpr);
-    this.canvas.height = Math.round(cssH * dpr);
-    this.canvas.style.width = `${cssW}px`;
-    this.canvas.style.height = `${cssH}px`;
-
-    const w = this.canvas.width, h = this.canvas.height;
-    this.baked = makeLayer(w, h);
-    this.emissive = makeLayer(w, h);
-    this.bloomA = makeLayer(Math.ceil(w / 4), Math.ceil(h / 4));
-    this.bloomB = makeLayer(Math.ceil(w / 10), Math.ceil(h / 10));
-    this.cam.fit(cssW, cssH);
-    this.bakedFor = '';
-  }
-
-  invalidate(): void { this.bakedFor = ''; }
-
-  get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
-
-  setQuality(patch: Partial<RenderQuality>): void {
-    this.qualityPreference = { ...this.qualityPreference, ...patch };
-    this.quality = { ...this.quality, ...patch };
-    if (patch.particles !== undefined) this.particles.budget = patch.particles;
-    if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
-    save('quality', this.qualityPreference);
-  }
-
-  resetSettings(): void {
-    this.qualityPreference = defaultQuality();
-    this.quality = { ...this.qualityPreference };
-    this.particles.budget = this.quality.particles;
-    this.invalidate();
-    save('quality', this.qualityPreference);
-  }
-
-  /** Record a played note for the piano roll in the cabinet margins. */
-  logNote(note: number, force: number, low: number, high: number): void {
-    this.rollRange.low = low;
-    this.rollRange.high = high;
-    this.roll.push({ note, at: this.t, end: -1, force });
-    if (this.roll.length > 320) this.roll.shift();
-  }
-
-  endNote(note: number): void {
-    for (let i = this.roll.length - 1; i >= 0; i--) {
-      if (this.roll[i].note === note && this.roll[i].end < 0) { this.roll[i].end = this.t; return; }
-    }
-  }
-
-  /** Hue for a pitch, honouring the colour-blind palette setting. */
-  private hue(note: number): number {
-    return this.quality.colorBlind ? pitchHueSafe(note) : pitchHue(note);
-  }
-
-  kick(amount: number): void {
-    if (this.quality.reducedMotion) return;
-    this.shake = Math.min(26, this.shake + amount);
-  }
+  // Shorthands onto the stage. The drawing code below reads better for them,
+  // and they keep it honest that none of this state is the renderer's own.
+  private get cam(): TableCamera { return this.stage.cam; }
+  private get quality(): RenderQuality { return this.stage.quality; }
+  private get cssW(): number { return this.stage.cssW; }
+  private get cssH(): number { return this.stage.cssH; }
+  private get dpr(): number { return this.stage.dpr; }
+  private get bounds(): { minX: number; maxX: number; minY: number; maxY: number } { return this.stage.bounds; }
+  private get t(): number { return this.stage.t; }
+  private hue(note: number): number { return this.stage.hue(note); }
 
   // ------------------------------------------------------------- baking ---
 
   /** Redraw the static playfield. Runs on load and on resize only. */
   private bake(game: Game): void {
-    const key = `${game.def.id}|${this.cssW}x${this.cssH}|${this.dpr}|${this.quality.colorBlind}`;
-    if (this.bakedFor === key) return;
-    this.bakedFor = key;
+    if (!this.stage.needsBake(game.def.id)) return;
 
-    const ctx = this.baked.ctx;
+    const ctx = this.stage.baked.ctx;
     const pal = game.def.palette;
     const H = game.def.height;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.cssW, this.cssH);
 
-    this.measureBounds(game);
+    this.stage.measureBounds(game.def.outline);
     this.bakeCabinet(ctx, game);
 
     // --- Playfield surface ---
@@ -245,20 +125,6 @@ export class Renderer {
       ctx.lineWidth = Math.max(1, width * 0.24);
       ctx.stroke();
     }
-  }
-
-  /** Screen-space extent of the playfield, used to place the cabinet. */
-  private measureBounds(game: Game): void {
-    const p = { x: 0, y: 0 };
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const pt of game.def.outline) {
-      for (const z of [0, 50]) {
-        this.cam.project(pt.x, pt.y, z, p);
-        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-      }
-    }
-    this.bounds = { minX, maxX, minY, maxY };
   }
 
   /**
@@ -363,133 +229,32 @@ export class Renderer {
 
   // -------------------------------------------------------------- frame ---
 
-  render(game: Game, alpha: number, dt: number): void {
-    this.t += dt;
+  draw(game: Game, alpha: number, dt: number): void {
+    const stage = this.stage;
+    // The table owns the colours while it is on screen.
+    stage.palette = game.def.palette;
+
     this.bake(game);
-    this.particles.update(dt);
+    stage.beginFrame(dt);
 
-    const ctx = this.ctx;
-    const pal = game.def.palette;
-
-    this.shake *= Math.max(0, 1 - 9 * dt);
-    if (this.shake < 0.05) this.shake = 0;
-    this.shakeX = (Math.random() - 0.5) * this.shake;
-    this.shakeY = (Math.random() - 0.5) * this.shake;
-
-    const tx = this.shakeX * this.dpr, ty = this.shakeY * this.dpr;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, tx, ty);
-    ctx.fillStyle = pal.void;
-    ctx.fillRect(-40, -40, this.cssW + 80, this.cssH + 80);
-    ctx.drawImage(this.baked.canvas, 0, 0, this.cssW, this.cssH);
-
-    const em = this.emissive.ctx;
-    em.setTransform(this.dpr, 0, 0, this.dpr, tx, ty);
-    em.clearRect(-40, -40, this.cssW + 80, this.cssH + 80);
+    const ctx = stage.ctx;
+    const em = stage.emissive.ctx;
 
     const sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
     for (const el of sorted) this.drawElement(ctx, em, game, el);
 
-    this.drawKeybed(ctx, em, game);
+    drawKeys(ctx, em, stage, game.keybed);
     this.drawBalls(ctx, em, game, alpha);
-    this.particles.draw(em, this.cam);
+    stage.particles.draw(em, stage.cam);
 
-    this.composite(ctx);
-    this.drawPianoRoll(ctx, game);
+    stage.composite();
+    stage.drawRoll();
     this.drawPops(ctx, game);
-    this.drawGlass(ctx, game);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }
-
-  /** Additive bloom: two progressively smaller downscales, layered back on. */
-  private composite(ctx: CanvasRenderingContext2D): void {
-    const em = this.emissive.canvas;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, this.shakeX * this.dpr, this.shakeY * this.dpr);
-    ctx.globalCompositeOperation = 'lighter';
-
-    if (this.quality.bloom) {
-      const a = this.bloomA, b = this.bloomB;
-      a.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      a.ctx.clearRect(0, 0, a.canvas.width, a.canvas.height);
-      a.ctx.imageSmoothingEnabled = true;
-      a.ctx.drawImage(em, 0, 0, a.canvas.width, a.canvas.height);
-
-      b.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      b.ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
-      b.ctx.imageSmoothingEnabled = true;
-      b.ctx.drawImage(a.canvas, 0, 0, b.canvas.width, b.canvas.height);
-
-      ctx.globalAlpha = 0.62;
-      ctx.drawImage(a.canvas, 0, 0, em.width, em.height);
-      ctx.globalAlpha = 0.5;
-      ctx.drawImage(b.canvas, 0, 0, em.width, em.height);
-    }
-    ctx.globalAlpha = 1;
-    ctx.drawImage(em, 0, 0);
-    ctx.restore();
-    ctx.globalCompositeOperation = 'source-over';
-  }
-
-  /** Sheen and vignette: the pane of glass the whole thing lives under. */
-  private drawGlass(ctx: CanvasRenderingContext2D, game: Game): void {
-    const w = this.cssW, h = this.cssH;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const sheen = ctx.createLinearGradient(0, h * 0.1, w * 0.75, h);
-    sheen.addColorStop(0, 'rgba(255,255,255,0)');
-    sheen.addColorStop(0.42, 'rgba(190,215,255,0.035)');
-    sheen.addColorStop(0.52, 'rgba(190,215,255,0.055)');
-    sheen.addColorStop(0.62, 'rgba(190,215,255,0.02)');
-    sheen.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = sheen;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-
-    const vig = ctx.createRadialGradient(w / 2, h * 0.52, Math.min(w, h) * 0.32, w / 2, h * 0.52, Math.max(w, h) * 0.78);
-    vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, withAlpha(game.def.palette.void, 0.82));
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, w, h);
+    stage.drawGlass();
+    stage.endFrame();
   }
 
   // ----------------------------------------------------------- elements ---
-
-  private fillDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, style: string | CanvasGradient): void {
-    fillPoly(ctx, this.cam, circlePoints(x, y, r, 34), z, style);
-  }
-
-  /** Stack of projected discs: reads as a solid extruded cylinder. */
-  private column(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z0: number, z1: number, lo: string, hi: string, steps = 9): void {
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      this.fillDisc(ctx, x, y, r, z0 + (z1 - z0) * t, mix(lo, hi, t));
-    }
-  }
-
-  private groundShadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, strength = 1): void {
-    if (!this.quality.shadows) return;
-    const p = { x: 0, y: 0 };
-    const sx = x + LIGHT.x * z * 0.8, sy = y - LIGHT.y * z * 0.5;
-    this.cam.project(sx, sy, 0, p);
-    const scale = this.cam.scaleAt(sx, sy);
-    const size = r * 2.9 * scale;
-    ctx.globalAlpha = 0.55 * strength;
-    ctx.drawImage(shadowSprite(), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
-    ctx.globalAlpha = 1;
-  }
-
-  private halo(em: CanvasRenderingContext2D, x: number, y: number, z: number, hue: number, radius: number, strength: number): void {
-    if (strength <= 0.001) return;
-    const p = { x: 0, y: 0 };
-    this.cam.project(x, y, z, p);
-    const scale = this.cam.scaleAt(x, y, z);
-    const size = radius * 2 * scale;
-    em.globalCompositeOperation = 'lighter';
-    em.globalAlpha = clamp01(strength);
-    em.drawImage(glowSprite(hue, 96), p.x - size / 2, p.y - size / 2, size, size);
-    em.globalAlpha = 1;
-    em.globalCompositeOperation = 'source-over';
-  }
 
   private drawElement(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, el: Game['table']['elements'][number]): void {
     const pal = game.def.palette;
@@ -499,22 +264,22 @@ export class Renderer {
 
     switch (el.kind) {
       case 'post': {
-        this.groundShadow(ctx, el.x, el.y, el.r, el.z);
-        this.column(ctx, el.x, el.y, el.r, 0, el.z * 0.7, '#1a1030', '#3b2a58');
-        this.column(ctx, el.x, el.y, el.r * 1.12, el.z * 0.7, el.z, '#61245a', '#ff86b4');
-        this.fillDisc(ctx, el.x, el.y, el.r * 0.62, el.z + 1, '#ffd0e4');
-        if (flash > 0) this.halo(em, el.x, el.y, el.z, 330, el.r * 3, flash * 0.7);
+        this.stage.groundShadow(ctx, el.x, el.y, el.r, el.z);
+        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * 0.7, '#1a1030', '#3b2a58');
+        this.stage.column(ctx, el.x, el.y, el.r * 1.12, el.z * 0.7, el.z, '#61245a', '#ff86b4');
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.62, el.z + 1, '#ffd0e4');
+        if (flash > 0) this.stage.halo(em, el.x, el.y, el.z, 330, el.r * 3, flash * 0.7);
         break;
       }
 
       case 'bumper': {
         const pulse = energised ? 0.55 + Math.sin(this.t * 12) * 0.2 : 0;
         const squash = 1 - flash * 0.22;
-        this.groundShadow(ctx, el.x, el.y, el.r, el.z);
+        this.stage.groundShadow(ctx, el.x, el.y, el.r, el.z);
         // Painted skirt ring on the playfield.
-        this.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25));
-        this.fillDisc(ctx, el.x, el.y, el.r * 1.22, 1, withAlpha(pal.void, 0.55));
-        this.column(ctx, el.x, el.y, el.r, 0, el.z * squash, '#171c38', mix('#39406e', pitchColor(el.note ?? 60, 70, 46), 0.55));
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25));
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.22, 1, withAlpha(pal.void, 0.55));
+        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, '#171c38', mix('#39406e', pitchColor(el.note ?? 60, 70, 46), 0.55));
 
         const p = { x: 0, y: 0 };
         this.cam.project(el.x, el.y, el.z * squash, p);
@@ -525,11 +290,11 @@ export class Renderer {
         cap.addColorStop(0, `hsl(${capHue} 100% ${88 - flash * 6}%)`);
         cap.addColorStop(0.45, `hsl(${capHue} 88% ${62 + pulse * 14}%)`);
         cap.addColorStop(1, `hsl(${capHue} 70% ${26}%)`);
-        this.fillDisc(ctx, el.x, el.y, el.r, el.z * squash, cap);
-        this.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, `hsl(${capHue} 100% 96% / ${0.5 + pulse * 0.5})`);
+        this.stage.fillDisc(ctx, el.x, el.y, el.r, el.z * squash, cap);
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, `hsl(${capHue} 100% 96% / ${0.5 + pulse * 0.5})`);
 
-        this.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5);
-        if (this.quality.labels && el.note !== null) this.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55);
+        this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5);
+        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55);
         break;
       }
 
@@ -544,7 +309,7 @@ export class Renderer {
         ctx.globalAlpha = 1;
         extrudeStroke(ctx, this.cam, pts, 0, el.z, w,
           (t) => mix('#2b0f2c', flash > 0 ? '#ffd9e8' : '#ff7fae', t * 0.9 + 0.1), false, 7);
-        this.halo(em, el.x, el.y, el.z, 335, 70, flash * 1.1 + (energised ? 0.35 : 0));
+        this.stage.halo(em, el.x, el.y, el.z, 335, 70, flash * 1.1 + (energised ? 0.35 : 0));
         break;
       }
 
@@ -559,27 +324,27 @@ export class Renderer {
           ctx.stroke();
           break;
         }
-        this.groundShadow(ctx, el.x, el.y, el.r * 0.6, el.z, 0.7);
+        this.stage.groundShadow(ctx, el.x, el.y, el.r * 0.6, el.z, 0.7);
         extrudeStroke(ctx, this.cam, pts, 0, el.z, 11 * scale,
           (t) => mix('#101534', `hsl(${hue} 82% ${52 + flash * 30}%)`, t * 0.95 + 0.05), false, 7);
         tracePath(ctx, this.cam, pts, el.z);
         ctx.strokeStyle = `hsl(${hue} 100% ${78 + flash * 20}%)`;
         ctx.lineWidth = 3.5 * scale;
         ctx.stroke();
-        this.halo(em, el.x, el.y, el.z, hue, 54, flash + (energised ? 0.4 : 0));
-        if (this.quality.labels && el.note !== null) this.label(ctx, el.x, el.y, el.z + 12, noteName(el.note), pal.ink, 0.6);
+        this.stage.halo(em, el.x, el.y, el.z, hue, 54, flash + (energised ? 0.4 : 0));
+        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 12, noteName(el.note), pal.ink, 0.6);
         break;
       }
 
       case 'rollover': {
         const lit = el.down;
-        this.fillDisc(ctx, el.x, el.y, el.r * 1.18, 0.4, withAlpha(pal.railTop, 0.3));
-        this.fillDisc(ctx, el.x, el.y, el.r, 0.8, withAlpha(pal.void, 0.75));
-        this.fillDisc(ctx, el.x, el.y, el.r * 0.84, 1.2,
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.18, 0.4, withAlpha(pal.railTop, 0.3));
+        this.stage.fillDisc(ctx, el.x, el.y, el.r, 0.8, withAlpha(pal.void, 0.75));
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.84, 1.2,
           lit ? `hsl(${hue} 96% 66%)` : `hsl(${hue} 55% 34%)`);
-        this.fillDisc(ctx, el.x, el.y, el.r * 0.46, 1.6,
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.46, 1.6,
           lit ? `hsl(${hue} 100% 88%)` : `hsl(${hue} 45% 44%)`);
-        this.halo(em, el.x, el.y, 2, hue, el.r * 2.6, (lit ? 0.55 : 0.12) + flash);
+        this.stage.halo(em, el.x, el.y, 2, hue, el.r * 2.6, (lit ? 0.55 : 0.12) + flash);
         break;
       }
 
@@ -587,7 +352,7 @@ export class Renderer {
         const scale = this.cam.scaleAt(el.x, el.y);
         const open = Math.abs(Math.cos(el.spin));
         // Posts either side of the blade.
-        for (const end of [el.a, el.b]) this.column(ctx, end.x, end.y, 7, 0, el.z, '#161b33', '#93a6dc', 6);
+        for (const end of [el.a, el.b]) this.stage.column(ctx, end.x, end.y, 7, 0, el.z, '#161b33', '#93a6dc', 6);
         // The blade foreshortens as it spins, which is what reads as rotation.
         const z0 = el.z * (0.52 - open * 0.42), z1 = el.z * (0.52 + open * 0.46);
         for (let i = 0; i <= 6; i++) {
@@ -602,95 +367,12 @@ export class Renderer {
         ctx.strokeStyle = `hsl(${hue} 100% ${80}%)`;
         ctx.lineWidth = Math.max(1, 2.2 * scale);
         ctx.stroke();
-        this.halo(em, el.x, el.y, el.z * 0.5, hue, 60, flash * 0.8 + Math.min(0.5, Math.abs(el.spinRate) * 0.03));
+        this.stage.halo(em, el.x, el.y, el.z * 0.5, hue, 60, flash * 0.8 + Math.min(0.5, Math.abs(el.spinRate) * 0.03));
         break;
       }
 
       default:
         break;
-    }
-  }
-
-  private label(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, text: string, color: string, alpha: number): void {
-    const p = { x: 0, y: 0 };
-    this.cam.project(x, y, z, p);
-    const scale = this.cam.scaleAt(x, y, z);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.font = `700 ${Math.max(10, 21 * scale)}px ui-sans-serif, system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.65)';
-    ctx.shadowBlur = 6;
-    ctx.fillText(text, p.x, p.y);
-    ctx.restore();
-  }
-
-  // ------------------------------------------------------------- keybed ---
-
-  private drawKeybed(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game): void {
-    const pal = game.def.palette;
-    const keys = game.keybed.keys;
-    // Whites first, then blacks: the blacks stand in front and above them.
-    for (const pass of [false, true]) {
-      for (const k of keys) {
-        const g = k.geom;
-        if (g.black !== pass) continue;
-        const ax = Math.cos(g.tilt), ay = Math.sin(g.tilt);
-        const fx = g.drawCx + g.nx * k.pos, fy = g.drawCy + g.ny * k.pos;
-        const hw = g.drawHalfW - (g.black ? 0.5 : 1.4);
-        const quad: Vec2[] = [
-          { x: fx - ax * hw, y: fy - ay * hw },
-          { x: fx + ax * hw, y: fy + ay * hw },
-          { x: fx + ax * hw - g.nx * g.depth, y: fy + ay * hw - g.ny * g.depth },
-          { x: fx - ax * hw - g.nx * g.depth, y: fy - ay * hw - g.ny * g.depth },
-        ];
-
-        const held = k.down ? 1 : 0;
-        const glow = clamp01(1 - (game.keybed.time - k.litAt) * 2.6);
-        const zTop = g.z - (k.pos / 24) * 5;
-        const hue = this.hue(g.note);
-
-        // Side walls, then the face.
-        const lo = g.black ? '#05060f' : '#171d33';
-        const hi = g.black
-          ? mix('#1b2038', `hsl(${hue} 70% 30%)`, 0.35 + glow * 0.5)
-          : mix('#cfd8f0', `hsl(${hue} 85% 74%)`, glow * 0.75 + held * 0.12);
-        for (let i = 0; i <= 6; i++) {
-          const t = i / 6;
-          fillPoly(ctx, this.cam, quad, zTop * t, mix(lo, hi, t * t * 0.7 + 0.15));
-        }
-
-        const p0 = { x: 0, y: 0 }, p1 = { x: 0, y: 0 };
-        this.cam.project(quad[0].x, quad[0].y, zTop, p0);
-        this.cam.project(quad[2].x, quad[2].y, zTop, p1);
-        const face = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
-        if (g.black) {
-          face.addColorStop(0, mix('#2a3150', `hsl(${hue} 80% 46%)`, glow * 0.85));
-          face.addColorStop(1, '#0b0e1c');
-        } else {
-          face.addColorStop(0, mix('#f2f5ff', `hsl(${hue} 95% 82%)`, glow * 0.9));
-          face.addColorStop(1, mix('#9aa6cb', `hsl(${hue} 60% 58%)`, glow * 0.5));
-        }
-        fillPoly(ctx, this.cam, quad, zTop, face);
-
-        // Lit front lip: the edge the ball actually strikes.
-        tracePath(ctx, this.cam, [quad[0], quad[1]], zTop);
-        ctx.strokeStyle = g.black
-          ? `hsl(${hue} ${40 + glow * 55}% ${28 + glow * 52}%)`
-          : `hsl(${hue} ${34 + glow * 62}% ${64 + glow * 30}%)`;
-        ctx.lineWidth = Math.max(1, 3 * this.cam.scaleAt(g.cx, g.cy));
-        ctx.lineCap = 'round';
-        ctx.stroke();
-
-        if (glow > 0.02) this.halo(em, g.cx, fy, zTop, hue, hw * 3.4, glow * (0.5 + k.velocity * 0.7));
-
-        if (this.quality.labels && !g.black && g.note % 12 === 0) {
-          this.label(ctx, g.drawCx - g.nx * g.depth * 0.62, g.drawCy - g.ny * g.depth * 0.62, zTop + 1,
-            `C${Math.floor(g.note / 12) - 1}`, pal.void, 0.5);
-        }
-      }
     }
   }
 
@@ -737,7 +419,7 @@ export class Renderer {
         em.globalCompositeOperation = 'source-over';
       }
 
-      this.groundShadow(ctx, x, y, ball.r, ball.r, 1);
+      this.stage.groundShadow(ctx, x, y, ball.r, ball.r, 1);
       this.cam.project(x, y, ball.r, p);
 
       // Chrome: dark limb, bright lit side, a hard specular and a rim kick.
@@ -801,81 +483,6 @@ export class Renderer {
     }
 
     for (const id of [...this.trails.keys()]) if (!live.has(id)) this.trails.delete(id);
-  }
-
-  /**
-   * A piano roll of the player's own playing, scrolling up the cabinet sides.
-   * The run is a performance; this is the score of it, written as you play.
-   */
-  private drawPianoRoll(ctx: CanvasRenderingContext2D, game: Game): void {
-    const WINDOW = 7.5;
-    const left = this.bounds.minX;
-    const right = this.cssW - this.bounds.maxX;
-    const pad = 14;
-    if (Math.min(left, right) < 78) return;
-
-    // Drop anything that has scrolled off the top.
-    while (this.roll.length && this.t - this.roll[0].at > WINDOW + 1) this.roll.shift();
-
-    const { low, high } = this.rollRange;
-    const span = Math.max(1, high - low);
-    const h = this.cssH;
-
-    for (const side of [0, 1]) {
-      const w = (side === 0 ? left : right) - pad * 2;
-      if (w < 50) continue;
-      const x0 = side === 0 ? pad : this.cssW - right + pad;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x0, 0, w, h);
-      ctx.clip();
-
-      // Octave guides, fading upward so they read as a time grid rather than
-      // a seam in the cabinet.
-      const guide = ctx.createLinearGradient(0, h, 0, 0);
-      guide.addColorStop(0, withAlpha(game.def.palette.railTop, 0.3));
-      guide.addColorStop(0.45, withAlpha(game.def.palette.railTop, 0.09));
-      guide.addColorStop(1, withAlpha(game.def.palette.railTop, 0));
-      ctx.strokeStyle = guide;
-      ctx.lineWidth = 1;
-      ctx.font = '600 9px ui-monospace, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = withAlpha(game.def.palette.railTop, 0.5);
-      for (let n = Math.ceil(low / 12) * 12; n <= high; n += 12) {
-        const t = (n - low) / span;
-        const x = side === 0 ? x0 + (1 - t) * w : x0 + t * w;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h - 14);
-        ctx.stroke();
-        ctx.fillText(`C${Math.floor(n / 12) - 1}`, x, h - 4);
-      }
-
-      ctx.globalCompositeOperation = 'lighter';
-      for (const ev of this.roll) {
-        const end = ev.end < 0 ? this.t : ev.end;
-        const age = this.t - end;
-        if (age > WINDOW) continue;
-        const t = (ev.note - low) / span;
-        // Low notes sit against the outer edge, so both sides read outward-in.
-        const x = side === 0 ? x0 + (1 - t) * w : x0 + t * w;
-        const yEnd = h - (age / WINDOW) * h;
-        const yStart = h - ((this.t - ev.at) / WINDOW) * h;
-        const barW = 5 + ev.force * 11;
-        const fade = 1 - age / WINDOW;
-        ctx.globalAlpha = Math.max(0, fade * fade) * (0.5 + ev.force * 0.5);
-        ctx.fillStyle = `hsl(${this.hue(ev.note)} 92% 64%)`;
-        const top = Math.min(yStart, yEnd);
-        const height = Math.max(3, Math.abs(yEnd - yStart));
-        ctx.beginPath();
-        ctx.roundRect(x - barW / 2, top, barW, height, barW / 2);
-        ctx.fill();
-      }
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
   }
 
   private drawPops(ctx: CanvasRenderingContext2D, game: Game): void {

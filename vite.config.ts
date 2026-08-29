@@ -40,7 +40,8 @@ function shotSink(): Plugin {
 
 export default defineConfig({
   base: './',
-  server: { port: 5173, host: true },
+  // PORT lets a git worktree run its own dev server alongside the main one.
+  server: { port: Number(process.env.PORT) || 5173, host: true },
   build: { target: 'es2022', sourcemap: true, assetsInlineLimit: 8192 },
   plugins: [
     shotSink(),

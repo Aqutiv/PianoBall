@@ -1,4 +1,5 @@
 import type { Vec2 } from '../../physics/vec2';
+import type { TablePalette } from '../../render/theme';
 import type { Collider } from '../../physics/colliders';
 
 export type ElementKind =
@@ -90,21 +91,7 @@ export interface MusicDef {
 
 export type ChordQuality = 'min' | 'maj' | 'min7' | 'maj7' | 'sus2' | 'sus4' | 'dom7' | 'dim';
 
-export interface TablePalette {
-  /** Deep background outside the playfield. */
-  void: string;
-  /** Playfield surface, near and far, for the vertical gradient. */
-  floorNear: string;
-  floorFar: string;
-  /** Primary and secondary neon. */
-  neon: string;
-  neon2: string;
-  /** Warm accent used sparingly for high-value features. */
-  accent: string;
-  rail: string;
-  railTop: string;
-  ink: string;
-}
+export type { TablePalette };
 
 export interface TableDef {
   id: string;

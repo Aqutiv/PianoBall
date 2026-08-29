@@ -10,7 +10,17 @@ export interface AudioSettings {
   assist: boolean;
   /** The rhythmic backing bed. */
   bed: boolean;
+  /** Pitch-bend travel at full wheel, in semitones. */
+  bendRange: number;
+  /** What the mod wheel moves. */
+  modTarget: ModTarget;
 }
+
+/**
+ * Vibrato moves the pitch, colour opens and closes the filter. Most players
+ * expect the first; the second is what makes a held chord breathe.
+ */
+export type ModTarget = 'vibrato' | 'colour' | 'both';
 
 export const DEFAULT_AUDIO: AudioSettings = {
   master: 0.85,
@@ -18,6 +28,8 @@ export const DEFAULT_AUDIO: AudioSettings = {
   effects: 0.9,
   assist: true,
   bed: true,
+  bendRange: 2,
+  modTarget: 'both',
 };
 
 const AUDIO_STORAGE_KEY = 'audio';
@@ -80,6 +92,16 @@ export class AudioEngine {
   private reverbSend!: GainNode;
   private delaySend!: GainNode;
   private noise!: AudioBuffer;
+  /**
+   * Expression, as two always-running control sources rather than per-frame
+   * JavaScript. `detune` and `frequency` are AudioParams, so connecting these
+   * to every live voice sums them sample-accurately and costs nothing to hold.
+   */
+  private bendSource!: ConstantSourceNode;
+  private lfoVibrato!: GainNode;
+  private lfoColour!: GainNode;
+  private bendValue = 0;
+  private modValue = 0;
   private voices = new Map<number, KeyVoice>();
   private active: KeyVoice[] = [];
   private sustained = new Set<number>();
@@ -182,6 +204,23 @@ export class AudioEngine {
     this.delaySend.connect(delay);
 
     this.noise = makeNoise(ctx, 1.2);
+
+    // Pitch bend, in cents, fanned out to every voice's detune.
+    this.bendSource = ctx.createConstantSource();
+    this.bendSource.offset.value = this.bendValue * this.settings.bendRange * 100;
+    this.bendSource.start();
+
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 5.2;
+    this.lfoVibrato = ctx.createGain();
+    this.lfoColour = ctx.createGain();
+    this.lfoVibrato.gain.value = 0;
+    this.lfoColour.gain.value = 0;
+    lfo.connect(this.lfoVibrato);
+    lfo.connect(this.lfoColour);
+    lfo.start();
+    this.applyMod();
   }
 
   setSettings(patch: Partial<AudioSettings>): void {
@@ -191,6 +230,45 @@ export class AudioEngine {
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
     this.fxBus.gain.value = this.settings.effects;
+    if (patch.bendRange !== undefined) this.setBend(this.bendValue);
+    if (patch.modTarget !== undefined) this.applyMod();
+  }
+
+  /**
+   * Pitch bend, -1..1. Ramped rather than set, so a fast wheel sweep does not
+   * zipper. The chord bed deliberately does not follow: only what the player is
+   * holding bends.
+   */
+  setBend(value: number): void {
+    this.bendValue = clamp(value, -1, 1);
+    if (!this.ready || !this.ctx) return;
+    this.bendSource.offset.setTargetAtTime(
+      this.bendValue * this.settings.bendRange * 100, this.ctx.currentTime, 0.015);
+  }
+
+  /** Modulation depth, 0..1. */
+  setMod(depth: number): void {
+    this.modValue = clamp01(depth);
+    this.applyMod();
+  }
+
+  get bend(): number { return this.bendValue; }
+  get mod(): number { return this.modValue; }
+
+  /** Centre the wheels. Leaving a mode must not leave the next one detuned. */
+  resetExpression(): void {
+    this.setBend(0);
+    this.setMod(0);
+  }
+
+  private applyMod(): void {
+    if (!this.ready || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const target = this.settings.modTarget;
+    const vibrato = target === 'colour' ? 0 : this.modValue * 42;
+    const colour = target === 'vibrato' ? 0 : this.modValue * 900;
+    this.lfoVibrato.gain.setTargetAtTime(vibrato, t, 0.02);
+    this.lfoColour.gain.setTargetAtTime(colour, t, 0.02);
   }
 
   resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
@@ -243,6 +321,13 @@ export class AudioEngine {
     osc2.connect(g2).connect(filter);
     sub.connect(g3).connect(filter);
 
+    // Expression rides on top of whatever the envelopes below are doing.
+    for (const osc of [osc1, osc2, sub]) {
+      this.bendSource.connect(osc.detune);
+      this.lfoVibrato.connect(osc.detune);
+    }
+    this.lfoColour.connect(filter.frequency);
+
     const pannerNode = ctx.createStereoPanner();
     pannerNode.pan.value = clamp(pan, -1, 1);
     filter.connect(amp).connect(pannerNode);
@@ -287,6 +372,13 @@ export class AudioEngine {
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
     const stop = t + seconds + 0.02;
     voice.osc1.stop(stop); voice.osc2.stop(stop); voice.sub.stop(stop);
+    // The expression sources are permanent and hold a reference to every param
+    // they feed, so a voice that is not explicitly unhooked never goes away.
+    for (const osc of [voice.osc1, voice.osc2, voice.sub]) {
+      this.bendSource.disconnect(osc.detune);
+      this.lfoVibrato.disconnect(osc.detune);
+    }
+    this.lfoColour.disconnect(voice.filter.frequency);
     const idx = this.active.indexOf(voice);
     if (idx >= 0) this.active.splice(idx, 1);
   }
@@ -457,10 +549,14 @@ export class AudioEngine {
   }
 
   /** Pad for the backing bed: long, soft, and behind everything else. */
-  pad(notes: readonly number[], seconds: number, gain = 0.1): void {
+  /**
+   * A sustained chord. `at` is an audio-clock time, so a scheduler with a
+   * lookahead can place a chord on a downbeat that has not arrived yet.
+   */
+  pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0): void {
     if (!this.running || !this.ctx || !this.settings.bed) return;
     const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     for (let i = 0; i < notes.length; i++) {
       const freq = noteToFreq(notes[i]);
       for (const detune of [-6, 6]) {

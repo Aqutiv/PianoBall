@@ -2,25 +2,13 @@ import type { World, Paddle } from '../physics/world';
 import type { Contact } from '../physics/world';
 import { segment, MATERIALS } from '../physics/colliders';
 import { v2 } from '../physics/vec2';
-import { clamp, clamp01 } from '../core/math';
-import { buildKeyLayout, type KeyGeom, type KeybedLayout } from './keyLayout';
+import { clamp } from '../core/math';
+import type { KeyGeom, KeybedLayout } from './keyLayout';
+import { KeyDeck, DEFAULT_TRAVEL, type KeyLit, type KeyTravel } from './keys';
 
-export interface KeyState {
-  geom: KeyGeom;
+/** A key of the on-screen piano that is also a physics paddle. */
+export interface KeyState extends KeyLit {
   paddle: Paddle;
-  /** Current extension towards the playfield, in table units. */
-  pos: number;
-  /** Extension rate, table units/s. Fed to the paddle as surface velocity. */
-  rate: number;
-  /** Extension the current press is heading for. */
-  peak: number;
-  down: boolean;
-  /** Normalised velocity of the press that is currently sounding, 0..1. */
-  velocity: number;
-  /** Seconds since the last note-on. */
-  since: number;
-  /** Simulation time of the last note-on; drives the glow. */
-  litAt: number;
   /** Balls this press has already launched, so one press cannot double-hit. */
   launched: Set<number>;
 }
@@ -38,13 +26,7 @@ export interface LaunchEvent {
   offset: number;
 }
 
-export interface KeybedTuning {
-  /** Extension of the key at the softest and hardest usable press. */
-  minTravel: number;
-  maxTravel: number;
-  /** Time for a key to reach full extension. Short: this is the whole feel. */
-  attack: number;
-  release: number;
+export interface KeybedTuning extends KeyTravel {
   /** Launch speed floor and velocity gain, table units/s. */
   baseSpeed: number;
   velocitySpeed: number;
@@ -66,10 +48,7 @@ export interface KeybedTuning {
 }
 
 export const DEFAULT_TUNING: KeybedTuning = {
-  minTravel: 7,
-  maxTravel: 23,
-  attack: 0.024,
-  release: 0.085,
+  ...DEFAULT_TRAVEL,
   baseSpeed: 540,
   velocitySpeed: 1420,
   carry: 0.34,
@@ -82,44 +61,33 @@ export const DEFAULT_TUNING: KeybedTuning = {
 /**
  * The 32 (or however many) key paddles along the bottom of the table.
  *
- * Physics gives us the bounce; this class owns the *feel*: how far a key throws
- * a ball for a given MIDI velocity, and how striking the left or right side of
- * a key aims the launch. That aiming is the skill ceiling of the whole game.
+ * `KeyDeck` gives us the piano; this class owns the *feel*: how far a key
+ * throws a ball for a given MIDI velocity, and how striking the left or right
+ * side of a key aims the launch. That aiming is the skill ceiling of the whole
+ * game.
  */
-export class Keybed {
-  readonly keys: KeyState[] = [];
-  readonly byNote = new Map<number, KeyState>();
-  layout: KeybedLayout;
+export class Keybed extends KeyDeck<KeyState> {
   tuning: KeybedTuning;
-  /** Simulation clock in seconds, advanced by `update`. */
-  time = 0;
-
   private world: World;
 
-  constructor(world: World, baseNote: number, count: number, layoutOverrides: Partial<KeybedLayout> = {}, tuning: Partial<KeybedTuning> = {}) {
+  constructor(
+    world: World,
+    baseNote: number,
+    count: number,
+    layoutOverrides: Partial<KeybedLayout> = {},
+    tuning: Partial<KeybedTuning> = {},
+  ) {
+    super(tuning);
+    // Both assignments have to land before the first key is made, which is why
+    // the base class does not build inside its own constructor.
     this.world = world;
     this.tuning = { ...DEFAULT_TUNING, ...tuning };
-    const built = buildKeyLayout(baseNote, count, layoutOverrides);
-    this.layout = built.layout;
-    for (const geom of built.keys) this.keys.push(this.makeKey(geom));
-    for (const k of this.keys) this.byNote.set(k.geom.note, k);
+    this.build(baseNote, count, layoutOverrides);
   }
 
-  /** Rebuild for a different controller range without recreating the world. */
-  remap(baseNote: number, count: number): void {
-    for (const k of this.keys) {
-      const i = this.world.paddles.indexOf(k.paddle);
-      if (i >= 0) this.world.paddles.splice(i, 1);
-    }
-    this.keys.length = 0;
-    this.byNote.clear();
-    const built = buildKeyLayout(baseNote, count, this.layout);
-    this.layout = built.layout;
-    for (const geom of built.keys) this.keys.push(this.makeKey(geom));
-    for (const k of this.keys) this.byNote.set(k.geom.note, k);
-  }
+  // -------------------------------------------------------- deck hooks ---
 
-  private makeKey(geom: KeyGeom): KeyState {
+  protected override makeKey(geom: KeyGeom): KeyState {
     const collider = segment(v2(0, 0), v2(0, 0), 5, {
       material: MATERIALS.key,
       owner: `key:${geom.lane}`,
@@ -132,19 +100,21 @@ export class Keybed {
       vel: v2(0, 0),
       kick: 0,
     };
-    const key: KeyState = {
-      geom, paddle,
-      pos: 0, rate: 0, peak: 0,
-      down: false, velocity: 0, since: 99,
-      litAt: -99, launched: new Set<number>(),
-    };
-    this.placePaddle(key);
     this.world.addPaddle(paddle);
-    return key;
+    return { ...super.makeKey(geom), paddle, launched: new Set<number>() };
+  }
+
+  protected override onRemove(k: KeyState): void {
+    const i = this.world.paddles.indexOf(k.paddle);
+    if (i >= 0) this.world.paddles.splice(i, 1);
+  }
+
+  protected override onPress(k: KeyState): void {
+    k.launched.clear();
   }
 
   /** Position the paddle capsule for the key's current extension. */
-  private placePaddle(k: KeyState): void {
+  protected override place(k: KeyState): void {
     const g = k.geom;
     const ox = Math.cos(g.tilt), oy = Math.sin(g.tilt);   // along the key face
     const px = g.cx + g.nx * k.pos;
@@ -162,52 +132,7 @@ export class Keybed {
     k.paddle.vel.y = g.ny * k.rate;
   }
 
-  noteOn(note: number, velocity01: number): KeyState | null {
-    const k = this.byNote.get(note);
-    if (!k) return null;
-    k.down = true;
-    k.velocity = clamp01(velocity01);
-    k.since = 0;
-    k.litAt = this.time;
-    k.launched.clear();
-    const t = this.tuning;
-    k.peak = t.minTravel + (t.maxTravel - t.minTravel) * k.velocity;
-    return k;
-  }
-
-  noteOff(note: number): void {
-    const k = this.byNote.get(note);
-    if (k) k.down = false;
-  }
-
-  allOff(): void {
-    for (const k of this.keys) { k.down = false; k.peak = 0; }
-  }
-
-  /** Advance the key envelopes and hand the resulting motion to the solver. */
-  update(dt: number): void {
-    this.time += dt;
-    const t = this.tuning;
-    for (const k of this.keys) {
-      k.since = Math.min(k.since + dt, 99);
-      let next: number;
-      if (k.down) {
-        if (k.since < t.attack) {
-          // Ease-out: fastest at the very start, which is what throws the ball.
-          const u = k.since / t.attack;
-          next = k.peak * (1 - (1 - u) * (1 - u));
-        } else {
-          next = k.peak;
-        }
-      } else {
-        next = k.pos * Math.max(0, 1 - dt / t.release);
-        if (next < 0.01) next = 0;
-      }
-      k.rate = dt > 0 ? (next - k.pos) / dt : 0;
-      k.pos = next;
-      this.placePaddle(k);
-    }
-  }
+  // ------------------------------------------------------------ launch ---
 
   /**
    * Forgiveness pass, run the instant a key goes down: any ball hovering just
@@ -282,42 +207,5 @@ export class Keybed {
     k.launched.add(ballId);
 
     return { key: k, ballId, velocity: k.velocity, speed, x, y, dirX, dirY, offset };
-  }
-
-  /** Which key, if any, sits under a table-space point. For touch input. */
-  pick(x: number, y: number): KeyState | null {
-    let best: KeyState | null = null;
-    let bestD = Infinity;
-    // Black keys first: they sit in front and should win ties.
-    for (const pass of [true, false]) {
-      for (const k of this.keys) {
-        if (k.geom.black !== pass) continue;
-        const g = k.geom;
-        const dx = x - g.cx, dy = y - g.cy;
-        const along = dx * Math.cos(g.tilt) + dy * Math.sin(g.tilt);
-        const out = dx * g.nx + dy * g.ny;
-        if (Math.abs(along) > g.drawHalfW + 2) continue;
-        if (out > 16 || out < -g.depth) continue;
-        const d = Math.abs(along);
-        if (d < bestD) { bestD = d; best = k; }
-      }
-      if (best) return best;
-    }
-    return null;
-  }
-
-  /** Fraction across a key's face for a table-space point, -1..1. */
-  offsetOn(k: KeyState, x: number, y: number): number {
-    const g = k.geom;
-    const along = (x - g.cx) * Math.cos(g.tilt) + (y - g.cy) * Math.sin(g.tilt);
-    return clamp(along / g.halfW, -1, 1);
-  }
-
-  /** Highest and lowest notes currently mapped. */
-  get range(): { low: number; high: number } {
-    return {
-      low: this.keys.length ? this.keys[0].geom.note : 0,
-      high: this.keys.length ? this.keys[this.keys.length - 1].geom.note : 0,
-    };
   }
 }

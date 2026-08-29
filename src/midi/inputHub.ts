@@ -21,6 +21,8 @@ export class InputHub {
   velocity: VelocitySettings = { ...DEFAULT_VELOCITY, ...load('velocity', {}) };
   /** Raw pitch-bend position, -1..1. Smoothing happens in the tilt model. */
   bend = 0;
+  /** Mod wheel position, 0..1. What it does is the current mode's business. */
+  mod = 0;
   sustain = false;
   /** Notes currently held, whatever the source. */
   readonly held = new Set<number>();
@@ -42,6 +44,9 @@ export class InputHub {
     };
   }
 
+  /** Live subscribers. The mode teardown test asserts on this. */
+  get listenerCount(): number { return this.listeners.length; }
+
   on(fn: InputListener): () => void {
     this.listeners.push(fn);
     return () => { this.listeners = this.listeners.filter((f) => f !== fn); };
@@ -61,6 +66,7 @@ export class InputHub {
         this.bend = e.value;
         break;
       case 'cc':
+        if (e.controller === 1) this.mod = e.value;
         if (e.controller === 64) this.sustain = e.value >= 0.5;
         break;
       default:
