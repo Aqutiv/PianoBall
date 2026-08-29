@@ -2,6 +2,7 @@ import type { ChordQuality } from '../../game/table/schema';
 import type { ScaleName } from '../../audio/music';
 import { SCALES, chordNotes, degreeToNote, inScale } from '../../audio/music';
 import { COMP_PATTERNS, type CompPattern } from '../../audio/comp';
+import { BED_VOICES, LEAD_VOICES } from '../../audio/voices';
 
 /** One note the player is asked to play. Simultaneous beats form a chord. */
 export interface ChartNote {
@@ -47,6 +48,17 @@ export interface Tune {
   chords: ChartChord[];
   /** How the bed plays those chords: the rhythm, not the harmony. */
   accompaniment: CompPattern;
+  /**
+   * What the keys sound like, and what the bed sounds like under them.
+   *
+   * Both are left out rather than defaulted here, because the absence carries
+   * the rule: a tune that names no instrument is a tune with nothing to name,
+   * and gets the sound the app makes everywhere else. Für Elise names a piano
+   * and Twinkle names a music box; the originals name neither, so they say
+   * nothing and keep the voice PianoBall has always had.
+   */
+  voiceId?: string;
+  bedVoiceId?: string;
   /**
    * Chord tones from outside `scaleId` this tune means to use, as semitones
    * above the tonic.
@@ -118,6 +130,17 @@ export function validate(tune: Tune): string[] {
   if (!scale) problems.push(`unknown scale "${tune.scaleId}"`);
   if (!COMP_PATTERNS.includes(tune.accompaniment)) {
     problems.push(`unknown accompaniment "${tune.accompaniment}"`);
+  }
+  // Checked against the banks rather than through `findLeadVoice`, which falls
+  // back to the default on purpose. That fallback is right for a saved
+  // preference and wrong for a chart: it would turn a typo here into a tune
+  // that quietly plays on the signature voice, and this is the one place a
+  // typo in the library is supposed to say so.
+  if (tune.voiceId !== undefined && !LEAD_VOICES.some((v) => v.id === tune.voiceId)) {
+    problems.push(`unknown instrument "${tune.voiceId}"`);
+  }
+  if (tune.bedVoiceId !== undefined && !BED_VOICES.some((b) => b.id === tune.bedVoiceId)) {
+    problems.push(`unknown backing "${tune.bedVoiceId}"`);
   }
   if (tune.bpm <= 0) problems.push('bpm must be positive');
   if (tune.beatsPerBar <= 0) problems.push('beatsPerBar must be positive');

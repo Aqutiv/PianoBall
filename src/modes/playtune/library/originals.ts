@@ -60,6 +60,11 @@ export const FIRST_LIGHT: Tune = {
  * sustain tail has somewhere to be learned before a tune depends on it. The bed
  * is the one place in the library that stays a slow swell: a chord comping
  * along in time would be counting the note for the player.
+ *
+ * The only original that names an instrument, and it names one for the same
+ * reason: glass still rings while the key is down. A mallet voice would decay
+ * to nothing inside the first bar and the tune would be teaching a hold the
+ * player cannot hear themselves holding.
  */
 export const DRIFT: Tune = {
   id: 'drift',
@@ -73,6 +78,8 @@ export const DRIFT: Tune = {
   root: D4,
   scaleId: 'kumoi',
   accompaniment: 'sustain',
+  voiceId: 'glass',
+  bedVoiceId: 'glass-pad',
   // Kumoi is D E F A B: no C at all. The harmony wants one — it is what makes
   // an F major an F major and a D minor seventh a seventh — and nothing else
   // from outside the scale is allowed in.
