@@ -62,7 +62,7 @@ function isDotted(len: number): boolean {
 /**
  * Falling note auras.
  *
- * Because the camera is raked, an aura that is still four beats away is small,
+ * Because the camera is raked, an aura still at the top of the lane is small,
  * dim and high up the table, and one about to land is large and bright — the
  * approach reads as approach without anything having to fake a size curve.
  *
@@ -72,13 +72,23 @@ function isDotted(len: number): boolean {
  * lane the note runs, and drains as the key is held.
  */
 export class AuraStage {
-  /** Beats of approach an aura gets. Set by the mode from settings. */
-  leadBeats = 4;
+  /**
+   * How many beats of music the lane is holding right now.
+   *
+   * Derived in `view` from the approach it was actually handed, never set from
+   * outside. The head falls on a ruler of seconds and the tail is drawn on a
+   * ruler of beats, and the two describe the same lane only while
+   * `leadSeconds === laneBeats * beatSeconds`. That used to be the caller's
+   * job to remember; deriving it here means there is no longer a way to set
+   * one and pass the other, and no way for them to part company.
+   */
+  private laneBeats = 4;
 
   constructor(private readonly stage: Stage, private readonly deck: KeyDeck) {}
 
   /** Auras currently in flight, nearest last so they paint over the far ones. */
   view(judge: Judge, now: number, leadSeconds: number, beatSeconds: number): AuraView[] {
+    this.laneBeats = leadSeconds / beatSeconds;
     const out: AuraView[] = [];
     for (const target of judge.approaching(now, leadSeconds)) {
       const key = this.deck.byNote.get(target.note);
@@ -163,7 +173,7 @@ export class AuraStage {
   ): void {
     if (v.tailBeats <= 0) return;
     const g = v.key.geom;
-    const perBeat = (SPAWN_Y - g.cy) / Math.max(1, this.leadBeats);
+    const perBeat = (SPAWN_Y - g.cy) / Math.max(1, this.laneBeats);
     const shown = v.held ? v.tailBeats : Math.max(v.tailBeats, MIN_TAIL);
     const back = Math.min(SPAWN_Y, v.y + perBeat * shown);
     if (back - v.y < 1) return;

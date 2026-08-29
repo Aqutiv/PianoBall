@@ -1,3 +1,25 @@
+import { clamp } from '../../core/math';
+import { MAX_LEAD_BEATS, MIN_LEAD_BEATS } from './settings';
+
+/**
+ * Tempo above which a beat stops being allowed to shrink the approach.
+ *
+ * `leadBeats` is a count of beats, so without this the tempo decides how much
+ * real time a player gets to read a note: at four beats the library ranged from
+ * Gymnopedie's 4.0s down to Jesu, Joy's 1.36s — the least warning going to the
+ * densest charts, which is backwards. Reading a note and moving a finger costs
+ * about the same wherever the tune sits.
+ *
+ * 120 rather than something rounder: more lead on a quick chart means more
+ * notes on screen at once, and the two trade directly. Measured over the
+ * library at four beats, 120 is the lowest cap at which no tune puts more than
+ * the eight simultaneous onsets Canon in D already asks to be read — so this
+ * never draws a picture the game had not already shipped. At 100, Minuet in G
+ * reaches ten, which is a busier screen than anything in the game, at
+ * difficulty 4.
+ */
+export const APPROACH_BPM_CAP = 120;
+
 /**
  * A bar-and-beat clock riding the audio clock.
  *
@@ -29,6 +51,42 @@ export class Transport {
 
   get beatSeconds(): number { return 60 / this.bpm; }
   get barSeconds(): number { return this.beatSeconds * this.beatsPerBar; }
+
+  /**
+   * Seconds of approach `leadBeats` buys at this tempo.
+   *
+   * Purely a display quantity: it is how far ahead an aura is drawn, and it
+   * touches nothing that is judged. `beatSeconds`, `timeOf`, `beatAt` and
+   * `judgeTime` are all untouched by the cap, so the chart, the hit windows,
+   * the count-in and the bed run at the tune's real tempo.
+   *
+   * Still multiplied by the setting rather than floored at a flat number of
+   * seconds, because a floor would collapse three, four and six beats onto the
+   * same value on a quick tune and quietly retire the control.
+   */
+  approachSeconds(leadBeats: number): number {
+    return clamp(leadBeats, MIN_LEAD_BEATS, MAX_LEAD_BEATS)
+      * Math.max(this.beatSeconds, 60 / APPROACH_BPM_CAP);
+  }
+
+  /**
+   * Beats of count-in: a bar at least, and never less than the approach.
+   *
+   * The judge and the auras only exist once the run has started, so a count-in
+   * shorter than the lane means the first aura is created already partway down
+   * it. That made the opening note the one note in the tune to get less warning
+   * than the setting promises — worst on the tunes in three, where a one-bar
+   * count-in was three beats against a lead of four, so Gymnopedie's first note
+   * was a second short of its own approach.
+   *
+   * Rounded up to a whole beat rather than a whole bar: it only has to cover
+   * the lane, and buying that in bars would leave Gymnopedie staring at two
+   * seconds of empty lane before the first aura even appeared. A bar remains
+   * the floor, so nothing gets a shorter count-in than it used to have.
+   */
+  countInBeats(leadBeats: number): number {
+    return Math.max(this.beatsPerBar, Math.ceil(this.approachSeconds(leadBeats) / this.beatSeconds));
+  }
 
   /** Start such that beat 0 falls `countIn` beats after `now`. */
   start(now: number, countIn = 4): void {

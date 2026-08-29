@@ -238,11 +238,14 @@ export const GREENSLEEVES: Tune = {
   // step up from the 1.5 that nothing before this tune in the chain exceeds.
   // The tune before it is Drift, at 0.2.
   //
-  // The count of beats is the other half of it. `leadBeats` is four *beats*,
-  // so tempo buys the approach as well: 168 gave 1.4s of warning where
-  // everything earlier in the chain gives 2.4 to 3.8. At 132 the rate is 1.66
-  // and the warning 1.8s, which puts this between Scarborough Fair and Für
+  // At 132 the rate is 1.66, which puts this between Scarborough Fair and Für
   // Elise instead of past the end of the library.
+  //
+  // This used to carry a second argument about warning time — that `leadBeats`
+  // being four *beats* meant 168 bought only 1.4s of approach. That is no
+  // longer true of anything: `APPROACH_BPM_CAP` now puts a floor under it, and
+  // 168 would get the same 2.0s that 132 does. The density above is the whole
+  // of the reason now, and it is enough on its own, so the tempo stays here.
   bpm: 132,
   beatsPerBar: 6,
   pickup: 1,

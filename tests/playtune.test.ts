@@ -8,7 +8,8 @@ import {
   HOLD_FLOOR, HOLD_GRACE, Judge, WINDOWS, grade, type TargetSpec,
 } from '../src/modes/playtune/judge';
 import { noteShape } from '../src/modes/playtune/render';
-import { Transport } from '../src/modes/playtune/transport';
+import { APPROACH_BPM_CAP, Transport } from '../src/modes/playtune/transport';
+import { DEFAULT_PLAYTUNE, LEAD_BEAT_CHOICES } from '../src/modes/playtune/settings';
 import { loadProgress, recordRun, resetProgress, unlockedBy } from '../src/modes/playtune/progress';
 import { SCALES, degreeToNote, inScale } from '../src/audio/music';
 
@@ -54,6 +55,28 @@ describe('the tune library', () => {
       for (let i = 1; i < onsets.length; i++) {
         const gap = (onsets[i] - onsets[i - 1]) * beatSeconds;
         expect(gap, `${tune.id} at beat ${onsets[i]}`).toBeGreaterThanOrEqual(floor);
+      }
+    }
+  });
+
+  it('never puts more notes on screen at once than the busiest chart already did', () => {
+    // More approach on a quick tune means more notes in the air at once; the
+    // two trade directly, and this is the side of the trade that has no other
+    // guard. Eight is not a taste judgement — it is Canon in D's own worst
+    // screen at 100 bpm, the busiest picture the library shipped before the
+    // approach floor existed. A future tune, or a lower APPROACH_BPM_CAP, that
+    // draws more than the hardest chart in the game fails here: at a cap of
+    // 100, Minuet in G reaches ten.
+    const t = new Transport();
+    for (const tune of LIBRARY) {
+      t.bpm = tune.bpm;
+      const lead = t.approachSeconds(DEFAULT_PLAYTUNE.leadBeats);
+      const onsets = [...new Set(tune.melody.map((n) => n.beat))]
+        .sort((a, b) => a - b)
+        .map((b) => b * t.beatSeconds);
+      for (const start of onsets) {
+        const shown = onsets.filter((o) => o >= start && o < start + lead).length;
+        expect(shown, `${tune.id} from ${start.toFixed(2)}s`).toBeLessThanOrEqual(8);
       }
     }
   });
@@ -491,6 +514,100 @@ describe('the transport', () => {
     expect(t.judgeTime(late) - due).toBeCloseTo(0, 9);
     t.offset = 0.08;
     expect(t.judgeTime(late) - due).toBeCloseTo(-0.04, 9);
+  });
+
+  it('lets tempo buy approach only down to the cap', () => {
+    const t = new Transport();
+    const at = (bpm: number) => { t.bpm = bpm; return t.approachSeconds(4); };
+
+    // Below the cap the lead is exactly what four beats are worth.
+    expect(at(60)).toBeCloseTo(4, 9);
+    expect(at(100)).toBeCloseTo(2.4, 9);
+    expect(at(APPROACH_BPM_CAP)).toBeCloseTo(2, 9);
+
+    // Above it the beat stops shrinking, so the quick tunes stop being charged
+    // the same four beats in less and less real time.
+    expect(at(132)).toBeCloseTo(2, 9);
+    expect(at(176)).toBeCloseTo(2, 9);
+  });
+
+  it('never gives a note less approach than its beats are worth', () => {
+    // The floor may only ever add. If this fails, some tune got quicker to
+    // read than it used to be, which is the opposite of the point.
+    const t = new Transport();
+    for (const bpm of [50, 60, 96, 132, 176, 200]) {
+      t.bpm = bpm;
+      for (const lead of LEAD_BEAT_CHOICES) {
+        expect(t.approachSeconds(lead), `${bpm} bpm, ${lead} beats`)
+          .toBeGreaterThanOrEqual(lead * t.beatSeconds - 1e-9);
+      }
+    }
+  });
+
+  it('keeps the setting worth changing at every tempo', () => {
+    // A flat floor in seconds would collapse three, four and six beats onto one
+    // value on a quick tune and quietly retire the control. This is the test
+    // that rejects that design.
+    const t = new Transport();
+    for (const bpm of [60, 132, 176]) {
+      t.bpm = bpm;
+      const leads = LEAD_BEAT_CHOICES.map((b) => t.approachSeconds(b));
+      for (let i = 1; i < leads.length; i++) {
+        expect(leads[i], `${bpm} bpm`).toBeGreaterThan(leads[i - 1]);
+      }
+    }
+  });
+
+  it('copes with a lead that was persisted out of range', () => {
+    // setPlayTuneSettings does not clamp, so an old build's value reaches here.
+    const t = new Transport();
+    t.bpm = 176;
+    const [low] = LEAD_BEAT_CHOICES;
+    const high = LEAD_BEAT_CHOICES[LEAD_BEAT_CHOICES.length - 1];
+    expect(t.approachSeconds(0)).toBe(t.approachSeconds(low));
+    expect(t.approachSeconds(-4)).toBe(t.approachSeconds(low));
+    expect(t.approachSeconds(999)).toBe(t.approachSeconds(high));
+  });
+
+  it('counts in for at least as long as the lane takes to fall', () => {
+    // The judge and the auras are built by start(), so a count-in shorter than
+    // the approach puts the first aura on screen already partway down — making
+    // the opening note the one note that gets less warning than was asked for.
+    // A one-bar count-in was three beats against a lead of four on every tune
+    // in three, so this was already true of Gymnopedie by a full second before
+    // the approach floor widened it.
+    const t = new Transport();
+    for (const tune of LIBRARY) {
+      t.bpm = tune.bpm;
+      t.beatsPerBar = tune.beatsPerBar;
+      for (const lead of LEAD_BEAT_CHOICES) {
+        const beats = t.countInBeats(lead);
+        const where = `${tune.id}, ${lead} beats`;
+        expect(beats * t.beatSeconds, where)
+          .toBeGreaterThanOrEqual(t.approachSeconds(lead) - 1e-9);
+        // A whole number of beats, and never less than the bar it used to be.
+        expect(Number.isInteger(beats), where).toBe(true);
+        expect(beats, where).toBeGreaterThanOrEqual(tune.beatsPerBar);
+      }
+    }
+  });
+
+  it('rules the tail against the same lane the heads fall down', () => {
+    // The head falls on a ruler of seconds and the tail is drawn on a ruler of
+    // beats; `AuraStage` derives the second from the first. They describe one
+    // lane only while laneBeats * beatSeconds is the approach, and the tail's
+    // `Math.max(1, laneBeats)` guard must never be what clamps.
+    const t = new Transport();
+    for (const tune of LIBRARY) {
+      t.bpm = tune.bpm;
+      for (const lead of LEAD_BEAT_CHOICES) {
+        const approach = t.approachSeconds(lead);
+        const laneBeats = approach / t.beatSeconds;
+        expect(laneBeats * t.beatSeconds, `${tune.id}, ${lead} beats`)
+          .toBeCloseTo(approach, 9);
+        expect(laneBeats, `${tune.id}, ${lead} beats`).toBeGreaterThanOrEqual(1);
+      }
+    }
   });
 });
 

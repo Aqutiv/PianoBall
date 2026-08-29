@@ -11,11 +11,30 @@ export interface PlayTuneSettings {
    * different amounts, so there is no getting this right without asking.
    */
   offsetMs: number;
-  /** Beats of approach an aura gets. Fewer is less warning, not less time. */
+  /**
+   * Beats of lane an aura gets to fall down.
+   *
+   * Beats rather than seconds because the lane is a beat ruler: it is what
+   * makes a minim's tail twice a crotchet's. What it is *not* is the whole
+   * story about warning time — above `APPROACH_BPM_CAP` the beat stops being
+   * allowed to shrink, so a quick tune buys the same seconds a moderate one
+   * does. See `Transport.approachSeconds`.
+   */
   leadBeats: number;
   /** Light the key an aura is heading for. */
   assist: boolean;
 }
+
+/**
+ * The leads the panel offers, and so the range anything else has to cope with.
+ *
+ * Exported so the clamp and the `<select>` read one list rather than two that
+ * drift, the way `MIN_BPM`/`MAX_BPM` are shared with the Freestyle HUD.
+ */
+export const LEAD_BEAT_CHOICES = [3, 4, 6, 8] as const;
+
+export const MIN_LEAD_BEATS = LEAD_BEAT_CHOICES[0];
+export const MAX_LEAD_BEATS = LEAD_BEAT_CHOICES[LEAD_BEAT_CHOICES.length - 1];
 
 export const DEFAULT_PLAYTUNE: PlayTuneSettings = {
   offsetMs: 0,
