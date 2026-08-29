@@ -220,6 +220,28 @@ describe('groove', () => {
   });
 });
 
+describe('the beginner scales', () => {
+  it('offers a plain major and a plain minor', () => {
+    expect(SCALES.ionian).toEqual([0, 2, 4, 5, 7, 9, 11]);
+    expect(SCALES.aeolian).toEqual([0, 2, 3, 5, 7, 8, 10]);
+    expect(MODES.map((m) => m.label)).toContain('major');
+    expect(MODES.map((m) => m.label)).toContain('natural minor');
+  });
+
+  it('spells C major and A minor from the notes anyone would name', () => {
+    const C = 60, A = 57;
+    // The white keys, from each of the two places a beginner starts.
+    for (const n of [0, 2, 4, 5, 7, 9, 11]) {
+      expect(inScale(C + n, C, SCALES.ionian)).toBe(true);
+      expect(inScale(C + n, A, SCALES.aeolian)).toBe(true);
+    }
+    // And nothing black belongs to either.
+    for (const n of [1, 3, 6, 8, 10]) {
+      expect(inScale(C + n, C, SCALES.ionian)).toBe(false);
+    }
+  });
+});
+
 describe('modes', () => {
   it('offers a catalogue of scales, each with a loop of its own', () => {
     expect(MODES.length).toBeGreaterThan(1);

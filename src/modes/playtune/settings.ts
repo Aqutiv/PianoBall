@@ -32,3 +32,9 @@ export function setPlayTuneSettings(patch: Partial<PlayTuneSettings>): void {
   current = { ...current, ...patch };
   save(KEY, current);
 }
+
+/** Part of the panel's "reset everything": these are preferences like any other. */
+export function resetPlayTuneSettings(): void {
+  current = { ...DEFAULT_PLAYTUNE };
+  save(KEY, current);
+}

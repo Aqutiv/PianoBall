@@ -3,6 +3,8 @@ import { buildKeyLayout } from '../src/game/keyLayout';
 import { NoteMapping } from '../src/midi/mapping';
 import { mapVelocity, DEFAULT_VELOCITY } from '../src/midi/velocityCurve';
 import { isBlackKey } from '../src/midi/notes';
+import { KeyboardFallback } from '../src/midi/keyboardFallback';
+import type { InputEvent } from '../src/midi/types';
 
 describe('key layout', () => {
   it('gives a 32-key controller 19 white and 13 black keys', () => {
@@ -106,5 +108,70 @@ describe('velocity curve', () => {
     const soft = mapVelocity(45, { ...DEFAULT_VELOCITY, curve: 'soft' });
     const linear = mapVelocity(45, { ...DEFAULT_VELOCITY, curve: 'linear' });
     expect(soft).toBeGreaterThan(linear);
+  });
+});
+
+/**
+ * Input can be switched off between a key going down and coming up — focus
+ * moving to an on-screen control does exactly that — and a release that is
+ * dropped leaves a note sounding with nothing able to stop it.
+ */
+describe('losing the keyboard mid-note', () => {
+  function harness() {
+    const events: InputEvent[] = [];
+    const kb = new KeyboardFallback({
+      baseNote: () => 60,
+      emit: (e) => events.push(e),
+      shiftOctave: () => {},
+    });
+    const down = (code: string) => kb['onDown']({
+      code, repeat: false, metaKey: false, ctrlKey: false,
+      shiftKey: false, altKey: false, preventDefault: () => {},
+    } as unknown as KeyboardEvent);
+    const up = (code: string) => kb['onUp']({ code } as KeyboardEvent);
+    return { kb, events, down, up };
+  }
+
+  it('still lets a note go after input is disabled', () => {
+    const { kb, events, down, up } = harness();
+    down('KeyZ');
+    expect(events.filter((e) => e.type === 'noteon')).toHaveLength(1);
+
+    kb.enabled = false;
+    up('KeyZ');
+
+    expect(events.filter((e) => e.type === 'noteoff'), 'the note must not be stranded').toHaveLength(1);
+  });
+
+  it('lets go of the bend as well', () => {
+    const { kb, events, down, up } = harness();
+    down('ArrowLeft');
+    kb.enabled = false;
+    up('ArrowLeft');
+
+    const bends = events.filter((e) => e.type === 'bend');
+    expect(bends).toHaveLength(2);
+    expect(bends[bends.length - 1]).toMatchObject({ value: 0 });
+  });
+
+  it('ignores a release for something it never had', () => {
+    const { kb, events, up } = harness();
+    kb.enabled = false;
+    up('KeyZ');
+    up('ArrowLeft');
+
+    expect(events).toHaveLength(0);
+  });
+
+  it('releases everything held when the keyboard is taken away', () => {
+    const { kb, events, down } = harness();
+    down('KeyZ');
+    down('KeyX');
+    down('ArrowRight');
+
+    kb.releaseAll();
+
+    expect(events.filter((e) => e.type === 'noteoff')).toHaveLength(2);
+    expect(events.filter((e) => e.type === 'bend' && e.value === 0)).toHaveLength(1);
   });
 });

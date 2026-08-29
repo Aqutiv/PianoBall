@@ -10,6 +10,8 @@ export interface AudioSettings {
   assist: boolean;
   /** The rhythmic backing bed. */
   bed: boolean;
+  /** How much of the room is heard, 0..1. */
+  reverb: number;
   /** Pitch-bend travel at full wheel, in semitones. */
   bendRange: number;
   /** What the mod wheel moves. */
@@ -28,6 +30,7 @@ export const DEFAULT_AUDIO: AudioSettings = {
   effects: 0.9,
   assist: true,
   bed: true,
+  reverb: 0.5,
   bendRange: 2,
   modTarget: 'both',
 };
@@ -57,6 +60,9 @@ const IMPACTS: Record<string, ImpactProfile> = {
 };
 
 const MAX_VOICES = 48;
+
+/** Wet gain at a full reverb setting. Half of it is the original fixed value. */
+const REVERB_MAX = 1.7;
 
 interface KeyVoice {
   note: number;
@@ -88,8 +94,18 @@ export class AudioEngine {
   private master!: GainNode;
   private limiter!: DynamicsCompressorNode;
   private musicBus!: GainNode;
+  /**
+   * Everything the chord bed makes, on its own fader.
+   *
+   * Pads are one-shot oscillators rather than tracked voices, so there is no
+   * note to release when the bed is switched off. Giving them a bus means the
+   * bed can actually stop — and stop its own reverb tail with it — without
+   * touching a single note the player is holding.
+   */
+  private padBus!: GainNode;
   private fxBus!: GainNode;
   private reverbSend!: GainNode;
+  private reverbWet!: GainNode;
   private delaySend!: GainNode;
   private noise!: AudioBuffer;
   /**
@@ -180,9 +196,11 @@ export class AudioEngine {
     // exponential decay, with the high end rolling off faster than the low.
     const convolver = ctx.createConvolver();
     convolver.buffer = makeImpulse(ctx, 2.1, 2.6);
-    const wet = ctx.createGain();
-    wet.gain.value = 0.85;
-    convolver.connect(wet).connect(this.master);
+    // Half travel reproduces the fixed 0.85 the room used to have, so the
+    // default is where the sound has always been.
+    this.reverbWet = ctx.createGain();
+    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
+    convolver.connect(this.reverbWet).connect(this.master);
     this.reverbSend = ctx.createGain();
     this.reverbSend.gain.value = 1;
     this.reverbSend.connect(convolver);
@@ -202,6 +220,13 @@ export class AudioEngine {
     this.delaySend = ctx.createGain();
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
+
+    this.padBus = ctx.createGain();
+    this.padBus.gain.value = 1;
+    this.padBus.connect(this.musicBus);
+    const padReverb = ctx.createGain();
+    padReverb.gain.value = 0.6;
+    this.padBus.connect(padReverb).connect(this.reverbSend);
 
     this.noise = makeNoise(ctx, 1.2);
 
@@ -230,6 +255,7 @@ export class AudioEngine {
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
     this.fxBus.gain.value = this.settings.effects;
+    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
     if (patch.bendRange !== undefined) this.setBend(this.bendValue);
     if (patch.modTarget !== undefined) this.applyMod();
   }
@@ -272,6 +298,15 @@ export class AudioEngine {
   }
 
   resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
+
+  /**
+   * Fade the chord bed in or out. A fade rather than a cut, because a pad
+   * stopping dead sounds like a fault rather than like a decision.
+   */
+  setBedAudible(on: boolean): void {
+    if (!this.ready || !this.ctx) return;
+    this.padBus.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.08);
+  }
 
   get now(): number { return this.ctx ? this.ctx.currentTime : 0; }
 
@@ -577,9 +612,7 @@ export class AudioEngine {
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
         osc.connect(f).connect(g).connect(pannerNode);
-        pannerNode.connect(this.musicBus);
-        const rev = ctx.createGain(); rev.gain.value = 0.6;
-        pannerNode.connect(rev).connect(this.reverbSend);
+        pannerNode.connect(this.padBus);
         osc.start(t);
         osc.stop(t + seconds + 0.1);
       }

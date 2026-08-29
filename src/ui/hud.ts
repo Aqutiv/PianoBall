@@ -22,7 +22,7 @@ export class Hud {
   private bannerUntil = 0;
   showFps = false;
 
-  constructor(private readonly root: HTMLElement) {
+  constructor(readonly root: HTMLElement) {
     root.innerHTML = `
       <div class="hud-top">
         <div class="hud-left" id="hud-left"></div>

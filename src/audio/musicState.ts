@@ -7,9 +7,29 @@ const STORAGE_KEY = 'music';
 /** What the player picked in settings: a `MODES` id, or 'random'. */
 export const RANDOM = 'random';
 
+/**
+ * The nearest place a pitch class sits to a given note.
+ *
+ * Moving the key by a semitone should move the music by a semitone. Folding
+ * the interval to 0..11 and always subtracting sends everything above the
+ * tonic down an octave instead — from D, that is D# through G landing eleven
+ * semitones below where they were asked for.
+ */
+function nearestRoot(base: number, pitchClass: number): number {
+  const want = ((pitchClass % 12) + 12) % 12;
+  const up = ((want - base) % 12 + 12) % 12;
+  return up <= 6 ? base + up : base + up - 12;
+}
+
 export interface MusicStateEvents {
   /** The key, scale or tempo changed. Modes retune on this. */
   change: ActiveMusic;
+}
+
+interface StoredMusic {
+  mode: string;
+  /** Pitch class of the tonic, or null to follow whatever names the default. */
+  key: number | null;
 }
 
 export interface MusicDefaults {
@@ -45,8 +65,14 @@ export class MusicState {
     this.root = defaults.root;
     this.bpm = defaults.bpm;
     // Random by default: a fresh player should meet a different colour each
-    // game rather than the one the table happens to be authored in.
-    this.choice = load<{ mode: string }>(STORAGE_KEY, { mode: RANDOM }).mode;
+    // game rather than the one the table happens to be authored in. The key is
+    // remembered as a plain pitch class so a saved D survives whatever octave
+    // the table happens to be authored in.
+    const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: null });
+    this.choice = stored.mode;
+    if (stored.key !== null && stored.key >= 0 && stored.key < 12) {
+      this.root = nearestRoot(defaults.root, stored.key);
+    }
     this.set(this.resolve(), true);
   }
 
@@ -66,8 +92,24 @@ export class MusicState {
   /** Remember what the player picked, and apply it now so they can hear it. */
   setChoice(choice: string): void {
     this.choice = choice;
-    save(STORAGE_KEY, { mode: choice });
+    this.persist();
     this.set(this.resolve());
+  }
+
+  /**
+   * Move the tonic to a pitch class, staying in the register the app is
+   * written around rather than leaping an octave to reach it.
+   */
+  setRoot(pitchClass: number): void {
+    const root = nearestRoot(this.defaults.root, pitchClass);
+    if (root === this.root) return;
+    this.root = root;
+    this.persist();
+    this.bus.emit('change', this.active);
+  }
+
+  private persist(): void {
+    save(STORAGE_KEY, { mode: this.choice, key: ((this.root % 12) + 12) % 12 });
   }
 
   /**
@@ -91,9 +133,25 @@ export class MusicState {
     this.bus.emit('change', this.active);
   }
 
+  /**
+   * Forget the key and the scale together.
+   *
+   * `setChoice` alone would write the current key straight back out, so a
+   * "reset everything" that went through it left the tonic exactly where the
+   * player had put it.
+   */
+  resetSettings(): void {
+    this.choice = RANDOM;
+    this.root = this.defaults.root;
+    this.bpm = this.defaults.bpm;
+    this.persist();
+    this.set(this.resolve());
+  }
+
   /** Back to the tonic and tempo the app starts in. */
   resetTuning(): void {
     this.setTuning(this.defaults.root, this.defaults.bpm);
+    this.persist();
   }
 
   /** Re-draw the scale. Under `RANDOM` this is a fresh one; otherwise a no-op. */

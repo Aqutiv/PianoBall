@@ -429,3 +429,28 @@ kbd {
 .t-good { color: #7fe0b0; } .t-good::before { background: #7fe0b0; }
 .t-ok { color: var(--accent); } .t-ok::before { background: var(--accent); }
 .t-miss { color: #ff7a92; } .t-miss::before { background: #ff7a92; }
+
+/* On-screen controls live inside the HUD, which is otherwise click-through. */
+.hud-controls { display: flex; gap: 6px; margin-top: 4px; pointer-events: auto; }
+.hud-controls select {
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dim);
+}
+.hud-controls select:hover, .hud-controls select:focus { color: var(--ink); }
+.hud-controls button {
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 7px;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.06);
+}
+.hud-controls button:hover { color: var(--ink); }
+.wheel input[type="range"] { width: 90px; height: 12px; pointer-events: auto; }
+.wheel input[type="range"]::-webkit-slider-runnable-track { height: 4px; }
+.wheel input[type="range"]::-webkit-slider-thumb { width: 10px; height: 10px; margin-top: -3px; }
+.wheel input[type="range"]::-moz-range-track { height: 4px; }
+.wheel input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; }

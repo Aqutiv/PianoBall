@@ -1,12 +1,13 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
 import { KeyDeck } from '../../game/keys';
 import { drawKeys } from '../../render/keys';
-import { identifyChord, snapToScale, inScale } from '../../audio/music';
+import { identifyChord, inScale } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { Field } from './field';
 import { FreestyleHud } from './hud';
+import { freestyleSettings } from './settings';
 
 /**
  * Playing for the sound of it.
@@ -29,13 +30,21 @@ export class FreestyleMode extends ModeBase implements GameMode {
     super();
     this.ctx = ctx;
     this.field = new Field(ctx.stage);
-    this.panel = new FreestyleHud(ctx.hud, ctx.music, ctx.audio);
+    this.panel = new FreestyleHud(ctx.hud, ctx.music, ctx.audio, () => this.applyBed());
     this.remap();
   }
 
   remap(): void {
     const m = this.ctx.input.mapping.settings;
     this.deck.build(m.baseNote, m.count);
+  }
+
+  /** Start or silence the bed to match what the player last chose. */
+  applyBed(): void {
+    // Deliberately no allNotesOff here: the bed's pads are not key voices, so
+    // it would not silence them — it would only cut the note the player is
+    // holding, which is not what switching off a backing track should do.
+    this.ctx.bed.setEnabled(freestyleSettings().bed);
   }
 
   enter(): void {
@@ -46,13 +55,16 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.remap();
     this.panel.mount();
     this.track(input.on((e) => this.onInput(e)));
-    this.track(this.ctx.music.bus.on('change', () => this.field.reset()));
+    this.track(this.ctx.music.bus.on('change', () => { this.field.reset(); this.panel.sync(); }));
+    this.applyBed();
     this.ctx.bed.start();
     audio.resetExpression();
   }
 
   exit(): void {
     this.release();
+    // Leave the bed as the next mode expects to find it.
+    this.ctx.bed.setEnabled(true);
     this.ctx.audio.resetExpression();
     this.deck.allOff();
     this.field.reset();
@@ -60,8 +72,12 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.ctx.hud.clearPanels();
   }
 
-  /** Freestyle has no run to restart; entering it is all there is. */
+  /**
+   * Freestyle has no run to restart, but picking it from the menu is the same
+   * moment the table calls a new game — so it is where a random scale is drawn.
+   */
   newGame(): void {
+    this.ctx.music.roll();
     this.field.reset();
   }
 
@@ -127,18 +143,15 @@ export class FreestyleMode extends ModeBase implements GameMode {
     return (note - m.root) % 12 === 0 ? 0.2 : 0.09;
   }
 
-  private tune(note: number): number {
-    const m = this.ctx.music;
-    return this.ctx.audio.settings.assist ? snapToScale(note, m.root, m.scale) : note;
-  }
-
   private onInput(e: InputEvent): void {
     const { audio, input, stage, bed } = this.ctx;
     if (e.type === 'noteon') {
       const force = input.force(e.raw);
       const key = this.deck.noteOn(e.note, force);
       if (!key) return;
-      audio.noteOn(this.tune(e.note), force, this.pan(key.geom.cx));
+      // Never snapped, whatever the assist setting says. The point of the mode
+      // is that the keyboard does exactly what the player asks of it.
+      audio.noteOn(e.note, force, this.pan(key.geom.cx));
       this.field.noteOn(key.geom, force);
       const r = this.deck.range;
       stage.logNote(e.note, force, r.low, r.high);
@@ -149,7 +162,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
       if (audio.running && bed.groove.judge(audio.now)) this.field.onBeat();
     } else if (e.type === 'noteoff') {
       this.deck.noteOff(e.note);
-      audio.noteOff(this.tune(e.note));
+      audio.noteOff(e.note);
       this.field.noteOff(e.note);
       stage.endNote(e.note);
       this.held = this.held.filter((n) => n !== e.note);

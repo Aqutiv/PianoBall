@@ -9,6 +9,7 @@ import { MusicState, RANDOM } from '../src/audio/musicState';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { loadScores, saveBest } from '../src/modes/pinball/pinball';
 import { DEFAULT_PLAYTUNE, playTuneSettings, setPlayTuneSettings } from '../src/modes/playtune/settings';
+import { DEFAULT_FREESTYLE, freestyleSettings, setFreestyleSettings } from '../src/modes/freestyle/settings';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -70,6 +71,48 @@ describe('settings persistence', () => {
     setPlayTuneSettings({ offsetMs: 45, leadBeats: 6, assist: false });
 
     expect(playTuneSettings()).toEqual({ offsetMs: 45, leadBeats: 6, assist: false });
+  });
+
+  it('starts Freestyle with no bed under it', () => {
+    expect(DEFAULT_FREESTYLE.bed).toBe(false);
+    setFreestyleSettings({ bed: true });
+    expect(freestyleSettings().bed).toBe(true);
+  });
+
+  it('remembers the room', () => {
+    new AudioEngine().setSettings({ reverb: 0.2 });
+
+    expect(new AudioEngine().settings.reverb).toBe(0.2);
+  });
+
+  it('remembers the key as a pitch class, not an octave', () => {
+    const music = new MusicState({ ...AURORA.music });
+    const started = music.root;
+    music.setRoot(0);   // C
+
+    expect(music.root % 12).toBe(0);
+    // Stays in the register the app is written around rather than leaping.
+    expect(Math.abs(music.root - started)).toBeLessThanOrEqual(12);
+    expect(new MusicState({ ...AURORA.music }).root % 12).toBe(0);
+  });
+
+  it('draws a fresh scale on every roll while the choice is random', () => {
+    const music = new MusicState({ ...AURORA.music });
+    expect(music.choice).toBe(RANDOM);
+
+    // Over enough draws it must actually vary, or "random each game" is a lie.
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i++) { music.roll(); seen.add(music.id); }
+    expect(seen.size).toBeGreaterThan(1);
+
+    // A named choice pins it, and picking random again un-pins it.
+    music.setChoice('blues');
+    const pinned = new Set<string>();
+    for (let i = 0; i < 20; i++) { music.roll(); pinned.add(music.id); }
+    expect([...pinned]).toEqual(['blues']);
+
+    music.setChoice(RANDOM);
+    expect(music.choice).toBe(RANDOM);
   });
 
   it('uses a random scale by default and still remembers an explicit choice', () => {
