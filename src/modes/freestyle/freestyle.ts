@@ -5,9 +5,12 @@ import { identifyChord, inScale } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
+import { RhythmBox } from '../../audio/rhythmBox';
+import { findPattern } from '../../audio/patterns';
 import { Field } from './field';
 import { FreestyleHud } from './hud';
 import { freestyleSettings } from './settings';
+import { rhythmSettings } from './rhythmSettings';
 
 /**
  * Playing for the sound of it.
@@ -22,15 +25,24 @@ export class FreestyleMode extends ModeBase implements GameMode {
   private readonly deck = new KeyDeck();
   private readonly field: Field;
   private readonly panel: FreestyleHud;
+  private readonly box: RhythmBox;
   private readonly ctx: ModeContext;
   /** Notes the player is holding, in the order they were pressed. */
   private held: number[] = [];
+  /** The tempo the app was in before Freestyle borrowed it. */
+  private enteredBpm = 0;
 
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
     this.field = new Field(ctx.stage);
-    this.panel = new FreestyleHud(ctx.hud, ctx.music, ctx.audio, () => this.applyBed());
+    const r = rhythmSettings();
+    this.box = new RhythmBox(ctx.audio, () => ctx.music.bpm, findPattern(r.patternId));
+    this.box.swing = r.swing;
+    this.box.level = r.level;
+    this.panel = new FreestyleHud(
+      ctx.hud, ctx.music, ctx.audio, this.box, () => this.applyBed(),
+    );
     this.remap();
   }
 
@@ -47,30 +59,79 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.ctx.bed.setEnabled(freestyleSettings().bed);
   }
 
+  /** Put the rhythm box back in step with the remembered settings. */
+  private applyRhythm(): void {
+    const r = rhythmSettings();
+    this.box.setPattern(findPattern(r.patternId));
+    this.box.swing = r.swing;
+    this.box.level = r.level;
+    if (r.on) this.box.start(); else this.box.stop();
+  }
+
+  /**
+   * Re-read every preference this mode owns.
+   *
+   * The settings panel's "reset everything" calls this on whichever mode is
+   * running: the bed, the rhythm and the tempo are all read once on the way in
+   * and would otherwise sit on values the player has just cleared.
+   */
+  applySettings(): void {
+    this.applyBed();
+    this.applyRhythm();
+    const { music, audio } = this.ctx;
+    music.setBpm(rhythmSettings().bpm);
+    audio.setTempo(music.bpm);
+    this.panel.sync();
+  }
+
   enter(): void {
-    const { stage, input, audio } = this.ctx;
+    const { stage, input, audio, music } = this.ctx;
     stage.cam.configure({ width: FIELD.width, height: FIELD.height });
     stage.resize(stage.cssW, stage.cssH, stage.dpr);
 
     this.remap();
-    this.panel.mount();
     this.track(input.on((e) => this.onInput(e)));
-    this.track(this.ctx.music.bus.on('change', () => { this.field.reset(); this.panel.sync(); }));
+    // The delay is tempo-locked, so it has to follow whatever moves the tempo
+    // — the slider here, or a tune that retunes the whole app.
+    this.track(music.bus.on('change', (m) => {
+      this.field.reset();
+      this.panel.sync();
+      audio.setTempo(m.bpm);
+    }));
+    this.track(music.bus.on('tempo', (bpm) => audio.setTempo(bpm)));
+
+    // Freestyle borrows the shared tempo while it is running and hands it back
+    // on the way out, so a tempo chosen here does not follow you to a table.
+    this.enteredBpm = music.bpm;
+    music.setBpm(rhythmSettings().bpm);
+    audio.setTempo(music.bpm);
+
+    this.panel.mount();
     this.applyBed();
     this.ctx.bed.start();
+    this.applyRhythm();
     audio.resetExpression();
   }
 
   exit(): void {
     this.release();
+    this.box.stop();
+    const { audio, music } = this.ctx;
     // Leave the bed as the next mode expects to find it.
     this.ctx.bed.setEnabled(true);
-    this.ctx.audio.resetExpression();
+    if (this.enteredBpm) music.setBpm(this.enteredBpm);
+    audio.setTempo(music.bpm);
+    audio.resetExpression();
     this.deck.allOff();
     this.field.reset();
     this.held.length = 0;
     this.ctx.hud.clearPanels();
   }
+
+  /** Nothing should keep drumming behind the pause panel. */
+  pause(): void { this.box.stop(); }
+
+  resume(): void { if (rhythmSettings().on) this.box.start(); }
 
   /**
    * Freestyle has no run to restart, but picking it from the menu is the same

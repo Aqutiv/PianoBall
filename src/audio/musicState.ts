@@ -1,4 +1,5 @@
 import { EventBus } from '../core/events';
+import { clamp } from '../core/math';
 import { load, save } from '../core/storage';
 import { MODES, findMode, type ActiveMusic, type MusicMode } from './music';
 
@@ -6,6 +7,10 @@ const STORAGE_KEY = 'music';
 
 /** What the player picked in settings: a `MODES` id, or 'random'. */
 export const RANDOM = 'random';
+
+/** Travel of the tempo control: a slow ballad through to hardcore. */
+export const MIN_BPM = 50;
+export const MAX_BPM = 200;
 
 /**
  * The nearest place a pitch class sits to a given note.
@@ -24,6 +29,14 @@ function nearestRoot(base: number, pitchClass: number): number {
 export interface MusicStateEvents {
   /** The key, scale or tempo changed. Modes retune on this. */
   change: ActiveMusic;
+  /**
+   * The tempo alone moved.
+   *
+   * Separate from `change` because retuning is expensive to hear: it restarts
+   * the chord progression and wipes what is on screen. That is right when the
+   * key changes and quite wrong when somebody is dragging a tempo slider.
+   */
+  tempo: number;
 }
 
 interface StoredMusic {
@@ -131,6 +144,14 @@ export class MusicState {
     this.root = root;
     this.bpm = bpm;
     this.bus.emit('change', this.active);
+  }
+
+  /** Move the tempo without the retune a new key or scale forces. */
+  setBpm(bpm: number): void {
+    const next = clamp(Math.round(bpm), MIN_BPM, MAX_BPM);
+    if (next === this.bpm) return;
+    this.bpm = next;
+    this.bus.emit('tempo', next);
   }
 
   /**

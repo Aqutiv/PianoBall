@@ -8,6 +8,7 @@ import { ChordBed } from '../audio/bed';
 import { wireGlobalControls } from '../audio/controls';
 import { MusicState } from '../audio/musicState';
 import { resetFreestyleSettings } from '../modes/freestyle/settings';
+import { resetRhythmSettings } from '../modes/freestyle/rhythmSettings';
 import { resetPlayTuneSettings } from '../modes/playtune/settings';
 import { AURORA } from '../game/table/tables/aurora';
 import { Hud } from '../ui/hud';
@@ -206,10 +207,13 @@ export class Shell {
     this.input.midi.resetSettings();
     this.music.resetSettings();
     resetFreestyleSettings();
+    resetRhythmSettings();
     resetPlayTuneSettings();
     this.stage.resetSettings();
     this.remapKeys();
-    (this.active as GameMode & { applyBed?: () => void }).applyBed?.();
+    // Nothing a mode owns is re-read until the mode is entered again, so the
+    // one that is running has to be told the preferences moved under it.
+    (this.active as GameMode & { applySettings?: () => void }).applySettings?.();
     this.refreshStatus(this.input.midi.status);
   }
 

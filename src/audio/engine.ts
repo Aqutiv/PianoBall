@@ -1,6 +1,7 @@
 import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
+import { DRUM_SPECS, type DrumVoice } from './drums';
 
 export interface AudioSettings {
   master: number;
@@ -64,6 +65,11 @@ const MAX_VOICES = 48;
 /** Wet gain at a full reverb setting. Half of it is the original fixed value. */
 const REVERB_MAX = 1.7;
 
+/** Longest delay the node can hold, which caps how slow a tempo it can follow. */
+const DELAY_MAX = 2;
+
+const dottedEighth = (bpm: number) => clamp((60 / bpm) * 0.75, 0.02, DELAY_MAX);
+
 interface KeyVoice {
   note: number;
   startedAt: number;
@@ -107,6 +113,8 @@ export class AudioEngine {
   private reverbSend!: GainNode;
   private reverbWet!: GainNode;
   private delaySend!: GainNode;
+  /** Held so the repeats can be retuned when the tempo changes. */
+  private delayNode!: DelayNode;
   private noise!: AudioBuffer;
   /**
    * Expression, as two always-running control sources rather than per-frame
@@ -118,6 +126,8 @@ export class AudioEngine {
   private lfoColour!: GainNode;
   private bendValue = 0;
   private modValue = 0;
+  /** What the tempo-locked effects are currently tuned to. */
+  private tempo = 96;
   private voices = new Map<number, KeyVoice>();
   private active: KeyVoice[] = [];
   private sustained = new Set<number>();
@@ -206,8 +216,9 @@ export class AudioEngine {
     this.reverbSend.connect(convolver);
 
     // Dotted-eighth delay, darkened on each pass so repeats sit behind the mix.
-    const delay = ctx.createDelay(2);
-    delay.delayTime.value = (60 / 96) * 0.75;
+    const delay = ctx.createDelay(DELAY_MAX);
+    this.delayNode = delay;
+    delay.delayTime.value = dottedEighth(this.tempo);
     const feedback = ctx.createGain();
     feedback.gain.value = 0.34;
     const damp = ctx.createBiquadFilter();
@@ -298,6 +309,21 @@ export class AudioEngine {
   }
 
   resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
+
+  /**
+   * Point the tempo-locked effects at a new tempo.
+   *
+   * Only the delay cares so far, but it cares a lot: a dotted eighth is a
+   * musical delay at one tempo and a smear at another, and it used to be
+   * nailed to 96 bpm because nothing could change the tempo. Ramped rather
+   * than set, because moving a delay line's length abruptly is a click.
+   */
+  setTempo(bpm: number): void {
+    this.tempo = clamp(bpm, 20, 400);
+    if (!this.ready || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.delayNode.delayTime.setTargetAtTime(dottedEighth(this.tempo), t, 0.05);
+  }
 
   /**
    * Fade the chord bed in or out. A fade rather than a cut, because a pad
@@ -526,6 +552,86 @@ export class AudioEngine {
     // the table's tuning.
     if (note !== null && profile.tone > 0.4) {
       this.ping(noteToFreq(note), level * 0.5, pan, profile.decay * 2.5);
+    }
+  }
+
+  /**
+   * A drum hit, from the voice bank in `drums.ts`.
+   *
+   * `at` is an audio-clock time, like `pad`'s — the two schedulable voices in
+   * the engine. Everything else here plays the instant it is called, because
+   * everything else is a reaction to something the player just did; a drum
+   * machine is the opposite, and has to place a hit on a step that has not
+   * arrived yet.
+   */
+  drum(voice: DrumVoice, gain = 1, at = 0): void {
+    if (!this.running || !this.ctx) return;
+    const spec = DRUM_SPECS[voice];
+    const level = spec.gain * clamp01(gain);
+    if (level < 0.004) return;
+    const ctx = this.ctx;
+    const t = Math.max(ctx.currentTime, at || ctx.currentTime);
+
+    const out = ctx.createStereoPanner();
+    out.pan.value = clamp(spec.pan, -1, 1);
+    out.connect(this.musicBus);
+    const rev = ctx.createGain();
+    rev.gain.value = spec.reverb;
+    out.connect(rev).connect(this.reverbSend);
+
+    if (spec.noiseFreq > 0) {
+      // A handclap is several bursts a few milliseconds apart; every other
+      // voice is one. Same code either way.
+      for (let b = 0; b < spec.bursts; b++) {
+        const start = t + b * spec.burstGap;
+        // The last burst carries the tail; the flams before it are shorter.
+        const decay = b === spec.bursts - 1 ? spec.noiseDecay : spec.burstGap * 1.4;
+        const src = ctx.createBufferSource();
+        src.buffer = this.noise;
+        src.playbackRate.value = 0.85 + Math.random() * 0.3;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = spec.noiseFreq;
+        bp.Q.value = spec.noiseQ;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = spec.noiseHp;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(level * spec.noiseGain, start + spec.noiseAttack);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + spec.noiseAttack + decay);
+        src.connect(bp).connect(hp).connect(g).connect(out);
+        src.start(start, Math.random() * 0.9, spec.noiseAttack + decay + 0.02);
+      }
+    }
+
+    if (spec.tone.length === 0) return;
+    let toneIn: AudioNode = out;
+    if (spec.toneBp > 0) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = spec.toneBp;
+      bp.Q.value = spec.toneBpQ;
+      bp.connect(out);
+      toneIn = bp;
+    }
+    for (const [freq, share, decayShare, type] of spec.tone) {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      // The fall from `pitchDrop` down to the pitch is what turns a sine into
+      // a kick drum: the ear hears the drop as the head, not as a note.
+      osc.frequency.setValueAtTime(freq * spec.pitchDrop, t);
+      if (spec.pitchDrop !== 1) {
+        osc.frequency.exponentialRampToValueAtTime(freq, t + spec.pitchTime);
+      }
+      const decay = spec.toneDecay * decayShare;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(level * share, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      osc.connect(g).connect(toneIn);
+      osc.start(t);
+      osc.stop(t + decay + 0.05);
     }
   }
 
