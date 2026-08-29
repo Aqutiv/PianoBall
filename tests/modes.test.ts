@@ -66,6 +66,33 @@ describe('mode teardown', () => {
   });
 });
 
+/** Just enough panel for `TuneHud` to mount into; nothing here is asserted. */
+function fakeHud(): Hud {
+  const node = { textContent: '', innerHTML: '', style: {} };
+  const panel = () => ({ innerHTML: '', querySelector: () => node });
+  return {
+    left: panel(), right: panel(),
+    banner: () => {}, clearPanels: () => {},
+  } as unknown as Hud;
+}
+
+function playtuneRig() {
+  const input = new InputHub();
+  const engine = new AudioEngine();
+  const music = new MusicState({ ...AURORA.music });
+  const bed = new ChordBed(engine, music);
+  // The mode never draws in these tests, so the camera is only ever configured.
+  const stage = {
+    cam: { configure: () => {} }, resize: () => {},
+    cssW: 800, cssH: 600, dpr: 1,
+  } as unknown as Stage;
+  const ctx: ModeContext = {
+    stage, input, audio: engine, bed, music, hud: fakeHud(),
+    openScreen: () => {}, setResult: () => {},
+  };
+  return { mode: new PlayTuneMode(ctx), engine };
+}
+
 /**
  * A tune's instruments are the tune's, the way Freestyle's are Freestyle's.
  *
@@ -74,35 +101,8 @@ describe('mode teardown', () => {
  * pipe organ ends up on a pinball table.
  */
 describe('playtune instruments', () => {
-  /** Just enough panel for `TuneHud` to mount into; nothing here is asserted. */
-  function fakeHud(): Hud {
-    const node = { textContent: '', innerHTML: '', style: {} };
-    const panel = () => ({ innerHTML: '', querySelector: () => node });
-    return {
-      left: panel(), right: panel(),
-      banner: () => {}, clearPanels: () => {},
-    } as unknown as Hud;
-  }
-
-  function playtune() {
-    const input = new InputHub();
-    const engine = new AudioEngine();
-    const music = new MusicState({ ...AURORA.music });
-    const bed = new ChordBed(engine, music);
-    // The mode never draws in this test, so the camera is only ever configured.
-    const stage = {
-      cam: { configure: () => {} }, resize: () => {},
-      cssW: 800, cssH: 600, dpr: 1,
-    } as unknown as Stage;
-    const ctx: ModeContext = {
-      stage, input, audio: engine, bed, music, hud: fakeHud(),
-      openScreen: () => {}, setResult: () => {},
-    };
-    return { mode: new PlayTuneMode(ctx), engine };
-  }
-
   it('plays a tune on the instruments it names', () => {
-    const { mode, engine } = playtune();
+    const { mode, engine } = playtuneRig();
     mode.enter();
     expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
 
@@ -113,7 +113,7 @@ describe('playtune instruments', () => {
   });
 
   it('leaves the app its own sound on a tune that names none', () => {
-    const { mode, engine } = playtune();
+    const { mode, engine } = playtuneRig();
     mode.enter();
     expect(mode.start('first-light')).toBe(true);
 
@@ -123,7 +123,7 @@ describe('playtune instruments', () => {
   });
 
   it('hands the instruments back on the way out', () => {
-    const { mode, engine } = playtune();
+    const { mode, engine } = playtuneRig();
     mode.enter();
     mode.start('fur-elise');
     mode.exit();
@@ -133,7 +133,7 @@ describe('playtune instruments', () => {
   });
 
   it('lets go of a held note before the next tune takes the instrument', () => {
-    const { mode, engine } = playtune();
+    const { mode, engine } = playtuneRig();
     mode.enter();
     mode.start('jesu-joy');
 
@@ -152,13 +152,48 @@ describe('playtune instruments', () => {
   });
 
   it('swaps them when one tune follows another', () => {
-    const { mode, engine } = playtune();
+    const { mode, engine } = playtuneRig();
     mode.enter();
     mode.start('fur-elise');
     mode.start('twinkle');
 
     expect(engine.leadVoice).toBe('music-box');
     expect(engine.bedVoice).toBe('bed-harp');
+    mode.exit();
+  });
+});
+
+describe('playtune restart', () => {
+  it('has nothing to restart before a tune is chosen', () => {
+    const { mode } = playtuneRig();
+    mode.enter();
+    expect(mode.restart()).toBe(false);
+    mode.exit();
+  });
+
+  it('puts the running tune back at its count-in', () => {
+    const { mode } = playtuneRig();
+    mode.enter();
+    mode.start('twinkle');
+    mode.phase = 'playing';
+
+    expect(mode.restart()).toBe(true);
+    expect(mode.tune?.id).toBe('twinkle');
+    expect(mode.phase).toBe('countin');
+    mode.exit();
+  });
+
+  it('brings back the tune a pause interrupted', () => {
+    const { mode } = playtuneRig();
+    mode.enter();
+    mode.start('twinkle');
+    mode.phase = 'playing';
+    mode.pause();
+    expect(mode.phase).toBe('idle');
+
+    expect(mode.restart()).toBe(true);
+    expect(mode.tune?.id).toBe('twinkle');
+    expect(mode.phase).toBe('countin');
     mode.exit();
   });
 });

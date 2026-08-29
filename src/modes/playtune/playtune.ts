@@ -112,6 +112,23 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     if (again) this.start(again.id);
   }
 
+  /**
+   * Backspace: play the tune that is on the board again, from its count-in.
+   *
+   * A run that has gone wrong two bars in is not worth sitting through, and the
+   * alternative is Escape, the song list, and finding the tune again. Nothing
+   * is kept from the abandoned attempt — `start` scores it from zero — because
+   * a restart is a fresh attempt at the whole tune, not a rewind.
+   *
+   * `pending` as well as `tune`, so the tune a pause interrupted is the one
+   * that comes back rather than nothing. A finished run still counts: its tune
+   * is still the one on screen once the results are dismissed.
+   */
+  restart(): boolean {
+    const again = this.tune ?? this.pending;
+    return again ? this.start(again.id) : false;
+  }
+
   /** The shell's "restart"/"play" entry point. Opens the song list. */
   newGame(): void {
     this.pending = null;

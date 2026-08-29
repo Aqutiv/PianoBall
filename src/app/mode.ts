@@ -50,6 +50,11 @@ export interface GameMode {
   /** Escape was pressed, or the mode is being suspended behind a menu. */
   pause?(): void;
   resume?(): void;
+  /**
+   * Backspace was pressed with the board in front of the player: begin the
+   * current run again from the top. Returns whether there was one to begin.
+   */
+  restart?(): boolean;
 }
 
 /** Subscription bookkeeping, which is the whole of the teardown contract. */
