@@ -74,6 +74,8 @@ export class ChordBed {
       this.groove.bpm = music.bpm;
       this.reset();
     });
+    // A tempo move is not a new progression. Follow it and keep playing.
+    music.bus.on('tempo', () => { this.groove.bpm = music.bpm; });
   }
 
   get running(): boolean { return this.timer !== 0; }
@@ -177,7 +179,13 @@ export class ChordBed {
       if (this.barsLeft <= 0) this.advance();
       this.barsLeft--;
       this.play(bar);
-      this.nextBar += bar;
+      // Onto the shared grid. `Groove` and the rhythm box both measure phase
+      // from audio time zero, so the bed's downbeats have to land there too,
+      // or the harmony moves against the drums. Rounding rather than ceiling
+      // keeps the correction under half a bar, so the bar the bed is switched
+      // on in reads as a pick-up rather than as a stumble — and once it is on
+      // the grid every later bar stays there exactly.
+      this.nextBar = Math.round((this.nextBar + bar) / bar) * bar;
     }
   }
 
