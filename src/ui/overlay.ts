@@ -275,7 +275,9 @@ export class Overlay {
     const diag = $('#diag');
     const rangeEl = $('#range');
     const modeNow = $('#mode-now');
+    const masterEl = $<HTMLInputElement>('#vol-master');
     this.live = () => {
+      masterEl.value = String(audio.engine.settings.master);
       // Under Random the picked scale is only knowable at run time, so say it.
       modeNow.textContent = `Playing ${noteName(game.music.root)} ${game.music.label}`
         + (game.modeChoice === 'random' ? ' — a new one is drawn each game' : '');
@@ -284,9 +286,9 @@ export class Overlay {
       const peak = input.histogram.peak;
       hist.innerHTML = input.histogram.bins
         .map((v) => `<span style="height:${Math.round((v / peak) * 100)}%"></span>`).join('');
-      diag.textContent = audio.ready
+      diag.textContent = audio.running
         ? `audio ${audio.engine.latencyMs.toFixed(1)} ms · ${input.histogram.count} notes played`
-        : 'audio not started';
+        : 'sound is off — click anywhere on the table to enable it';
       const m = input.mapping;
       rangeEl.textContent = `${noteLabel(m.low)}–${noteLabel(m.high)} · ${m.settings.count} keys`;
     };

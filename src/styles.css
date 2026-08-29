@@ -95,6 +95,10 @@ html, body {
 .dot.ok { background: #45e2a0; box-shadow: 0 0 8px #45e2a0; }
 .dot.warn { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .dot.err { background: #ff5470; box-shadow: 0 0 8px #ff5470; }
+.status .sep { width: 1px; height: 11px; background: var(--stroke); }
+.status .nudge { color: var(--accent); animation: nudge 2.4s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .status .nudge { animation: none; opacity: 1; } }
 
 .banner {
   position: absolute;

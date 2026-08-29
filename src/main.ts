@@ -109,6 +109,43 @@ function showMusic(m: { label: string; root: number }): void {
 game.bus.on('music', showMusic);
 showMusic(game.music);
 
+// --------------------------------------------------------- audio unlock ---
+
+/**
+ * Browsers only let a page make sound after a real user gesture, and a MIDI
+ * message is not one. Rather than relying on the player finding the Play
+ * button, every interaction of any kind retries the unlock, and the HUD says
+ * plainly when sound is still off.
+ */
+function unlockAudio(): void {
+  if (audio.running) return;
+  void audio.start().then(refreshSound);
+}
+
+for (const evt of ['pointerdown', 'keydown', 'touchstart'] as const) {
+  window.addEventListener(evt, unlockAudio, { capture: true, passive: true });
+}
+// Chrome suspends the context when the tab is hidden or the output device
+// changes; coming back should not leave the game mute.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) unlockAudio(); });
+audio.engine.onStateChange = () => refreshSound();
+
+/**
+ * Start the game from a MIDI note.
+ *
+ * Sitting down and playing is the natural way to begin, so it has to work —
+ * even though the note cannot unlock audio on its own, which is exactly why
+ * the sound indicator exists.
+ */
+input.on((e) => {
+  if (e.type !== 'noteon') return;
+  if (overlay.screen === 'start' || overlay.screen === 'gameover') {
+    overlay.hide();
+    void audio.start().then(refreshSound);
+    game.newGame();
+  }
+});
+
 // -------------------------------------------------------- pointer input ---
 
 const activePointers = new Map<number, number>();   // pointerId -> note
@@ -211,9 +248,14 @@ window.addEventListener('keydown', (e) => {
 async function boot(): Promise<void> {
   const status = await input.midi.init().catch(() => 'denied' as const);
   refreshStatus(status);
+  refreshSound();
   input.midi.onDevicesChanged = () => { refreshStatus(input.midi.status); if (overlay.visible) overlay.show(overlay.screen); };
   // The table plays itself behind the menu until the player starts.
   loop.start();
+}
+
+function refreshSound(): void {
+  hud.setSound(audio.running);
 }
 
 function refreshStatus(status: string): void {

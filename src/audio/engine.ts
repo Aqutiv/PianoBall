@@ -1,5 +1,6 @@
 import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
+import { load, save } from '../core/storage';
 
 export interface AudioSettings {
   master: number;
@@ -18,6 +19,8 @@ export const DEFAULT_AUDIO: AudioSettings = {
   assist: true,
   bed: true,
 };
+
+const ASSIST_STORAGE_KEY = 'audioAssist';
 
 /** Character of an impact, chosen by the surface the ball struck. */
 interface ImpactProfile {
@@ -61,10 +64,16 @@ interface KeyVoice {
  * gap between pressing a key and hearing it as short as the hardware allows.
  */
 export class AudioEngine {
-  settings: AudioSettings = { ...DEFAULT_AUDIO };
+  settings: AudioSettings = {
+    ...DEFAULT_AUDIO,
+    assist: load(ASSIST_STORAGE_KEY, DEFAULT_AUDIO.assist),
+  };
   ctx: AudioContext | null = null;
+  /** The graph has been built. Says nothing about whether it is audible. */
   ready = false;
   error: string | null = null;
+  /** Fired whenever the context starts or stops running, so the UI can react. */
+  onStateChange: (() => void) | null = null;
 
   private master!: GainNode;
   private limiter!: DynamicsCompressorNode;
@@ -78,17 +87,38 @@ export class AudioEngine {
   private sustained = new Set<number>();
   private sustainOn = false;
 
-  /** Start the context. Must be called from a user gesture. */
+  /**
+   * True only when audio can actually be heard right now.
+   *
+   * Browsers hand out a *suspended* context to code that has not yet seen a
+   * real user gesture, and suspend a running one when the tab is hidden or the
+   * output device changes. Treating "context exists" as "sound works" is how a
+   * game ends up silently silent, so everything checks this instead.
+   */
+  get running(): boolean {
+    return this.ready && this.ctx !== null && this.ctx.state === 'running';
+  }
+
+  /**
+   * Create or resume the context. Safe to call repeatedly and from anywhere;
+   * it only succeeds when the browser has granted an audio gesture, so the
+   * caller should keep trying on every interaction rather than assume once.
+   */
   async start(): Promise<boolean> {
-    if (this.ready) { await this.ctx?.resume(); return true; }
     try {
-      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new Ctor({ latencyHint: 'interactive' });
-      this.ctx = ctx;
-      await ctx.resume();
-      this.build(ctx);
-      this.ready = true;
-      return true;
+      if (!this.ctx) {
+        const Ctor = window.AudioContext
+          ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) { this.error = 'This browser has no Web Audio.'; return false; }
+        const ctx = new Ctor({ latencyHint: 'interactive' });
+        this.ctx = ctx;
+        ctx.onstatechange = () => this.onStateChange?.();
+        this.build(ctx);
+        this.ready = true;
+      }
+      if (this.ctx.state !== 'running') await this.ctx.resume();
+      this.onStateChange?.();
+      return this.ctx.state === 'running';
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
       return false;
@@ -148,6 +178,7 @@ export class AudioEngine {
 
   setSettings(patch: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...patch };
+    if (patch.assist !== undefined) save(ASSIST_STORAGE_KEY, this.settings.assist);
     if (!this.ready) return;
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
@@ -168,7 +199,7 @@ export class AudioEngine {
 
   /** A pressed key. Velocity drives loudness *and* brightness. */
   noteOn(note: number, velocity: number, pan = 0): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     this.noteOff(note, true);
@@ -229,7 +260,7 @@ export class AudioEngine {
   }
 
   noteOff(note: number, immediate = false): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     if (this.sustainOn && !immediate) { this.sustained.add(note); return; }
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
@@ -279,7 +310,7 @@ export class AudioEngine {
    * something being struck rather than a note being played.
    */
   mallet(note: number, gain = 0.5, pan = 0, bright = 0.5): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const freq = noteToFreq(note);
@@ -324,7 +355,7 @@ export class AudioEngine {
 
   /** Ball meeting a surface. Loudness and brightness follow the impact energy. */
   impact(tag: string, energy: number, pan = 0, note: number | null = null): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     const profile = IMPACTS[tag] ?? IMPACTS.wood;
     if (profile.gain <= 0) return;
     const ctx = this.ctx;
@@ -363,7 +394,7 @@ export class AudioEngine {
 
   /** Short FM ping used for chrome and wire. */
   ping(freq: number, gain: number, pan: number, decay: number): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const carrier = ctx.createOscillator();
@@ -393,7 +424,7 @@ export class AudioEngine {
 
   /** Filtered-noise swell, for drains and multiball. */
   swell(up: boolean, seconds = 1.1, gain = 0.34): void {
-    if (!this.ready || !this.ctx) return;
+    if (!this.running || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
@@ -417,7 +448,7 @@ export class AudioEngine {
 
   /** Pad for the backing bed: long, soft, and behind everything else. */
   pad(notes: readonly number[], seconds: number, gain = 0.1): void {
-    if (!this.ready || !this.ctx || !this.settings.bed) return;
+    if (!this.running || !this.ctx || !this.settings.bed) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     for (let i = 0; i < notes.length; i++) {

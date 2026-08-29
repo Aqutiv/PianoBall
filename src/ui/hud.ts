@@ -14,6 +14,8 @@ export class Hud {
   private tiltEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private dotEl!: HTMLElement;
+  private soundEl!: HTMLElement;
+  private soundDotEl!: HTMLElement;
   private bannerEl!: HTMLElement;
   private fpsEl!: HTMLElement;
 
@@ -39,7 +41,11 @@ export class Hud {
       </div>
       <div></div>
       <div class="hud-bottom">
-        <div class="status"><span class="dot" id="hud-dot"></span><span id="hud-status">Starting&hellip;</span></div>
+        <div class="status">
+          <span class="dot" id="hud-dot"></span><span id="hud-status">Starting&hellip;</span>
+          <span class="sep"></span>
+          <span class="dot" id="hud-sound-dot"></span><span id="hud-sound">Sound off</span>
+        </div>
       </div>
       <div class="banner" id="hud-banner"></div>
       <div class="fps" id="hud-fps" style="display:none"></div>
@@ -51,6 +57,8 @@ export class Hud {
     this.tiltEl = root.querySelector('#hud-tilt')!;
     this.statusEl = root.querySelector('#hud-status')!;
     this.dotEl = root.querySelector('#hud-dot')!;
+    this.soundEl = root.querySelector('#hud-sound')!;
+    this.soundDotEl = root.querySelector('#hud-sound-dot')!;
     this.bannerEl = root.querySelector('#hud-banner')!;
     this.fpsEl = root.querySelector('#hud-fps')!;
   }
@@ -58,6 +66,17 @@ export class Hud {
   setSubtitle(text: string): void {
     const el = this.root.querySelector('#hud-sub');
     if (el) el.textContent = text;
+  }
+
+  /**
+   * Sound needs a user gesture the browser will accept, and a MIDI note is not
+   * one. When it is still off, say so and say what fixes it — a silent game
+   * with no explanation reads as broken.
+   */
+  setSound(on: boolean): void {
+    this.soundEl.textContent = on ? 'Sound on' : 'Sound off — click the table';
+    this.soundDotEl.className = `dot ${on ? 'ok' : 'warn'}`;
+    this.soundEl.classList.toggle('nudge', !on);
   }
 
   setStatus(text: string, level: 'ok' | 'warn' | 'err' | 'idle' = 'idle'): void {

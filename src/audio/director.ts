@@ -4,6 +4,8 @@ import type { Game } from '../game/game';
 import type { InputHub } from '../midi/inputHub';
 import { clamp } from '../core/math';
 
+const MIDI_CHANNEL_VOLUME = 7;
+
 /**
  * Turns what happens on the table into music.
  *
@@ -24,8 +26,8 @@ export class AudioDirector {
    * with it.
    */
   barsPerChord = 2;
-  /** Set true once the context has actually started. */
-  get ready(): boolean { return this.engine.ready; }
+  /** True only when sound can actually be heard right now. */
+  get running(): boolean { return this.engine.running; }
 
   private game: Game;
   private input: InputHub;
@@ -44,10 +46,13 @@ export class AudioDirector {
     this.wire();
   }
 
-  /** Must be called from a user gesture. */
+  /**
+   * Create or resume the audio context. Safe to call on every interaction —
+   * the browser decides when it is allowed to take.
+   */
   async start(): Promise<boolean> {
     const ok = await this.engine.start();
-    if (ok) {
+    if (ok && !this.timer) {
       this.nextBar = this.engine.now + 0.1;
       this.timer = window.setInterval(() => this.schedule(), 40);
     }
@@ -96,7 +101,7 @@ export class AudioDirector {
       this.engine.mallet(el.note, gain, this.pan(x), energised ? 0.85 : 0.45);
       // Judge against the beat grid, and let the streak drive the multiplier.
       // With no audio clock running there is no grid to be on time with.
-      if (!this.engine.ready) return;
+      if (!this.engine.running) return;
       if (this.groove.judge(this.engine.now)) {
         this.game.scoring.setGroove(this.groove.multiplier);
       } else {
@@ -137,6 +142,9 @@ export class AudioDirector {
     bus.on('serve', () => { this.groove.reset(); });
 
     this.input.on((e) => {
+      if (e.type === 'cc' && e.controller === MIDI_CHANNEL_VOLUME) {
+        this.engine.setSettings({ master: e.value });
+      }
       if (e.type === 'cc' && e.controller === 64) this.engine.setSustain(e.value >= 0.5);
       if (e.type === 'cc' && e.controller === 123) this.engine.allNotesOff();
     });
@@ -175,7 +183,7 @@ export class AudioDirector {
    * instant it happens; only this slow layer is scheduled ahead.
    */
   private schedule(): void {
-    if (!this.engine.ready) return;
+    if (!this.engine.running) return;
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;
     while (this.nextBar < now + 0.15) {
