@@ -8,6 +8,7 @@ import type { WallStyle, TablePalette } from '../game/table/schema';
 import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
+import { load, save } from '../core/storage';
 
 export interface RenderQuality {
   bloom: boolean;
@@ -26,6 +27,14 @@ export const DEFAULT_QUALITY: RenderQuality = {
   reducedMotion: false,
   colorBlind: false,
 };
+
+function defaultQuality(): RenderQuality {
+  return {
+    ...DEFAULT_QUALITY,
+    reducedMotion: typeof window !== 'undefined'
+      && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+  };
+}
 
 function makeLayer(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
@@ -57,7 +66,8 @@ function wallColors(style: WallStyle, pal: TablePalette): [string, string] {
 export class Renderer {
   readonly cam = new TableCamera();
   readonly particles = new Particles();
-  quality: RenderQuality = { ...DEFAULT_QUALITY };
+  quality: RenderQuality;
+  private qualityPreference: RenderQuality;
 
   private ctx: CanvasRenderingContext2D;
   private baked = makeLayer(1, 1);
@@ -81,6 +91,12 @@ export class Renderer {
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
+    this.qualityPreference = {
+      ...defaultQuality(),
+      ...load<Partial<RenderQuality>>('quality', {}),
+    };
+    this.quality = { ...this.qualityPreference };
+    this.particles.budget = this.quality.particles;
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
@@ -102,6 +118,24 @@ export class Renderer {
   }
 
   invalidate(): void { this.bakedFor = ''; }
+
+  get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
+
+  setQuality(patch: Partial<RenderQuality>): void {
+    this.qualityPreference = { ...this.qualityPreference, ...patch };
+    this.quality = { ...this.quality, ...patch };
+    if (patch.particles !== undefined) this.particles.budget = patch.particles;
+    if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
+    save('quality', this.qualityPreference);
+  }
+
+  resetSettings(): void {
+    this.qualityPreference = defaultQuality();
+    this.quality = { ...this.qualityPreference };
+    this.particles.budget = this.quality.particles;
+    this.invalidate();
+    save('quality', this.qualityPreference);
+  }
 
   /** Record a played note for the piano roll in the cabinet margins. */
   logNote(note: number, force: number, low: number, high: number): void {

@@ -1,4 +1,5 @@
 import type { InputEvent, RawMessage } from './types';
+import { load, save } from '../core/storage';
 
 export type MidiStatus = 'unsupported' | 'idle' | 'requesting' | 'denied' | 'ready';
 
@@ -17,7 +18,7 @@ export class MidiInput {
   status: MidiStatus = 'idle';
   error: string | null = null;
   devices: { id: string; name: string; manufacturer: string }[] = [];
-  selectedId: string | null = null;
+  selectedId: string | null = load<string | null>('midiDevice', null);
 
   onEvent: ((e: InputEvent) => void) | null = null;
   onRaw: ((m: RawMessage) => void) | null = null;
@@ -25,6 +26,7 @@ export class MidiInput {
 
   private access: MIDIAccess | null = null;
   private bound = new Set<MIDIInput>();
+  private preferredId: string | null = this.selectedId;
 
   static get supported(): boolean {
     return typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function';
@@ -64,13 +66,25 @@ export class MidiInput {
         this.bound.add(input);
       }
     }
-    if (!this.selectedId || !this.devices.some((d) => d.id === this.selectedId)) {
+    if (this.preferredId && this.devices.some((d) => d.id === this.preferredId)) {
+      this.selectedId = this.preferredId;
+    } else if (!this.selectedId || !this.devices.some((d) => d.id === this.selectedId)) {
       this.selectedId = this.devices.length ? this.devices[0].id : null;
     }
     this.onDevicesChanged?.();
   }
 
-  select(id: string | null): void { this.selectedId = id; }
+  select(id: string | null): void {
+    this.selectedId = id;
+    this.preferredId = id;
+    save('midiDevice', id);
+  }
+
+  resetSettings(): void {
+    this.preferredId = null;
+    this.selectedId = this.devices.length ? this.devices[0].id : null;
+    save('midiDevice', null);
+  }
 
   private handle(port: MIDIInput, msg: MIDIMessageEvent): void {
     const data = msg.data;

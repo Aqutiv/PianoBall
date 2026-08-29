@@ -25,11 +25,6 @@ const overlay = new Overlay(overlayRoot, {
   onStart: () => { void audio.start(); game.newGame(); },
 });
 
-// Respect the OS setting rather than waiting to be told.
-if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-  renderer.quality.reducedMotion = true;
-}
-
 // --------------------------------------------------------------- sizing ---
 
 function resize(): void {
@@ -204,10 +199,13 @@ function adaptQuality(dt: number): void {
   } else if (frameAvg > 13 && renderer.quality.shadows) {
     renderer.quality.shadows = false;
     qualityHeld = 3;
-  } else if (frameAvg < 7 && !renderer.quality.bloom) {
-    renderer.quality.bloom = true;
-    renderer.quality.shadows = true;
-    renderer.particles.budget = 1400;
+  } else if (frameAvg < 7 && (
+    renderer.quality.bloom !== renderer.preferredQuality.bloom
+    || renderer.quality.shadows !== renderer.preferredQuality.shadows
+  )) {
+    renderer.quality.bloom = renderer.preferredQuality.bloom;
+    renderer.quality.shadows = renderer.preferredQuality.shadows;
+    renderer.particles.budget = renderer.preferredQuality.particles;
     qualityHeld = 6;
   }
 }

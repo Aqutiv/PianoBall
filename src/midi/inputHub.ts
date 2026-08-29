@@ -77,6 +77,11 @@ export class InputHub {
     save('velocity', this.velocity);
   }
 
+  resetVelocitySettings(): void {
+    this.velocity = { ...DEFAULT_VELOCITY };
+    save('velocity', this.velocity);
+  }
+
   /** Synthesise a press from touch or from the debug hook. */
   press(note: number, force01: number, source: 'pointer' | 'debug' = 'debug'): void {
     const raw = Math.round(Math.max(1, Math.min(127, force01 * 127)));

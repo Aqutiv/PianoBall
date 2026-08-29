@@ -237,6 +237,7 @@ button.primary {
 }
 button.primary:hover { background: linear-gradient(96deg, rgba(87,220,255,0.34), rgba(166,120,255,0.34)); }
 .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+.settings-actions #reset-settings { margin-left: auto; }
 
 kbd {
   font-family: var(--mono);

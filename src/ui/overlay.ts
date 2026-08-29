@@ -228,7 +228,10 @@ export class Overlay {
         <span class="diag" id="diag"></span>
       </div>
 
-      <div class="actions"><button class="primary" id="close">Back to the table</button></div>
+      <div class="actions settings-actions">
+        <button class="primary" id="close">Back to the table</button>
+        <button id="reset-settings">Reset Settings</button>
+      </div>
     `;
 
     const $ = <T extends HTMLElement>(sel: string) => this.body.querySelector(sel) as T;
@@ -264,11 +267,22 @@ export class Overlay {
     };
     toggle('#assist', () => audio.engine.settings.assist, (v) => audio.engine.setSettings({ assist: v }));
     toggle('#bed', () => audio.engine.settings.bed, (v) => audio.engine.setSettings({ bed: v }));
-    toggle('#q-bloom', () => renderer.quality.bloom, (v) => { renderer.quality.bloom = v; });
-    toggle('#q-labels', () => renderer.quality.labels, (v) => { renderer.quality.labels = v; renderer.invalidate(); });
-    toggle('#q-motion', () => renderer.quality.reducedMotion, (v) => { renderer.quality.reducedMotion = v; });
-    toggle('#q-cb', () => renderer.quality.colorBlind, (v) => { renderer.quality.colorBlind = v; renderer.invalidate(); });
+    toggle('#q-bloom', () => renderer.quality.bloom, (v) => renderer.setQuality({ bloom: v }));
+    toggle('#q-labels', () => renderer.quality.labels, (v) => renderer.setQuality({ labels: v }));
+    toggle('#q-motion', () => renderer.quality.reducedMotion, (v) => renderer.setQuality({ reducedMotion: v }));
+    toggle('#q-cb', () => renderer.quality.colorBlind, (v) => renderer.setQuality({ colorBlind: v }));
     $('#clear-mon').addEventListener('click', () => input.clearMonitor());
+    $('#reset-settings').addEventListener('click', () => {
+      if (!window.confirm('Reset all settings to their defaults? Your best score will be kept.')) return;
+      audio.engine.resetSettings();
+      input.mapping.resetSettings();
+      input.resetVelocitySettings();
+      input.midi.resetSettings();
+      game.setModeChoice(game.def.music.mode);
+      game.remapKeybed();
+      renderer.resetSettings();
+      this.show('settings');
+    });
 
     const mon = $('#mon');
     const hist = $('#hist');

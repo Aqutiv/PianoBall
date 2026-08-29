@@ -109,5 +109,14 @@ export class NoteMapping {
 
   cancelCalibration(): void { this.phase = 'idle'; }
 
+  resetSettings(): void {
+    this.settings = { ...DEFAULT_MAPPING };
+    this.observedLow = 127;
+    this.observedHigh = 0;
+    this.phase = 'idle';
+    this.revision++;
+    this.persist();
+  }
+
   persist(): void { save('mapping', this.settings); }
 }
