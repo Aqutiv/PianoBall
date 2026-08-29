@@ -31,6 +31,17 @@ export class FreestyleMode extends ModeBase implements GameMode {
   private held: number[] = [];
   /** The tempo the app was in before Freestyle borrowed it. */
   private enteredBpm = 0;
+  /**
+   * Whether the player is actually here, rather than looking at a menu.
+   *
+   * A mode is also entered at boot purely so the home screen has something
+   * behind it, and `Shell.play` re-enters an already-active mode by calling
+   * `newGame` alone. Neither goes through `resume`, so the one thing in this
+   * mode that makes a noise of its own has to follow the run rather than the
+   * mode: the alternative is drums under the menu, or a rhythm that was left
+   * switched on refusing to come back.
+   */
+  private running = false;
 
   constructor(ctx: ModeContext) {
     super();
@@ -65,7 +76,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.box.setPattern(findPattern(r.patternId));
     this.box.swing = r.swing;
     this.box.level = r.level;
-    if (r.on) this.box.start(); else this.box.stop();
+    if (this.running && r.on) this.box.start(); else this.box.stop();
   }
 
   /**
@@ -109,12 +120,14 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.panel.mount();
     this.applyBed();
     this.ctx.bed.start();
+    // Not started here: entering the mode is not the same as playing it.
     this.applyRhythm();
     audio.resetExpression();
   }
 
   exit(): void {
     this.release();
+    this.running = false;
     this.box.stop();
     const { audio, music } = this.ctx;
     // Leave the bed as the next mode expects to find it.
@@ -131,15 +144,17 @@ export class FreestyleMode extends ModeBase implements GameMode {
   /** Nothing should keep drumming behind the pause panel. */
   pause(): void { this.box.stop(); }
 
-  resume(): void { if (rhythmSettings().on) this.box.start(); }
+  resume(): void { this.applyRhythm(); }
 
   /**
    * Freestyle has no run to restart, but picking it from the menu is the same
    * moment the table calls a new game — so it is where a random scale is drawn.
    */
   newGame(): void {
+    this.running = true;
     this.ctx.music.roll();
     this.field.reset();
+    this.applyRhythm();
   }
 
   step(dt: number): void {
