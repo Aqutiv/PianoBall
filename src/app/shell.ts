@@ -37,6 +37,20 @@ export class Shell {
 
   active: GameMode | null = null;
   modeId: GameModeId | null = null;
+  /**
+   * True once the player has actually chosen a mode.
+   *
+   * A mode is also entered at boot purely so the menu has something behind it,
+   * which is not the same thing: without this distinction, Escape on the home
+   * screen offers to "resume" a game nobody started.
+   */
+  playing = false;
+  /**
+   * Frozen behind a menu. The mode still draws — the table should be visible
+   * under the pause panel — but nothing simulates, so a ball cannot drain and a
+   * tune cannot run on while the player is reading.
+   */
+  suspended = false;
   /** Filled in when a mode finishes a run, for the results screen. */
   lastResult: ModeResult | null = null;
 
@@ -72,7 +86,7 @@ export class Shell {
 
     this.loop = new GameLoop({
       hz: 240,
-      step: (dt) => this.active?.step(dt),
+      step: (dt) => { if (!this.suspended) this.active?.step(dt); },
       draw: (alpha, frameDt) => this.draw(alpha, frameDt),
     });
 
@@ -129,6 +143,7 @@ export class Shell {
     if (!mode) { mode = factory(this.ctx); this.built.set(id, mode); }
     this.active = mode;
     this.modeId = id;
+    this.suspended = false;
     save('lastMode', { id });
     mode.enter();
     this.refreshStatus(this.input.midi.status);
@@ -139,6 +154,8 @@ export class Shell {
     this.overlay.hide();
     void this.startAudio();
     this.switchTo(id);
+    this.playing = true;
+    this.suspended = false;
     this.restartMode();
   }
 
@@ -148,19 +165,29 @@ export class Shell {
   }
 
   goHome(): void {
-    this.active?.pause?.();
+    this.pauseActive();
+    this.playing = false;
     this.overlay.show('home');
   }
 
-  /** Step out of play without leaving the mode. Used when focus is lost. */
+  /** Freeze the running mode. Safe to call when nothing is running. */
+  pauseActive(): void {
+    if (this.suspended) return;
+    this.suspended = true;
+    this.active?.pause?.();
+  }
+
+  /** Step out of play when focus is lost, rather than playing on unattended. */
   private suspend(): void {
-    if (!this.modeId || this.overlay.visible || !this.active?.pause) return;
-    this.active.pause();
+    if (!this.playing || this.overlay.visible) return;
+    this.pauseActive();
     this.overlay.show('paused');
   }
 
   resumeMode(): void {
     this.overlay.hide();
+    if (!this.suspended) return;
+    this.suspended = false;
     this.active?.resume?.();
   }
 
@@ -357,11 +384,11 @@ export class Shell {
     // menu — never a shortcut into settings from somewhere you can't return to.
     const screen = this.overlay.screen;
     if (screen === 'settings' || screen === 'calibrate') {
-      this.overlay.show(this.modeId ? 'paused' : 'home');
+      this.overlay.back();
     } else if (screen === 'paused') {
       this.resumeMode();
     } else if (screen === null) {
-      if (this.modeId) { this.active?.pause?.(); this.overlay.show('paused'); }
+      if (this.playing) { this.pauseActive(); this.overlay.show('paused'); }
       else this.overlay.show('home');
     } else {
       this.overlay.show('home');

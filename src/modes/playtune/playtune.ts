@@ -46,6 +46,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private readonly scoring = new Scoring();
   private readonly ctx: ModeContext;
   private judge: Judge | null = null;
+  /** The tune a pause interrupted, waiting to be started again on resume. */
+  private pending: Tune | null = null;
   private endsAt = 0;
   private strikePulse = 0;
 
@@ -78,19 +80,31 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   exit(): void {
     this.release();
+    this.pending = null;
     this.stopRun();
     this.deck.allOff();
     this.ctx.hud.clearPanels();
   }
 
+  /**
+   * A tune picked up mid-phrase is not a tune you have played, so a pause ends
+   * the attempt — but it keeps hold of *which* tune, because resuming has to
+   * put the player back on it rather than on an empty board.
+   */
   pause(): void {
-    // Nothing survives a pause: a tune resumed mid-phrase is unplayable, so it
-    // restarts from the top with a fresh count-in instead.
+    if (this.phase === 'countin' || this.phase === 'playing') this.pending = this.tune;
     this.stopRun();
+  }
+
+  resume(): void {
+    const again = this.pending;
+    this.pending = null;
+    if (again) this.start(again.id);
   }
 
   /** The shell's "restart"/"play" entry point. Opens the song list. */
   newGame(): void {
+    this.pending = null;
     this.stopRun();
     this.ctx.openScreen('songs');
   }
@@ -112,6 +126,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     if (shift === null) return false;
 
     this.stopRun();
+    this.pending = null;
     this.tune = tune;
     this.scoring.reset();
 

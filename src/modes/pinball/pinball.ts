@@ -92,6 +92,19 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.remapKeybed();
   }
 
+  /**
+   * The shell stops stepping us; this drops what the hands were holding, so a
+   * key held when the menu opened is not still down when play resumes.
+   */
+  pause(): void {
+    this.game.active = false;
+    this.game.keybed.allOff();
+  }
+
+  resume(): void {
+    this.game.active = true;
+  }
+
   draw(alpha: number, frameDt: number): void {
     this.renderer.draw(this.game, alpha, frameDt);
   }

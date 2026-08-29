@@ -12,9 +12,14 @@ export class Transport {
   /**
    * Seconds subtracted from the moment a press is judged.
    *
-   * Output latency means the note the player hears is already in the past by
-   * the time it reaches the speakers, so an honest player lands consistently
-   * late. Seeded from the device's reported latency and adjustable in settings.
+   * Output latency means the note the player hears has already happened by the
+   * time it reaches the speakers, so a player in time with what they hear lands
+   * consistently late. Subtracting pulls the press back to where they meant it.
+   *
+   * The direction follows from that: **raising the offset compensates for
+   * landing late**, lowering it for landing early. Both the device's own
+   * reported latency and the manual trim mean the same thing, which is why they
+   * simply add.
    */
   offset = 0;
   running = false;

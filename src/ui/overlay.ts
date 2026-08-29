@@ -35,6 +35,14 @@ export class Overlay {
   private offInput: (() => void) | null = null;
   /** Index of the highlighted mode card on the home screen. */
   private cursor = 0;
+  /**
+   * Where Back should go from settings or calibration.
+   *
+   * Settings can be opened from the menu, from a pause, or from the song list,
+   * and it has to return to whichever it was — inferring it from "is a mode
+   * loaded" was wrong, because one is always loaded to sit behind the menu.
+   */
+  private returnTo: Screen = 'home';
 
   constructor(private readonly root: HTMLElement, private readonly shell: Shell) {
     root.innerHTML = '<div class="panel" id="panel"></div>';
@@ -47,7 +55,7 @@ export class Overlay {
       if (e.target === root && this.screen !== 'home') {
         if (this.screen === 'paused') this.shell.resumeMode();
         else if (this.screen === 'songs' || this.screen === 'result') this.show('home');
-        else this.show(this.shell.modeId ? 'paused' : 'home');
+        else this.back();
       }
     });
   }
@@ -55,6 +63,9 @@ export class Overlay {
   get visible(): boolean { return this.screen !== null; }
 
   show(screen: Screen): void {
+    const sub = screen === 'settings' || screen === 'calibrate';
+    const wasSub = this.screen === 'settings' || this.screen === 'calibrate';
+    if (sub && !wasSub) this.returnTo = this.screen ?? (this.shell.playing ? 'paused' : 'home');
     this.screen = screen;
     this.live = null;
     this.offInput?.();
@@ -72,6 +83,12 @@ export class Overlay {
   }
 
   hide(): void { this.show(null); }
+
+  /** Leave a sub-screen for whatever opened it. */
+  back(): void {
+    if (this.returnTo === null) this.shell.resumeMode();
+    else this.show(this.returnTo);
+  }
 
   /** Refresh the live parts of the current screen. */
   update(): void { this.live?.(); }
@@ -390,8 +407,9 @@ export class Overlay {
       <div class="row"><label>Audio offset</label>
         <span><input type="range" id="pt-offset" min="-120" max="120" step="5" value="${tune.offsetMs}">
         <span class="diag" id="pt-offset-now"></span></span></div>
-      <p class="diag">Raise this if you land consistently early, lower it if you land late.
-        Your device already reports ${audio.latencyMs.toFixed(0)} ms of its own.</p>
+      <p class="diag">Raise this if your hits are judged early &mdash; that is, if you
+        are landing late. Lower it if you are landing early. Your device already
+        reports ${audio.latencyMs.toFixed(0)} ms of its own.</p>
       <div class="row"><label>Note approach</label>
         <select id="pt-lead">
           ${[3, 4, 6, 8].map((b) => `<option value="${b}" ${tune.leadBeats === b ? 'selected' : ''}>${b} beats</option>`).join('')}
@@ -424,7 +442,7 @@ export class Overlay {
 
     const $ = <T extends HTMLElement>(sel: string) => this.body.querySelector(sel) as T;
 
-    $('#close').addEventListener('click', () => this.show(this.shell.modeId ? 'paused' : 'home'));
+    $('#close').addEventListener('click', () => this.back());
     $('#cal').addEventListener('click', () => this.show('calibrate'));
     $('#oct-down').addEventListener('click', () => { input.mapping.shiftOctave(-1); this.shell.remapKeys(); });
     $('#oct-up').addEventListener('click', () => { input.mapping.shiftOctave(1); this.shell.remapKeys(); });

@@ -100,8 +100,10 @@ whatever keyboard is plugged in** — a tune too wide for your controller says s
 on its card rather than failing when you press play.
 
 Passing a tune (accuracy above its own mark) unlocks the next and records your
-best. **Settings → PlayTune → Audio offset** exists because output latency is
-real: if you land consistently early, raise it.
+best. **Settings → PlayTune → Audio offset** exists because output latency is real.
+You play in time with what you *hear*, and what you hear has already happened,
+so an honest player lands late — raise the offset to compensate for that, lower
+it if you are landing early.
 
 ---
 

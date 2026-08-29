@@ -228,6 +228,24 @@ describe('the transport', () => {
     t.offset = 0.03;
     expect(t.judgeTime(5)).toBeCloseTo(4.97, 9);
   });
+
+  it('raising the offset corrects a player who lands late', () => {
+    const t = new Transport();
+    t.bpm = 120;
+    t.start(0, 0);
+    const due = t.timeOf(4);
+    const late = due + 0.04;
+
+    // Uncalibrated, a late press is judged late.
+    expect(t.judgeTime(late) - due).toBeCloseTo(0.04, 9);
+
+    // Raising the offset by exactly that much brings it back onto the beat,
+    // and raising it further would overshoot into being early.
+    t.offset = 0.04;
+    expect(t.judgeTime(late) - due).toBeCloseTo(0, 9);
+    t.offset = 0.08;
+    expect(t.judgeTime(late) - due).toBeCloseTo(-0.04, 9);
+  });
 });
 
 describe('progression', () => {
