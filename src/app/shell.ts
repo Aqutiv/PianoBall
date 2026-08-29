@@ -400,6 +400,13 @@ export class Shell {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'F3') { this.hud.showFps = !this.hud.showFps; e.preventDefault(); }
       if (e.code === 'Escape') { this.onEscape(); e.preventDefault(); }
+      // Backspace is "from the top again". Only while the board is the thing in
+      // front of the player: behind a menu it belongs to whatever has focus, and
+      // in a text field it is still an erase. The browser's own back-navigation
+      // is given up either way, but only when a mode actually took the key.
+      if (e.code === 'Backspace' && !this.overlay.visible && !this.hudHasFocus()) {
+        if (this.active?.restart?.()) e.preventDefault();
+      }
       if (this.overlay.visible) this.overlay.onKey(e);
     });
   }

@@ -192,8 +192,9 @@ belongs and no black key does.
 | Shift an octave | your controller's octave buttons | `[` `]` | Settings |
 
 On the home screen, `1` `2` `3` pick a mode and `Enter` plays the highlighted
-one. `Esc` steps back — out of a screen, out of play, out to the menu. `F3`
-shows the frame budget.
+one. `Esc` steps back — out of a screen, out of play, out to the menu.
+`Backspace` starts the tune you are on again, from its count-in, without going
+back through the song list. `F3` shows the frame budget.
 
 ## Your controller
 
