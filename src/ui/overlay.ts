@@ -2,7 +2,8 @@ import type { Game } from '../game/game';
 import type { InputHub } from '../midi/inputHub';
 import type { AudioDirector } from '../audio/director';
 import type { Renderer } from '../render/renderer';
-import { noteLabel } from '../midi/notes';
+import { noteLabel, noteName } from '../midi/notes';
+import { MODES } from '../audio/music';
 import { load, save } from '../core/storage';
 import type { CurveName } from '../midi/velocityCurve';
 
@@ -153,11 +154,16 @@ export class Overlay {
   }
 
   private renderSettings(): void {
-    const { input, audio, renderer } = this.d;
+    const { game, input, audio, renderer } = this.d;
     const midi = input.midi;
     const opts = midi.devices.map((dv) =>
       `<option value="${dv.id}" ${dv.id === midi.selectedId ? 'selected' : ''}>${dv.name}</option>`).join('');
     const curves: CurveName[] = ['soft', 'linear', 'hard', 'gamma', 'fixed'];
+    const root = noteName(game.music.root);
+    const modes = [`<option value="random" ${game.modeChoice === 'random' ? 'selected' : ''}>Random each game</option>`]
+      .concat(MODES.map((m) =>
+        `<option value="${m.id}" ${game.modeChoice === m.id ? 'selected' : ''}>${root} ${m.label}</option>`))
+      .join('');
 
     this.body.innerHTML = `
       <h1>Settings</h1>
@@ -179,6 +185,9 @@ export class Overlay {
       <div class="row"><label>Master</label><input type="range" id="vol-master" min="0" max="1" step="0.01" value="${audio.engine.settings.master}"></div>
       <div class="row"><label>Music</label><input type="range" id="vol-music" min="0" max="1" step="0.01" value="${audio.engine.settings.music}"></div>
       <div class="row"><label>Impacts</label><input type="range" id="vol-fx" min="0" max="1" step="0.01" value="${audio.engine.settings.effects}"></div>
+      <div class="row"><label>Scale</label>
+        <select id="mode">${modes}</select></div>
+      <p class="diag" id="mode-now"></p>
       <div class="row"><label>Snap off-scale notes into the table's key</label>
         <button id="assist">${audio.engine.settings.assist ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Backing bed</label>
@@ -211,6 +220,8 @@ export class Overlay {
     $<HTMLSelectElement>('#dev').addEventListener('change', (e) => midi.select((e.target as HTMLSelectElement).value));
     $<HTMLSelectElement>('#curve').addEventListener('change', (e) =>
       input.setVelocitySettings({ curve: (e.target as HTMLSelectElement).value as CurveName }));
+    $<HTMLSelectElement>('#mode').addEventListener('change', (e) =>
+      game.setModeChoice((e.target as HTMLSelectElement).value));
 
     const bindSlider = (sel: string, key: 'master' | 'music' | 'effects') =>
       $<HTMLInputElement>(sel).addEventListener('input', (e) =>
@@ -235,7 +246,11 @@ export class Overlay {
     const hist = $('#hist');
     const diag = $('#diag');
     const rangeEl = $('#range');
+    const modeNow = $('#mode-now');
     this.live = () => {
+      // Under Random the picked scale is only knowable at run time, so say it.
+      modeNow.textContent = `Playing ${noteName(game.music.root)} ${game.music.label}`
+        + (game.modeChoice === 'random' ? ' — a new one is drawn each game' : '');
       const lines = input.monitor.slice(-14).map((m) => `${m.label}`);
       mon.textContent = lines.length ? lines.join('\n') : 'waiting for messages…';
       const peak = input.histogram.peak;

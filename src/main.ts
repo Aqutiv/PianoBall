@@ -8,6 +8,7 @@ import { Hud } from './ui/hud';
 import { Overlay } from './ui/overlay';
 import { AudioDirector } from './audio/director';
 import { pitchHue } from './render/palette';
+import { noteName } from './midi/notes';
 import { clamp } from './core/math';
 
 const canvas = document.getElementById('table') as HTMLCanvasElement;
@@ -95,6 +96,18 @@ game.bus.on('tilt', (e) => {
 game.bus.on('state', ({ to }) => {
   if (to === 'over') window.setTimeout(() => overlay.show('gameover'), 1400);
 });
+
+/**
+ * The table's key, wherever it is shown. The playfield needs rebaking as well
+ * as the subtitle: note names and per-pitch hues are painted into the static
+ * layer, so a retune is invisible until that layer is thrown away.
+ */
+function showMusic(m: { label: string; root: number }): void {
+  hud.setSubtitle(`${game.def.name} · ${noteName(m.root)} ${m.label}`);
+  renderer.invalidate();
+}
+game.bus.on('music', showMusic);
+showMusic(game.music);
 
 // -------------------------------------------------------- pointer input ---
 

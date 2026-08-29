@@ -79,11 +79,13 @@ export interface DecalSpec {
 export interface MusicDef {
   /** MIDI note of the tonic. */
   root: number;
-  /** Semitone offsets of the scale, ascending from the root. */
-  scale: number[];
   bpm: number;
-  /** Chord roots as scale degrees, cycled as objectives complete. */
-  progression: { degree: number; quality: ChordQuality }[];
+  /**
+   * The scale and chord loop the table is written in, by `MODES` id. This is
+   * the default only: the player can pick another, and the game retunes the
+   * playfield to match.
+   */
+  mode: string;
 }
 
 export type ChordQuality = 'min' | 'maj' | 'min7' | 'maj7' | 'sus2' | 'sus4' | 'dom7' | 'dim';

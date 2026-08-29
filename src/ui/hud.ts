@@ -26,7 +26,7 @@ export class Hud {
       <div class="hud-top">
         <div class="score-block">
           <div class="score" id="hud-score">0</div>
-          <div class="score-sub" id="hud-sub">Aurora &middot; D minor pentatonic</div>
+          <div class="score-sub" id="hud-sub"></div>
         </div>
         <div class="hud-right">
           <div class="mult" id="hud-mult">&times;1.0</div>

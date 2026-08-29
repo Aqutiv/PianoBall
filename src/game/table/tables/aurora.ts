@@ -42,7 +42,11 @@ const SHELL: Vec2[] = [
   v2(WALL_R, 0),
 ];
 
-/** D minor pentatonic: five notes that cannot clash, whatever the player does. */
+/**
+ * The playfield is tuned by hand in D minor pentatonic. Choosing another scale
+ * does not rewrite these: the game maps each note across by scale degree, so
+ * the contour below survives the change.
+ */
 const D3 = 50, A3 = 57;
 const D4 = 62, F4 = 65, G4 = 67, A4 = 69, C5 = 72;
 const D5 = 74, F5 = 77, G5 = 79;
@@ -55,17 +59,7 @@ export const AURORA: TableDef = {
   serve: v2(W / 2, 1216),
   outline: SHELL,
   keybed: { left: 84, right: 940, baseY: 176, crown: 46 },
-  music: {
-    root: D4,
-    scale: [0, 3, 5, 7, 10],
-    bpm: 96,
-    progression: [
-      { degree: 0, quality: 'min' },
-      { degree: 3, quality: 'maj' },
-      { degree: 4, quality: 'min7' },
-      { degree: 2, quality: 'maj' },
-    ],
-  },
+  music: { root: D4, bpm: 96, mode: 'minorPentatonic' },
   palette: {
     void: '#04050d',
     floorNear: '#1a2145',

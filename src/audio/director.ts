@@ -1,5 +1,5 @@
 import { AudioEngine } from './engine';
-import { Groove, chordNotes, snapToScale, degreeToNote } from './music';
+import { Groove, chordNotes, snapToScale, degreeToNote, voiceLead } from './music';
 import type { Game } from '../game/game';
 import type { InputHub } from '../midi/inputHub';
 import { clamp } from '../core/math';
@@ -16,8 +16,14 @@ export class AudioDirector {
   readonly engine = new AudioEngine();
   readonly groove: Groove;
 
-  /** Index into the table's chord progression. */
+  /** Index into the current chord progression. */
   chordIndex = 0;
+  /**
+   * Bars each chord is held for. Two at 96 bpm is five seconds — the bed keeps
+   * moving under the ball without turning into a backing track that competes
+   * with it.
+   */
+  barsPerChord = 2;
   /** Set true once the context has actually started. */
   get ready(): boolean { return this.engine.ready; }
 
@@ -25,11 +31,16 @@ export class AudioDirector {
   private input: InputHub;
   private nextBar = 0;
   private timer = 0;
+  /** Bars still owed to the current chord. */
+  private barsLeft = 2;
+  /** The voicing the last bar used, so the next one can lead into it. */
+  private lastVoicing: number[] = [];
 
   constructor(game: Game, input: InputHub) {
     this.game = game;
     this.input = input;
-    this.groove = new Groove(game.def.music.bpm);
+    this.groove = new Groove(game.music.bpm);
+    this.barsLeft = this.barsPerChord;
     this.wire();
   }
 
@@ -55,7 +66,7 @@ export class AudioDirector {
 
   /** Off-scale notes are nudged into the table's key when assist is on. */
   private tune(note: number): number {
-    const m = this.game.def.music;
+    const m = this.game.music;
     return this.engine.settings.assist ? snapToScale(note, m.root, m.scale) : note;
   }
 
@@ -108,9 +119,19 @@ export class AudioDirector {
       this.arpeggio(6, 0.055, 0.3);
     });
 
+    // Completing something pushes the progression on early, and the chord it
+    // lands on still gets its full run of bars rather than a stub.
     bus.on('objective', () => {
-      this.chordIndex = (this.chordIndex + 1) % this.game.def.music.progression.length;
+      this.advanceChord();
       this.arpeggio(5, 0.07, 0.26);
+    });
+
+    // A new scale means a new progression: start it from the top.
+    bus.on('music', () => {
+      this.chordIndex = 0;
+      this.barsLeft = this.barsPerChord;
+      this.lastVoicing = [];
+      this.groove.bpm = this.game.music.bpm;
     });
 
     bus.on('serve', () => { this.groove.reset(); });
@@ -123,7 +144,7 @@ export class AudioDirector {
 
   /** Rising run through the table's scale. Used for objectives and multiball. */
   private arpeggio(count: number, spacing: number, gain: number): void {
-    const m = this.game.def.music;
+    const m = this.game.music;
     for (let i = 0; i < count; i++) {
       window.setTimeout(() => {
         this.engine.mallet(degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8);
@@ -131,12 +152,22 @@ export class AudioDirector {
     }
   }
 
-  /** Current chord of the progression, as absolute notes. */
-  get currentChord(): number[] {
-    const m = this.game.def.music;
+  /**
+   * Current chord of the progression. The root is kept alongside the notes
+   * because voice leading can leave it anywhere in the voicing, and the bass
+   * still has to play the actual root.
+   */
+  get chordSpec(): { root: number; notes: number[] } {
+    const m = this.game.music;
     const step = m.progression[this.chordIndex % m.progression.length];
     const root = degreeToNote(step.degree, m.root, m.scale) - 12;
-    return chordNotes(root, step.quality);
+    return { root, notes: chordNotes(root, step.quality) };
+  }
+
+  private advanceChord(): void {
+    const n = this.game.music.progression.length;
+    this.chordIndex = (this.chordIndex + 1) % n;
+    this.barsLeft = this.barsPerChord;
   }
 
   /**
@@ -148,10 +179,16 @@ export class AudioDirector {
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;
     while (this.nextBar < now + 0.15) {
-      const chord = this.currentChord;
-      this.engine.pad(chord, bar * 1.05, 0.075);
-      // Root an octave down, so the bed has a floor.
-      this.engine.pad([chord[0] - 12], bar * 1.05, 0.05);
+      // The chord clock rides the bar loop rather than a timer of its own, so
+      // a change always lands on a downbeat.
+      if (this.barsLeft <= 0) this.advanceChord();
+      this.barsLeft--;
+      const { root, notes } = this.chordSpec;
+      const voiced = voiceLead(this.lastVoicing, notes);
+      this.lastVoicing = voiced;
+      this.engine.pad(voiced, bar * 1.05, 0.075);
+      // The root an octave down, so the bed has a floor.
+      this.engine.pad([root - 12], bar * 1.05, 0.05);
       this.nextBar += bar;
     }
   }
