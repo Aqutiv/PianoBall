@@ -272,15 +272,15 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const em = stage.emissive.ctx;
 
     const settings = playTuneSettings();
-    // Read live rather than from the snapshot `start` used to take: the tail is
-    // drawn in beats of lane, so a lead changed mid-run has to move the fall
-    // speed and the tail length together or they part company.
-    this.auras.leadBeats = settings.leadBeats;
+    // Read live rather than from the snapshot `start` took, so a lead changed
+    // mid-run lands on the next frame. The approach is the transport's to work
+    // out and not `leadBeats * beatSeconds`: past a point, a quicker tune stops
+    // being allowed to charge for the same four beats in less time.
     const views = this.judge && this.ctx.audio.running
       ? this.auras.view(
         this.judge,
         this.transport.judgeTime(this.ctx.audio.now),
-        settings.leadBeats * this.transport.beatSeconds,
+        this.transport.approachSeconds(settings.leadBeats),
         this.transport.beatSeconds,
       )
       : [];

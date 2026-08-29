@@ -6,7 +6,8 @@ import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
 import { loadScores } from '../modes/pinball/pinball';
 import type { ModTarget } from '../audio/engine';
-import { playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
+import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
+import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
 import { loadProgress, resetProgress } from '../modes/playtune/progress';
 import { TUNE_ORDER } from '../modes/playtune/library';
 
@@ -421,8 +422,12 @@ export class Overlay {
         reports ${audio.latencyMs.toFixed(0)} ms of its own.</p>
       <div class="row"><label>Note approach</label>
         <select id="pt-lead">
-          ${[3, 4, 6, 8].map((b) => `<option value="${b}" ${tune.leadBeats === b ? 'selected' : ''}>${b} beats</option>`).join('')}
+          ${LEAD_BEAT_CHOICES.map((b) => `<option value="${b}" ${tune.leadBeats === b ? 'selected' : ''}>${b} beats</option>`).join('')}
         </select></div>
+      <p class="diag">Beats of lane, so a longer note still shows a longer tail.
+        Past ${APPROACH_BPM_CAP} bpm the approach stops shrinking &mdash; a quick tune
+        gives you the same seconds of warning as a slower one rather than the same
+        count of beats.</p>
       <div class="row"><label>Light the key a note is heading for</label>
         <button id="pt-assist">${tune.assist ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Unlocked tunes</label>
