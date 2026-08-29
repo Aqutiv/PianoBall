@@ -16,14 +16,16 @@ if (!existsSync(source)) {
 const jobs = [
   { file: resolve(iconDir, 'icon-192.png'), size: 192 },
   { file: resolve(iconDir, 'icon-512.png'), size: 512 },
-  { file: resolve(iconDir, 'apple-touch-icon.png'), size: 180 },
+  // Apple touch icons do not reliably preserve transparency. Give that one
+  // the game's backdrop while desktop/PWA icons keep their alpha channel.
+  { file: resolve(iconDir, 'apple-touch-icon.png'), size: 180, background: '#04050d' },
   { file: resolve(root, 'public/favicon.png'), size: 64 },
 ];
 
 for (const job of jobs) {
-  const info = await sharp(source)
-    .resize(job.size, job.size, { fit: 'cover' })
-    .flatten({ background: '#04050d' })
+  let image = sharp(source).resize(job.size, job.size, { fit: 'cover' });
+  if (job.background) image = image.flatten({ background: job.background });
+  const info = await image
     .png({ compressionLevel: 9 })
     .toFile(job.file);
   console.log('wrote ' + job.file + ' (' + info.width + 'x' + info.height + ')');
