@@ -1,11 +1,10 @@
 import { noteLabel, noteName } from '../midi/notes';
 import { MODES } from '../audio/music';
 import { RANDOM } from '../audio/musicState';
-import { load, save } from '../core/storage';
 import type { CurveName } from '../midi/velocityCurve';
 import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
-import type { Scores } from '../modes/pinball/pinball';
+import { loadScores } from '../modes/pinball/pinball';
 import type { ModTarget } from '../audio/engine';
 import { playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
 import { loadProgress, resetProgress } from '../modes/playtune/progress';
@@ -179,7 +178,7 @@ export class Overlay {
 
   private renderGameOver(): void {
     const result = this.shell.lastResult;
-    const best = load<Scores>('scores', { pinball: 0 }).pinball;
+    const best = loadScores().pinball;
     const lines = (result?.lines ?? [])
       .map((l) => `<div class="row"><label>${l.label}</label><span>${l.value}</span></div>`).join('');
     this.body.innerHTML = `
@@ -417,7 +416,10 @@ export class Overlay {
         <span class="diag" id="diag"></span>
       </div>
 
-      <div class="actions"><button class="primary" id="close">Back</button></div>
+      <div class="actions settings-actions">
+        <button class="primary" id="close">Back</button>
+        <button id="reset-settings">Reset settings</button>
+      </div>
     `;
 
     const $ = <T extends HTMLElement>(sel: string) => this.body.querySelector(sel) as T;
@@ -439,11 +441,6 @@ export class Overlay {
       const paint = () => el.style.setProperty('--fill', `${Number(el.value) * 100}%`);
       el.addEventListener('input', () => {
         audio.setSettings({ [key]: Number(el.value) });
-        save('volumes', {
-          master: audio.settings.master,
-          music: audio.settings.music,
-          effects: audio.settings.effects,
-        });
         paint();
       });
       paint();
@@ -458,17 +455,15 @@ export class Overlay {
     };
     toggle('#assist', () => audio.settings.assist, (v) => audio.setSettings({ assist: v }));
     toggle('#bed', () => audio.settings.bed, (v) => audio.setSettings({ bed: v }));
-    const quality = (sel: string, key: 'bloom' | 'labels' | 'reducedMotion' | 'colorBlind', repaint = false) => {
-      toggle(sel, () => stage.quality[key], (v) => {
-        stage.quality[key] = v;
-        if (repaint) stage.invalidate();
-        save('quality', stage.quality);
-      });
+    const quality = (sel: string, key: 'bloom' | 'labels' | 'reducedMotion' | 'colorBlind') => {
+      // Through setQuality, so the choice is remembered as a *preference* and
+      // the adaptive-quality pass knows what to restore to.
+      toggle(sel, () => stage.quality[key], (v) => stage.setQuality({ [key]: v }));
     };
     quality('#q-bloom', 'bloom');
-    quality('#q-labels', 'labels', true);
+    quality('#q-labels', 'labels');
     quality('#q-motion', 'reducedMotion');
-    quality('#q-cb', 'colorBlind', true);
+    quality('#q-cb', 'colorBlind');
     $<HTMLSelectElement>('#bend-range').addEventListener('change', (e) =>
       audio.setSettings({ bendRange: Number((e.target as HTMLSelectElement).value) }));
     $<HTMLSelectElement>('#mod-target').addEventListener('change', (e) =>
@@ -514,6 +509,11 @@ export class Overlay {
     });
 
     $('#clear-mon').addEventListener('click', () => input.clearMonitor());
+    $('#reset-settings').addEventListener('click', () => {
+      if (!window.confirm('Reset all settings to their defaults? Your scores and unlocked tunes will be kept.')) return;
+      this.shell.resetSettings();
+      this.show('settings');
+    });
 
     const mon = $('#mon');
     const hist = $('#hist');

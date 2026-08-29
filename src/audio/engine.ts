@@ -32,7 +32,8 @@ export const DEFAULT_AUDIO: AudioSettings = {
   modTarget: 'both',
 };
 
-const ASSIST_STORAGE_KEY = 'audioAssist';
+const AUDIO_STORAGE_KEY = 'audio';
+const LEGACY_ASSIST_STORAGE_KEY = 'audioAssist';
 
 /** Character of an impact, chosen by the surface the ball struck. */
 interface ImpactProfile {
@@ -76,10 +77,7 @@ interface KeyVoice {
  * gap between pressing a key and hearing it as short as the hardware allows.
  */
 export class AudioEngine {
-  settings: AudioSettings = {
-    ...DEFAULT_AUDIO,
-    assist: load(ASSIST_STORAGE_KEY, DEFAULT_AUDIO.assist),
-  };
+  settings: AudioSettings;
   ctx: AudioContext | null = null;
   /** The graph has been built. Says nothing about whether it is audible. */
   ready = false;
@@ -108,6 +106,16 @@ export class AudioEngine {
   private active: KeyVoice[] = [];
   private sustained = new Set<number>();
   private sustainOn = false;
+
+  constructor() {
+    const stored = load<Partial<AudioSettings>>(AUDIO_STORAGE_KEY, {});
+    this.settings = {
+      ...DEFAULT_AUDIO,
+      ...stored,
+      // Keep the one setting older builds already remembered.
+      assist: stored.assist ?? load(LEGACY_ASSIST_STORAGE_KEY, DEFAULT_AUDIO.assist),
+    };
+  }
 
   /**
    * True only when audio can actually be heard right now.
@@ -217,7 +225,7 @@ export class AudioEngine {
 
   setSettings(patch: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...patch };
-    if (patch.assist !== undefined) save(ASSIST_STORAGE_KEY, this.settings.assist);
+    save(AUDIO_STORAGE_KEY, this.settings);
     if (!this.ready) return;
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
@@ -262,6 +270,8 @@ export class AudioEngine {
     this.lfoVibrato.gain.setTargetAtTime(vibrato, t, 0.02);
     this.lfoColour.gain.setTargetAtTime(colour, t, 0.02);
   }
+
+  resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
 
   get now(): number { return this.ctx ? this.ctx.currentTime : 0; }
 

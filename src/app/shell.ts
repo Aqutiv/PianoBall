@@ -6,7 +6,7 @@ import { InputHub } from '../midi/inputHub';
 import { AudioEngine } from '../audio/engine';
 import { ChordBed } from '../audio/bed';
 import { wireGlobalControls } from '../audio/controls';
-import { MusicState } from '../audio/musicState';
+import { MusicState, RANDOM } from '../audio/musicState';
 import { AURORA } from '../game/table/tables/aurora';
 import { Hud } from '../ui/hud';
 import { Overlay, type Screen } from '../ui/overlay';
@@ -53,7 +53,6 @@ export class Shell {
     this.stage.palette = DEFAULT_PALETTE;
     applyPalette(DEFAULT_PALETTE);
 
-    this.audio.setSettings(load('volumes', {}));
     this.music = new MusicState({ ...AURORA.music });
     this.bed = new ChordBed(this.audio, this.music);
     this.hud = new Hud(hudRoot);
@@ -70,12 +69,6 @@ export class Shell {
     };
 
     this.overlay = new Overlay(overlayRoot, this);
-
-    // Respect the OS setting rather than waiting to be told.
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      this.stage.quality.reducedMotion = true;
-    }
-    this.stage.quality = { ...this.stage.quality, ...load('quality', {}) };
 
     this.loop = new GameLoop({
       hz: 240,
@@ -105,7 +98,9 @@ export class Shell {
     // the player sees is a black rectangle. Enter the mode without starting a
     // run: pinball idles in attract, the others simply idle.
     this.switchTo(this.lastMode ?? 'pinball');
-    this.overlay.show('home');
+    // Re-render only if the player is still looking at it: MIDI init is async,
+    // and by the time it returns they may already have opened settings.
+    if (this.overlay.screen === 'home') this.overlay.show('home');
     this.loop.start();
   }
 
@@ -169,6 +164,23 @@ export class Shell {
     this.active?.resume?.();
   }
 
+  /**
+   * Put every remembered preference back to its default.
+   *
+   * Scores and unlocked tunes are earned rather than configured, so they are
+   * deliberately left alone — as is the separate reset on the PlayTune section.
+   */
+  resetSettings(): void {
+    this.audio.resetSettings();
+    this.input.mapping.resetSettings();
+    this.input.resetVelocitySettings();
+    this.input.midi.resetSettings();
+    this.music.setChoice(RANDOM);
+    this.stage.resetSettings();
+    this.remapKeys();
+    this.refreshStatus(this.input.midi.status);
+  }
+
   /** The keybed range changed; every built mode has to follow. */
   remapKeys(): void {
     for (const mode of this.built.values()) {
@@ -214,6 +226,7 @@ export class Shell {
   private adaptQuality(dt: number): void {
     const s = this.loop.stats;
     const q = this.stage.quality;
+    const want = this.stage.preferredQuality;
     this.frameAvg += ((s.stepMs + s.drawMs) - this.frameAvg) * Math.min(1, dt * 4);
     this.qualityHeld -= dt;
     if (this.qualityHeld > 0) return;
@@ -224,10 +237,11 @@ export class Shell {
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
       this.qualityHeld = 3;
-    } else if (this.frameAvg < 7 && !q.bloom) {
-      q.bloom = true;
-      q.shadows = true;
-      this.stage.particles.budget = 1400;
+    } else if (this.frameAvg < 7
+      && (q.bloom !== want.bloom || q.shadows !== want.shadows)) {
+      q.bloom = want.bloom;
+      q.shadows = want.shadows;
+      this.stage.particles.budget = want.particles;
       this.qualityHeld = 6;
     }
   }

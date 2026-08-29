@@ -5,6 +5,7 @@ import { mix, withAlpha, pitchHue, pitchHueSafe, LIGHT } from './palette';
 import { shadowSprite, glowSprite } from './sprites';
 import { DEFAULT_PALETTE, type TablePalette } from './theme';
 import { clamp01 } from '../core/math';
+import { load, save } from '../core/storage';
 
 export interface RenderQuality {
   bloom: boolean;
@@ -23,6 +24,21 @@ export const DEFAULT_QUALITY: RenderQuality = {
   reducedMotion: false,
   colorBlind: false,
 };
+
+/**
+ * The quality the player asked for, honouring the OS motion preference.
+ *
+ * Kept separate from what is actually running: the adaptive pass sheds effects
+ * under load and has to know what to restore *to*, which is the preference and
+ * not the hardcoded defaults.
+ */
+function defaultQuality(): RenderQuality {
+  return {
+    ...DEFAULT_QUALITY,
+    reducedMotion: typeof window !== 'undefined'
+      && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+  };
+}
 
 export interface Layer {
   canvas: HTMLCanvasElement;
@@ -49,7 +65,8 @@ export class Stage {
   readonly cam = new TableCamera();
   readonly particles = new Particles();
   readonly ctx: CanvasRenderingContext2D;
-  quality: RenderQuality = { ...DEFAULT_QUALITY };
+  /** What is being drawn right now, after any adaptive shedding. */
+  quality: RenderQuality;
   palette: TablePalette = DEFAULT_PALETTE;
 
   /** The static layer. A mode bakes into this and it is blitted every frame. */
@@ -68,6 +85,8 @@ export class Stage {
   private bloomA: Layer = makeLayer(1, 1);
   private bloomB: Layer = makeLayer(1, 1);
   private bakedFor = '';
+  /** What the player asked for, which the adaptive pass restores towards. */
+  private qualityPreference: RenderQuality;
   private shake = 0;
   private shakeX = 0;
   private shakeY = 0;
@@ -77,6 +96,28 @@ export class Stage {
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
+    this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
+    this.quality = { ...this.qualityPreference };
+    this.particles.budget = this.quality.particles;
+  }
+
+  get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
+
+  /** Change what the player asked for, and remember it. */
+  setQuality(patch: Partial<RenderQuality>): void {
+    this.qualityPreference = { ...this.qualityPreference, ...patch };
+    this.quality = { ...this.quality, ...patch };
+    if (patch.particles !== undefined) this.particles.budget = patch.particles;
+    if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
+    save('quality', this.qualityPreference);
+  }
+
+  resetSettings(): void {
+    this.qualityPreference = defaultQuality();
+    this.quality = { ...this.qualityPreference };
+    this.particles.budget = this.quality.particles;
+    this.invalidate();
+    save('quality', this.qualityPreference);
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {

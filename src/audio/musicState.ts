@@ -44,7 +44,9 @@ export class MusicState {
     this.defaults = defaults;
     this.root = defaults.root;
     this.bpm = defaults.bpm;
-    this.choice = load<{ mode: string }>(STORAGE_KEY, { mode: defaults.mode }).mode;
+    // Random by default: a fresh player should meet a different colour each
+    // game rather than the one the table happens to be authored in.
+    this.choice = load<{ mode: string }>(STORAGE_KEY, { mode: RANDOM }).mode;
     this.set(this.resolve(), true);
   }
 

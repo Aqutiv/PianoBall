@@ -10,6 +10,22 @@ import { load, save } from '../../core/storage';
 
 export interface Scores { pinball: number }
 
+const SCORES_KEY = 'scores';
+/** Older builds kept a bare number here, before there was more than one mode. */
+const LEGACY_BEST_KEY = 'best';
+
+/** Best score per mode, honouring what a pre-modes build left behind. */
+export function loadScores(): Scores {
+  const stored = load<Scores>(SCORES_KEY, { pinball: 0 });
+  return { pinball: Math.max(stored.pinball || 0, load<number>(LEGACY_BEST_KEY, 0) || 0) };
+}
+
+export function saveBest(score: number): number {
+  const best = Math.max(score, loadScores().pinball);
+  save(SCORES_KEY, { pinball: best });
+  return best;
+}
+
 /**
  * The original game: musical pinball, thirty-two flippers.
  *
@@ -166,8 +182,7 @@ export class PinballMode extends ModeBase implements GameMode {
       if (to === 'serve') hud.banner('PRESS A KEY TO DROP', 2.4, 'warn');
       if (to === 'over') {
         hud.banner('GAME OVER', 4);
-        const best = Math.max(game.scoring.score, load<Scores>('scores', { pinball: 0 }).pinball);
-        save('scores', { pinball: best });
+        saveBest(game.scoring.score);
         this.ctx.setResult({
           title: 'Game over',
           lines: [
