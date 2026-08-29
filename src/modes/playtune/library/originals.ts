@@ -1,5 +1,5 @@
 import type { Tune } from '../chart';
-import { line, bars, merge, harmonise, shift } from './notation';
+import { line, progression, merge, harmonise, shift } from './notation';
 
 // Middle C is 60. These are written where they read best; `fitToRange` moves
 // each chart by whole octaves onto whatever keyboard is actually plugged in.
@@ -10,7 +10,8 @@ const D5 = 74, E5 = 76, F5 = 77, A5 = 81;
  * Three notes, four square bars, nothing syncopated.
  *
  * The first tune has one job: teach that the aura lands on the beat and the key
- * goes down when it arrives. Everything else is deliberately absent.
+ * goes down when it arrives. Everything else is deliberately absent — which is
+ * also why the bed plays a chord on every single beat here and nowhere else.
  */
 export const FIRST_LIGHT: Tune = {
   id: 'first-light',
@@ -23,6 +24,10 @@ export const FIRST_LIGHT: Tune = {
   beatsPerBar: 4,
   root: D4,
   scaleId: 'minorPentatonic',
+  accompaniment: 'pulse',
+  // The second degree. A pentatonic melody leaves it out; the harmony under it
+  // cannot, because the A minor chord that answers the F major needs it.
+  borrows: [2],
   pass: 0.6,
   melody: line([
     [D4, 1], [F4, 1], [A4, 1], [F4, 1],
@@ -34,15 +39,27 @@ export const FIRST_LIGHT: Tune = {
     [F4, 1], [A4, 1], [F4, 1], [D4, 1],
     [D4, 4],
   ]),
-  chords: bars([[0, 'min'], [0, 'min'], [1, 'maj'], [1, 'maj'],
-    [3, 'min'], [3, 'min'], [0, 'min'], [0, 'min']], 4),
+  // Every held note is where the harmony moves, so the long bars are the ones
+  // that pull the tune into its next phrase rather than the ones where it waits.
+  chords: progression([
+    [0, 'min', 4],
+    [0, 'min', 2], [1, 'maj', 2],
+    [1, 'maj', 4],
+    [1, 'maj', 2], [3, 'min', 2],
+    [3, 'min', 4],
+    [3, 'min', 2], [1, 'maj', 2],
+    [0, 'min', 4],
+    [0, 'min', 4],
+  ]),
 };
 
 /**
  * Long notes on a five-note scale, where the only difficulty is patience.
  *
  * Everything before this rewards hitting; this one rewards holding, so the
- * sustain tail has somewhere to be learned before a tune depends on it.
+ * sustain tail has somewhere to be learned before a tune depends on it. The bed
+ * is the one place in the library that stays a slow swell: a chord comping
+ * along in time would be counting the note for the player.
  */
 export const DRIFT: Tune = {
   id: 'drift',
@@ -55,6 +72,11 @@ export const DRIFT: Tune = {
   beatsPerBar: 4,
   root: D4,
   scaleId: 'kumoi',
+  accompaniment: 'sustain',
+  // Kumoi is D E F A B: no C at all. The harmony wants one — it is what makes
+  // an F major an F major and a D minor seventh a seventh — and nothing else
+  // from outside the scale is allowed in.
+  borrows: [10],
   pass: 0.65,
   melody: line([
     [A4, 4], [E4, 4],
@@ -66,10 +88,16 @@ export const DRIFT: Tune = {
     [D5, 4], [A4, 4],
     [D4, 8],
   ]),
-  chords: bars([[0, 'min'], [0, 'min'], [2, 'maj'], [2, 'maj'],
-    [1, 'sus4'], [1, 'sus4'], [3, 'min7'], [3, 'min7'],
-    [4, 'maj'], [4, 'maj'], [2, 'maj'], [2, 'maj'],
-    [1, 'sus4'], [1, 'sus4'], [0, 'min'], [0, 'min']], 4),
+  chords: progression([
+    [0, 'min', 4], [0, 'min', 4],
+    [2, 'maj', 4], [2, 'maj', 4],
+    [1, 'sus4', 4], [1, 'sus4', 4],
+    [0, 'min7', 4], [0, 'min7', 4],
+    [3, 'min', 4], [2, 'maj', 4],
+    [1, 'sus4', 4], [1, 'sus4', 4],
+    [0, 'min', 4], [3, 'min', 4],
+    [0, 'min', 4], [0, 'min', 4],
+  ]),
 };
 
 const TUNE_A = line([
@@ -85,6 +113,18 @@ const TUNE_B = line([
   [A4, 1], [G4, 1], [F4, 2],
   [E4, 2], [D4, 2],
 ], 16);
+
+/** Eight bars of harmony, played twice: once alone, once in thirds. */
+const TWO_HANDS_CHORDS = progression([
+  [0, 'min', 4],
+  [3, 'min', 2], [6, 'maj', 2],
+  [5, 'maj', 2], [2, 'maj', 2],
+  [3, 'min', 2], [0, 'min', 2],
+  [0, 'min', 2], [5, 'maj', 2],
+  [5, 'maj', 2], [3, 'min', 2],
+  [4, 'min', 2], [2, 'maj', 2],
+  [4, 'min', 2], [0, 'min', 2],
+]);
 
 /**
  * The same eight bars twice: once alone, once in thirds.
@@ -103,6 +143,7 @@ export const TWO_HANDS: Tune = {
   beatsPerBar: 4,
   root: D4,
   scaleId: 'aeolian',
+  accompaniment: 'arpeggio',
   pass: 0.7,
   melody: merge(
     TUNE_A,
@@ -113,12 +154,7 @@ export const TWO_HANDS: Tune = {
     shift(TUNE_B, 32),
     harmonise(shift(TUNE_B, 32), -4),
   ),
-  chords: bars([
-    [0, 'min'], [3, 'min'], [5, 'maj'], [0, 'min'],
-    [2, 'maj'], [6, 'maj'], [4, 'min'], [0, 'min'],
-    [0, 'min'], [3, 'min'], [5, 'maj'], [0, 'min'],
-    [2, 'maj'], [6, 'maj'], [4, 'min'], [0, 'min'],
-  ], 4),
+  chords: [...TWO_HANDS_CHORDS, ...shift(TWO_HANDS_CHORDS, 32)],
 };
 
 export const ORIGINALS: Tune[] = [FIRST_LIGHT, DRIFT, TWO_HANDS];

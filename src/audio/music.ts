@@ -365,6 +365,41 @@ const NATURAL_STACK = ['9', '11', '13'];
 const MIN_SCORE = 12;
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const FLAT_NAMES = ['C', 'D\u266d', 'D', 'E\u266d', 'E', 'F', 'G\u266d', 'G', 'A\u266d', 'A', 'B\u266d', 'B'];
+
+/**
+ * Steps above the tonic that a musician writes as a flattened degree.
+ *
+ * The flat second, third, sixth and seventh. The tritone is left out because
+ * it is far more often a sharpened fourth than a flattened fifth.
+ */
+const FLAT_SIDE = new Set([1, 3, 8, 10]);
+
+/**
+ * How each quality is written after the root.
+ *
+ * These match the names `identifyChord` produces, so a chord the game states
+ * and the same chord read back off the player's hands are spelled alike.
+ */
+const QUALITY_SUFFIX: Record<ChordQuality, string> = {
+  maj: '', min: 'min', min7: 'min7', maj7: 'maj7',
+  sus2: 'sus2', sus4: 'sus4', dom7: '7', dim: 'dim',
+};
+
+/**
+ * Name a chord that is already known, rather than guessed at.
+ *
+ * `identifyChord` exists for notes whose chord nobody wrote down; when the
+ * chord *was* written down, going back through it would let a voice-led
+ * inversion come back with a different name from the one that was authored.
+ */
+export function chordLabel(root: number, quality: ChordQuality, tonic?: number): string {
+  // Spelling follows the key when there is one to follow. The sixth degree of D
+  // minor is a B flat, and calling it an A sharp in a panel whose whole job is
+  // to teach the player what they are hearing is worse than saying nothing.
+  const flat = tonic !== undefined && FLAT_SIDE.has(pitchClass(root - tonic));
+  return (flat ? FLAT_NAMES : NAMES)[pitchClass(root)] + QUALITY_SUFFIX[quality];
+}
 
 /** Conventional single names for a shape once a ninth is stacked on it. */
 function withNinth(shape: string): string {

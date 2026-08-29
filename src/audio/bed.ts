@@ -2,6 +2,7 @@ import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
 import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
+import { compEvents, type CompEvent, type CompPattern } from './comp';
 
 /** A chord placed at a beat, for a bed driven by a written piece. */
 export interface TrackChord {
@@ -15,6 +16,8 @@ export interface TrackChord {
 export interface BeatClock {
   running: boolean;
   beatSeconds: number;
+  /** Needed by the accompaniment: a bass note belongs on the bar line. */
+  beatsPerBar: number;
   timeOf(beat: number): number;
 }
 
@@ -63,6 +66,19 @@ export class ChordBed {
   private trackRoot = 0;
   private trackScale: readonly number[] = [];
   private trackCursor = 0;
+  private pattern: CompPattern = 'sustain';
+  /** Beat the track's first bar line falls on. Non-zero when it has a pickup. */
+  private barOrigin = 0;
+  /**
+   * Events expanded from chords whose turn has come, not yet sounded.
+   *
+   * A chord is turned into its accompaniment all at once, but the resulting
+   * notes are handed to the engine a lookahead at a time. Building a Web Audio
+   * graph for a whole bar of arpeggio in a single scheduler tick is a burst of
+   * a hundred-odd nodes, which the audio thread absorbs but the frame it lands
+   * on does not.
+   */
+  private pending: { at: number; ev: CompEvent }[] = [];
 
   constructor(engine: AudioEngine, music: MusicState) {
     this.engine = engine;
@@ -115,6 +131,7 @@ export class ChordBed {
   stop(): void {
     if (this.timer) window.clearInterval(this.timer);
     this.timer = 0;
+    this.pending.length = 0;
   }
 
   /**
@@ -127,12 +144,17 @@ export class ChordBed {
     clock: BeatClock | null,
     root = 0,
     scale: readonly number[] = [],
+    pattern: CompPattern = 'sustain',
+    barOrigin = 0,
   ): void {
     this.track = track;
     this.clock = clock;
     this.trackRoot = root;
     this.trackScale = scale;
     this.trackCursor = 0;
+    this.pattern = pattern;
+    this.barOrigin = barOrigin;
+    this.pending.length = 0;
     this.lastVoicing = [];
   }
 
@@ -140,7 +162,11 @@ export class ChordBed {
   reset(): void {
     this.chordIndex = 0;
     this.barsLeft = this.barsPerChord;
-    this.trackCursor = 0;
+    // A written track keeps its place. Rewinding the cursor here would send the
+    // next sweep back over chords whose moment has passed, which drops every
+    // one of them and leaves the bed silent for the rest of the piece — and a
+    // scale change fires this while a tune is playing.
+    if (!this.track) this.trackCursor = 0;
     this.align();
     this.groove.reset();
   }
@@ -197,6 +223,7 @@ export class ChordBed {
   private scheduleTrack(track: readonly TrackChord[], clock: BeatClock): void {
     if (!clock.running) return;
     const now = this.engine.now;
+    const beat = clock.beatSeconds;
     while (this.trackCursor < track.length) {
       const c = track[this.trackCursor];
       const at = clock.timeOf(c.beat);
@@ -208,10 +235,26 @@ export class ChordBed {
       const root = degreeToNote(c.degree, this.trackRoot, this.trackScale) - 12;
       const voiced = voiceLead(this.lastVoicing, chordNotes(root, c.quality));
       this.lastVoicing = voiced;
-      const seconds = c.len * clock.beatSeconds;
-      this.engine.pad(voiced, seconds * 1.05, 0.075, at);
-      this.engine.pad([root - 12], seconds * 1.05, 0.05, at);
+      // The chord is written out as the pattern plays it: one lookahead pays
+      // for the whole of it, so the comping inside a chord costs no more
+      // scheduler wakes than the single pad it replaces.
+      const phase = c.beat - this.barOrigin;
+      for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase)) {
+        this.pending.push({ at: at + ev.offset * beat, ev });
+      }
     }
+    this.flush(now, beat);
+  }
+
+  /** Hand the engine everything now due, and drop whatever the tab slept past. */
+  private flush(now: number, beat: number): void {
+    let keep = 0;
+    for (const p of this.pending) {
+      if (p.at > now + LOOKAHEAD) { this.pending[keep++] = p; continue; }
+      if (p.at < now - 0.2) continue;
+      this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
+    }
+    this.pending.length = keep;
   }
 
   private play(bar: number): void {

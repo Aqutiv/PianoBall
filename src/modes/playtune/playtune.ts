@@ -2,13 +2,13 @@ import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../.
 import { KeyDeck } from '../../game/keys';
 import { drawKeys } from '../../render/keys';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
-import { SCALES } from '../../audio/music';
+import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
-import type { Tune } from './chart';
+import type { ChartChord, Tune } from './chart';
 import { fitToRange, fittedMelody, lastBeat } from './chart';
-import { Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
+import { HOLD_FLOOR, Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
 import { Transport } from './transport';
 import { AuraStage } from './render';
 import { TuneHud } from './hud';
@@ -50,6 +50,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private pending: Tune | null = null;
   private endsAt = 0;
   private strikePulse = 0;
+  /** Octaves the running tune was moved by, needed to name its chords. */
+  private shift = 0;
+  /** Whether this run has ever seen a live audio clock. */
+  private ranWithAudio = false;
 
   constructor(ctx: ModeContext) {
     super();
@@ -128,6 +132,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.stopRun();
     this.pending = null;
     this.tune = tune;
+    this.shift = shift;
+    this.ranWithAudio = false;
     this.scoring.reset();
 
     const settings = playTuneSettings();
@@ -141,16 +147,22 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const countIn = tune.beatsPerBar;
     t.start(this.ctx.audio.now, countIn);
 
-    const specs: TargetSpec[] = fittedMelody(tune, shift)
-      .map((n) => ({ note: n.note, beat: n.beat, len: n.len, time: t.timeOf(n.beat) }));
+    // The release deadline is baked alongside the onset, for the same reason:
+    // one conversion out of beats onto the audio clock, done once.
+    const specs: TargetSpec[] = fittedMelody(tune, shift).map((n) => ({
+      note: n.note, beat: n.beat, len: n.len,
+      time: t.timeOf(n.beat), end: t.timeOf(n.beat + n.len),
+    }));
     this.judge = new Judge(specs);
-    this.auras.leadBeats = settings.leadBeats;
     this.endsAt = t.timeOf(lastBeat(tune) + tune.beatsPerBar);
     this.phase = 'countin';
 
     // The bed plays the tune's own harmony, in the tune's own key, without
     // disturbing whatever scale the player picked in settings.
-    this.ctx.bed.setTrack(tune.chords, t, tune.root + shift, SCALES[tune.scaleId]);
+    this.ctx.bed.setTrack(
+      tune.chords, t, tune.root + shift, SCALES[tune.scaleId],
+      tune.accompaniment, tune.pickup ?? 0,
+    );
     this.ctx.bed.start();
 
     this.panel.setTune(tune);
@@ -161,6 +173,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private stopRun(): void {
     this.transport.stop();
     this.ctx.bed.setTrack(null, null);
+    // Stopped, not merely detached: leaving the scheduler running drops the bed
+    // back onto the current scale's own loop, which then plays over whatever
+    // screen comes next.
+    this.ctx.bed.stop();
     this.judge = null;
     this.phase = 'idle';
   }
@@ -172,12 +188,15 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.phase = 'finished';
     this.transport.stop();
     this.ctx.bed.setTrack(null, null);
+    this.ctx.bed.stop();
     if (!tune || !judge) return;
-    // Anything still open when the tune ends was never played. Resolving it
-    // here keeps the tally on the results screen adding up to the whole tune.
-    judge.expire(Infinity);
+    // Anything still open when the tune ends was never played, and anything
+    // still down was held to the end. Resolving both here keeps the tally on
+    // the results screen adding up to the whole tune.
+    judge.finish();
 
     const accuracy = judge.accuracy;
+    const held = judge.holdAccuracy;
     const letter = grade(accuracy);
     const outcome = recordRun(this.progress, tune.id, TUNE_ORDER, {
       accuracy, score: this.scoring.score, grade: letter, passed: accuracy >= tune.pass,
@@ -191,6 +210,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
         { label: 'Score', value: this.scoring.score.toLocaleString() },
         { label: 'Perfect / good / ok / missed', value:
           `${judge.tally.perfect} / ${judge.tally.good} / ${judge.tally.ok} / ${judge.tally.miss}` },
+        ...(held === null ? [] : [{ label: 'Notes held', value: `${Math.round(held * 100)}%` }]),
+        ...(judge.tally.wrong ? [{ label: 'Wrong keys', value: String(judge.tally.wrong) }] : []),
         { label: 'Best run', value: `${Math.round(outcome.best.accuracy * 100)}%${outcome.improved ? ' — new best' : ''}` },
         ...(next ? [{ label: 'Unlocked', value: next.title }] : []),
         ...(letter ? [] : [{ label: 'To pass', value: `${Math.round(tune.pass * 100)}% accuracy` }]),
@@ -211,14 +232,23 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     audio.setMod(input.mod);
 
     if (this.phase === 'idle' || this.phase === 'finished') return;
-    if (!audio.running) return;
+    if (!audio.running) {
+      // The context has gone away mid-run. The clock every judgement is made
+      // against will never advance again, so end the attempt rather than leave
+      // the player on a board that can no longer finish.
+      if (this.ranWithAudio) this.finish();
+      return;
+    }
+    this.ranWithAudio = true;
 
     const now = audio.now;
     if (this.phase === 'countin' && this.transport.beatAt(now) >= 0) this.phase = 'playing';
 
     const judge = this.judge;
     if (!judge) return;
-    for (const missed of judge.expire(this.transport.judgeTime(now))) this.onMiss(missed);
+    const at = this.transport.judgeTime(now);
+    for (const missed of judge.expire(at)) this.onMiss(missed);
+    for (const done of judge.settleHolds(at)) this.onHoldSettled(done);
 
     if (now >= this.endsAt) this.finish();
   }
@@ -237,11 +267,16 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const em = stage.emissive.ctx;
 
     const settings = playTuneSettings();
+    // Read live rather than from the snapshot `start` used to take: the tail is
+    // drawn in beats of lane, so a lead changed mid-run has to move the fall
+    // speed and the tail length together or they part company.
+    this.auras.leadBeats = settings.leadBeats;
     const views = this.judge && this.ctx.audio.running
       ? this.auras.view(
         this.judge,
         this.transport.judgeTime(this.ctx.audio.now),
         settings.leadBeats * this.transport.beatSeconds,
+        this.transport.beatSeconds,
       )
       : [];
 
@@ -280,7 +315,38 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   hud(): void {
     const total = this.judge?.total ?? 0;
-    this.panel.update(this.judge, total ? this.judge!.judged / total : 0);
+    this.panel.update(this.judge, total ? this.judge!.judged / total : 0, this.harmony());
+  }
+
+  /**
+   * What the bed is playing, and what it plays next.
+   *
+   * Named from the chord that was authored rather than read back off the
+   * sounding notes: voice leading can leave a chord in any inversion, and the
+   * player is being told which chord this *is*, not which one it looks like.
+   */
+  private harmony(): { now: string | null; next: string | null } {
+    const tune = this.tune;
+    if (!tune || this.phase === 'idle' || this.phase === 'finished' || !this.ctx.audio.running) {
+      return { now: null, next: null };
+    }
+    const beat = this.transport.beatAt(this.ctx.audio.now);
+    const scale = SCALES[tune.scaleId];
+    const root = tune.root + this.shift;
+    const name = (c: ChartChord | undefined): string | null =>
+      c ? chordLabel(degreeToNote(c.degree, root, scale), c.quality, root) : null;
+
+    let at = -1;
+    for (let i = 0; i < tune.chords.length; i++) {
+      if (tune.chords[i].beat > beat) break;
+      at = i;
+    }
+    const current = at >= 0 ? tune.chords[at] : undefined;
+    // During the count-in nothing is playing yet, so the panel shows what is
+    // about to arrive instead of a blank.
+    if (!current) return { now: null, next: name(tune.chords[0]) };
+    const sounding = beat < current.beat + current.len;
+    return { now: sounding ? name(current) : null, next: name(tune.chords[at + 1]) };
   }
 
   debugLines(): string {
@@ -321,7 +387,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       this.deck.noteOff(e.note);
       audio.noteOff(e.note);
       stage.endNote(e.note);
-      this.judge?.release(e.note);
+      const settled = this.judge?.release(e.note, this.transport.judgeTime(audio.now));
+      if (settled) this.onHoldSettled(settled);
     }
   }
 
@@ -352,11 +419,32 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       this.ctx.stage.kick(1.2);
     }
 
+    // A note with a tail is only part paid for on the way in; the rest arrives
+    // when the hold settles, so dropping it at once genuinely costs points.
     const combo = 1 + Math.min(6, Math.floor(result.combo / 8)) * 0.5;
-    this.scoring.add(WORTH[result.verdict] * combo, g.cx, g.cy + 60, {
+    const share = result.target?.holdJudged ? HOLD_FLOOR : 1;
+    this.scoring.add(WORTH[result.verdict] * combo * share, g.cx, g.cy + 60, {
       flat: true, quiet: result.verdict !== 'perfect', label: result.verdict === 'perfect' ? 'PERFECT' : '',
       tone: hue / 360,
     });
+  }
+
+  /** The rest of a held note's worth, paid out when its tail resolves. */
+  private onHoldSettled(target: Target): void {
+    const judge = this.judge;
+    if (!judge || !target.verdict || target.hold === null) return;
+    const key = this.deck.byNote.get(target.note);
+    if (!key) return;
+    const g = key.geom;
+    const combo = 1 + Math.min(6, Math.floor(judge.combo / 8)) * 0.5;
+    const worth = WORTH[target.verdict] * (1 - HOLD_FLOOR) * target.hold * combo;
+    if (worth > 0) this.scoring.add(worth, g.cx, g.cy + 60, { flat: true, quiet: true });
+    if (target.hold < 0.6) {
+      // The same colourless nudge a wrong note gets. The tune did not stop, but
+      // the note did, and the player should be able to see which one.
+      this.ctx.stage.particles.spawn('spark', g.cx, g.cy + 12, 10,
+        { vz: 70, maxLife: 0.24, size: 10, hue: 0 });
+    }
   }
 
   private onMiss(target: Target): void {

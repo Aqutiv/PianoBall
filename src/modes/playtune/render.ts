@@ -1,12 +1,18 @@
 import type { Stage } from '../../render/stage';
 import type { KeyDeck, KeyLit } from '../../game/keys';
 import { FIELD } from '../../render/field';
-import { tracePath, circlePoints } from '../../render/geom';
+import { tracePath, circlePoints, fillPoly } from '../../render/geom';
 import { clamp01, lerp } from '../../core/math';
 import type { Judge, Target } from './judge';
 
 /** Where an aura first appears, in table y. */
 const SPAWN_Y = FIELD.far - 40;
+
+/** Table radius of the rim a crotchet is drawn at. Everything else scales off it. */
+const RIM = 26;
+
+/** Shortest tail that still reads as a tail, in beats. */
+const MIN_TAIL = 0.4;
 
 export interface AuraView {
   target: Target;
@@ -14,6 +20,43 @@ export interface AuraView {
   /** 0 at spawn, 1 as it lands on the key. */
   progress: number;
   y: number;
+  /** Beats of tail still owed. Counts down while the note is held. */
+  tailBeats: number;
+  /** True once the note has been struck and is being held. */
+  held: boolean;
+}
+
+/** Which note value a length in beats reads as. */
+export interface NoteShape {
+  kind: 'quaver' | 'crotchet' | 'minim' | 'semibreve';
+  dotted: boolean;
+}
+
+/**
+ * A length in beats, read as the note value a musician would write.
+ *
+ * The point is not notation for its own sake: a player who can see at a glance
+ * that the next aura is twice as long as the last one knows to keep the key
+ * down without having to watch the tail run out. Dotted values are worth
+ * distinguishing because they are the ones that go wrong — the difference
+ * between Ode to Joy's dotted crotchet and its crotchet is the whole phrase.
+ */
+export function noteShape(len: number): NoteShape {
+  const dotted = isDotted(len);
+  const base = dotted ? len / 1.5 : len;
+  const kind = base < 0.75 ? 'quaver'
+    : base < 1.75 ? 'crotchet'
+      : base < 3.5 ? 'minim'
+        : 'semibreve';
+  return { kind, dotted };
+}
+
+/** Whether a length is one and a half of some plain note value. */
+function isDotted(len: number): boolean {
+  for (let v = 0.5; v <= 8; v *= 2) {
+    if (Math.abs(len - v * 1.5) < v * 0.02) return true;
+  }
+  return false;
 }
 
 /**
@@ -22,6 +65,11 @@ export interface AuraView {
  * Because the camera is raked, an aura that is still four beats away is small,
  * dim and high up the table, and one about to land is large and bright — the
  * approach reads as approach without anything having to fake a size curve.
+ *
+ * Length is carried by two things at once. The head's shape says which note
+ * value it is, which is readable the moment it appears and survives colour-blind
+ * mode where hue carries less; the tail behind it says exactly how far down the
+ * lane the note runs, and drains as the key is held.
  */
 export class AuraStage {
   /** Beats of approach an aura gets. Set by the mode from settings. */
@@ -30,13 +78,30 @@ export class AuraStage {
   constructor(private readonly stage: Stage, private readonly deck: KeyDeck) {}
 
   /** Auras currently in flight, nearest last so they paint over the far ones. */
-  view(judge: Judge, now: number, leadSeconds: number): AuraView[] {
+  view(judge: Judge, now: number, leadSeconds: number, beatSeconds: number): AuraView[] {
     const out: AuraView[] = [];
     for (const target of judge.approaching(now, leadSeconds)) {
       const key = this.deck.byNote.get(target.note);
       if (!key) continue;
       const progress = clamp01(1 - (target.time - now) / leadSeconds);
-      out.push({ target, key, progress, y: lerp(SPAWN_Y, key.geom.cy, progress) });
+      out.push({
+        target, key, progress,
+        y: lerp(SPAWN_Y, key.geom.cy, progress),
+        tailBeats: target.len,
+        held: false,
+      });
+    }
+    // A note being held stays on screen with its tail shortening, so "how much
+    // longer" is a thing the player can see rather than count.
+    for (const target of judge.sounding(now)) {
+      const key = this.deck.byNote.get(target.note);
+      if (!key) continue;
+      out.push({
+        target, key, progress: 1,
+        y: key.geom.cy,
+        tailBeats: Math.max(0, (target.end - now) / beatSeconds),
+        held: true,
+      });
     }
     return out.sort((a, b) => b.y - a.y);
   }
@@ -78,41 +143,92 @@ export class AuraStage {
       const hue = this.stage.hue(g.note);
       const scale = cam.scaleAt(g.cx, v.y, 12);
       // Fades in rather than popping into existence at the far end.
-      const alpha = clamp01(v.progress * 3);
+      const alpha = v.held ? 1 : clamp01(v.progress * 3);
 
-      // The tail of a held note, trailing back up the lane behind the head.
-      // A note worth holding trails a tail as long as the note itself, in the
-      // same units the aura is falling through: the tail is the note's length
-      // made visible.
-      const tailBeats = v.target.len;
-      if (tailBeats > 1) {
-        const perBeat = (SPAWN_Y - g.cy) / Math.max(1, this.leadBeats);
-        const back = Math.min(SPAWN_Y, v.y + perBeat * tailBeats);
-        em.save();
-        em.globalCompositeOperation = 'lighter';
-        em.globalAlpha = alpha * 0.28;
-        em.strokeStyle = `hsl(${hue} 90% 62%)`;
-        em.lineWidth = Math.max(2, 16 * scale);
-        em.lineCap = 'round';
-        tracePath(em, cam, [{ x: g.cx, y: v.y }, { x: g.cx, y: back }], 10);
-        em.stroke();
-        em.restore();
-      }
-
-      // The aura itself: a soft disc with a hard rim, so the exact moment it
-      // meets the key is readable rather than a blur.
-      this.stage.halo(em, g.cx, v.y, 12, hue, 34 + v.progress * 16, alpha * (0.4 + v.progress * 0.5));
-
-      em.save();
-      em.globalCompositeOperation = 'lighter';
-      em.globalAlpha = alpha * (0.5 + v.progress * 0.5);
-      em.strokeStyle = `hsl(${hue} 95% ${64 + v.progress * 22}%)`;
-      em.lineWidth = Math.max(1.2, 3 * scale);
-      tracePath(em, cam, circlePoints(g.cx, v.y, 26, 24), 12, true);
-      em.stroke();
-      em.restore();
-
+      this.drawTail(em, v, hue, alpha, scale);
+      this.drawHead(em, v, hue, alpha, scale);
     }
+  }
+
+  /**
+   * The body of the note, trailing back up the lane behind the head.
+   *
+   * Drawn for every note rather than only the long ones: a quaver with no tail
+   * and a semibreve with no tail were the same picture, which is exactly the
+   * thing the player needed to be able to tell apart.
+   */
+  private drawTail(
+    em: CanvasRenderingContext2D, v: AuraView,
+    hue: number, alpha: number, scale: number,
+  ): void {
+    if (v.tailBeats <= 0) return;
+    const g = v.key.geom;
+    const perBeat = (SPAWN_Y - g.cy) / Math.max(1, this.leadBeats);
+    const shown = v.held ? v.tailBeats : Math.max(v.tailBeats, MIN_TAIL);
+    const back = Math.min(SPAWN_Y, v.y + perBeat * shown);
+    if (back - v.y < 1) return;
+    em.save();
+    em.globalCompositeOperation = 'lighter';
+    // A tail being held is the one thing on screen that is running out, so it
+    // burns brighter than one that is merely on its way.
+    em.globalAlpha = alpha * (v.held ? 0.42 : 0.28);
+    em.strokeStyle = `hsl(${hue} 90% ${v.held ? 70 : 62}%)`;
+    em.lineWidth = Math.max(2, 16 * scale);
+    em.lineCap = 'round';
+    tracePath(em, this.stage.cam, [{ x: g.cx, y: v.y }, { x: g.cx, y: back }], 10);
+    em.stroke();
+    em.restore();
+  }
+
+  /**
+   * The aura itself: a soft disc, and a rim whose shape is the note value.
+   *
+   * A quaver is a small solid dot, a crotchet the plain ring this mode has
+   * always drawn, a minim gains an inner ring and a semibreve becomes a
+   * hexagon. A dot alongside marks the dotted values.
+   */
+  private drawHead(
+    em: CanvasRenderingContext2D, v: AuraView,
+    hue: number, alpha: number, scale: number,
+  ): void {
+    const g = v.key.geom;
+    const c = this.stage.cam;
+    const shape = noteShape(v.target.len);
+    const small = shape.kind === 'quaver';
+
+    this.stage.halo(
+      em, g.cx, v.y, 12, hue,
+      (small ? 24 : 34) + v.progress * 16,
+      alpha * (0.4 + v.progress * 0.5),
+    );
+
+    em.save();
+    em.globalCompositeOperation = 'lighter';
+    em.globalAlpha = alpha * (0.5 + v.progress * 0.5);
+    const light = `hsl(${hue} 95% ${64 + v.progress * 22}%)`;
+    em.strokeStyle = light;
+    em.lineWidth = Math.max(1.2, 3 * scale);
+
+    if (small) {
+      // Solid rather than open: the shortest note is the one with the least
+      // room to draw anything inside it.
+      fillPoly(em, c, circlePoints(g.cx, v.y, RIM * 0.6, 20), 12, light);
+    } else {
+      const rim = shape.kind === 'semibreve'
+        ? circlePoints(g.cx, v.y, RIM * 1.08, 6)
+        : circlePoints(g.cx, v.y, RIM, 24);
+      tracePath(em, c, rim, 12, true);
+      em.stroke();
+      if (shape.kind !== 'crotchet') {
+        tracePath(em, c, circlePoints(g.cx, v.y, RIM * 0.58, 18), 12, true);
+        em.stroke();
+      }
+    }
+
+    if (shape.dotted) {
+      fillPoly(em, c, circlePoints(g.cx + RIM * 1.5, v.y, 5, 10), 12, light);
+    }
+    em.restore();
   }
 
   /**
@@ -120,7 +236,7 @@ export class AuraStage {
    * Without it there is nothing to be on time *with*.
    */
   drawStrikeLine(em: CanvasRenderingContext2D, pulse: number): void {
-    const cam = this.stage.cam;
+    const c = this.stage.cam;
     const keys = this.deck.keys;
     if (!keys.length) return;
     const left = keys[0].geom;
@@ -131,7 +247,7 @@ export class AuraStage {
     em.strokeStyle = 'hsl(200 80% 72%)';
     em.lineWidth = 2.5;
     em.lineCap = 'round';
-    tracePath(em, cam, [
+    tracePath(em, c, [
       { x: left.cx - left.halfW, y: left.cy + 26 },
       { x: right.cx + right.halfW, y: right.cy + 26 },
     ], 8);

@@ -1,6 +1,7 @@
 import type { ChordQuality } from '../../game/table/schema';
 import type { ScaleName } from '../../audio/music';
-import { SCALES } from '../../audio/music';
+import { SCALES, chordNotes, degreeToNote, inScale } from '../../audio/music';
+import { COMP_PATTERNS, type CompPattern } from '../../audio/comp';
 
 /** One note the player is asked to play. Simultaneous beats form a chord. */
 export interface ChartNote {
@@ -30,11 +31,32 @@ export interface Tune {
   teaches: string;
   bpm: number;
   beatsPerBar: number;
+  /**
+   * Beats before the first bar line, for a tune that starts mid-bar.
+   *
+   * The chart counts beats from its own first note, so in a tune with a pickup
+   * every bar line sits at `pickup + n * beatsPerBar`. The accompaniment needs
+   * that: a bass note belongs on the downbeat, and without this it would put
+   * one wherever the chart happens to have started instead.
+   */
+  pickup?: number;
   /** MIDI note of the tonic. */
   root: number;
   scaleId: ScaleName;
   melody: ChartNote[];
   chords: ChartChord[];
+  /** How the bed plays those chords: the rhythm, not the harmony. */
+  accompaniment: CompPattern;
+  /**
+   * Chord tones from outside `scaleId` this tune means to use, as semitones
+   * above the tonic.
+   *
+   * Borrowing is normal — a minor tune raises its seventh at a cadence, and
+   * Greensleeves is the standard example — but it has to be declared, because
+   * the alternative is having no way to tell a deliberate E major in A minor
+   * from a chord degree that was simply typed wrong.
+   */
+  borrows?: number[];
   /** Accuracy needed to unlock the next tune. */
   pass: number;
 }
@@ -94,8 +116,15 @@ export function validate(tune: Tune): string[] {
   const problems: string[] = [];
   const scale = SCALES[tune.scaleId] as readonly number[] | undefined;
   if (!scale) problems.push(`unknown scale "${tune.scaleId}"`);
+  if (!COMP_PATTERNS.includes(tune.accompaniment)) {
+    problems.push(`unknown accompaniment "${tune.accompaniment}"`);
+  }
   if (tune.bpm <= 0) problems.push('bpm must be positive');
   if (tune.beatsPerBar <= 0) problems.push('beatsPerBar must be positive');
+  const pickup = tune.pickup ?? 0;
+  if (pickup < 0 || pickup >= tune.beatsPerBar) {
+    problems.push(`pickup ${pickup} must be within [0, ${tune.beatsPerBar})`);
+  }
   if (!tune.melody.length) problems.push('no melody');
   if (tune.pass <= 0 || tune.pass > 1) problems.push('pass must be within (0, 1]');
 
@@ -125,4 +154,38 @@ export function validate(tune: Tune): string[] {
   }
 
   return problems;
+}
+
+/**
+ * Chord tones this tune plays that its own scale does not contain and its
+ * `borrows` list does not admit to.
+ *
+ * Checking the chord's *root* is in the scale is not enough, and used to be all
+ * that was checked: a B major triad built on a scale tone still drags a D sharp
+ * and an F sharp in behind it, which is how a chord nobody meant to write sat
+ * under a tune in D minor. Returns the offending semitones, as human-readable
+ * lines.
+ */
+export function harmonyProblems(tune: Tune): string[] {
+  const scale = SCALES[tune.scaleId] as readonly number[] | undefined;
+  if (!scale) return [`unknown scale "${tune.scaleId}"`];
+  const allowed = new Set(tune.borrows ?? []);
+  const out: string[] = [];
+  for (const c of tune.chords) {
+    const root = degreeToNote(c.degree, tune.root, scale);
+    for (const n of chordNotes(root, c.quality)) {
+      const rel = ((n - tune.root) % 12 + 12) % 12;
+      if (inScale(n, tune.root, scale) || allowed.has(rel)) continue;
+      out.push(`chord at beat ${c.beat} (degree ${c.degree} ${c.quality}) uses ${rel} semitones, `
+        + `which is outside ${tune.scaleId} and not in borrows`);
+    }
+  }
+  return out;
+}
+
+/** Longest stretch, in beats, that the same chord is held for. */
+export function slowestChordChange(tune: Tune): number {
+  let worst = 0;
+  for (const c of tune.chords) worst = Math.max(worst, c.len);
+  return worst;
 }
