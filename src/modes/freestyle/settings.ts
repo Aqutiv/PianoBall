@@ -1,4 +1,5 @@
 import { load, save } from '../../core/storage';
+import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
 
 const KEY = 'freestyleSettings';
 
@@ -11,10 +12,21 @@ export interface FreestyleSettings {
    * to decide for themselves — so it is offered rather than assumed.
    */
   bed: boolean;
+  /**
+   * What the keys sound like, and what the bed sounds like under them.
+   *
+   * Freestyle's own, not the app's: the mode sets both on the way in and puts
+   * the defaults back on the way out, so choosing a choir here leaves Pinball
+   * and PlayTune sounding exactly as they did.
+   */
+  voiceId: string;
+  bedVoiceId: string;
 }
 
 export const DEFAULT_FREESTYLE: FreestyleSettings = {
   bed: false,
+  voiceId: DEFAULT_LEAD_VOICE,
+  bedVoiceId: DEFAULT_BED_VOICE,
 };
 
 let current: FreestyleSettings = { ...DEFAULT_FREESTYLE, ...load(KEY, {}) };

@@ -2,6 +2,10 @@ import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
 import { DRUM_SPECS, type DrumVoice } from './drums';
+import {
+  DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice,
+  type BedSpec, type VoiceSpec,
+} from './voices';
 
 export interface AudioSettings {
   master: number;
@@ -73,11 +77,21 @@ const dottedEighth = (bpm: number) => clamp((60 / bpm) * 0.75, 0.02, DELAY_MAX);
 interface KeyVoice {
   note: number;
   startedAt: number;
-  osc1: OscillatorNode;
-  osc2: OscillatorNode;
-  sub: OscillatorNode;
+  /** Every oscillator the voice owns: its layers first, then any FM operator. */
+  oscs: OscillatorNode[];
+  /**
+   * Only the layer oscillators, which are the ones expression is wired into.
+   * An FM operator runs at its own ratio and must not be bent with them.
+   */
+  voiced: OscillatorNode[];
   filter: BiquadFilterNode;
   amp: GainNode;
+  /**
+   * Taken from the spec at the moment the key went down, not read back off the
+   * engine at release. That is what lets the player change instrument with
+   * notes still held: a note finishes as the voice it was struck as.
+   */
+  release: number;
   releasing: boolean;
 }
 
@@ -132,6 +146,19 @@ export class AudioEngine {
   private active: KeyVoice[] = [];
   private sustained = new Set<number>();
   private sustainOn = false;
+
+  /**
+   * Which instrument the keys and the bed are currently using.
+   *
+   * Deliberately not part of `AudioSettings` and never written to storage: a
+   * mode sets these on the way in and puts them back on the way out, so one
+   * mode's choice of sound cannot follow the player into another. Freestyle is
+   * the only mode that touches them, and it remembers its own preference.
+   */
+  private leadId = DEFAULT_LEAD_VOICE;
+  private bedId = DEFAULT_BED_VOICE;
+  private leadSpec: VoiceSpec = findLeadVoice(DEFAULT_LEAD_VOICE).spec;
+  private bedSpec: BedSpec = findBedVoice(DEFAULT_BED_VOICE).spec;
 
   constructor() {
     const stored = load<Partial<AudioSettings>>(AUDIO_STORAGE_KEY, {});
@@ -310,6 +337,32 @@ export class AudioEngine {
 
   resetSettings(): void { this.setSettings(DEFAULT_AUDIO); }
 
+  // ------------------------------------------------------------ instrument ---
+
+  /**
+   * Which instrument the keys play, and which the bed plays under them.
+   *
+   * Both take effect on the next note: anything already sounding finishes as
+   * the voice it was struck as, which is what makes changing instrument
+   * mid-phrase sound like a change rather than a glitch. An unknown id falls
+   * back to the default rather than throwing, so dropping a voice from the
+   * bank cannot strand a saved preference.
+   */
+  setLeadVoice(id: string): void {
+    const voice = findLeadVoice(id);
+    this.leadId = voice.id;
+    this.leadSpec = voice.spec;
+  }
+
+  setBedVoice(id: string): void {
+    const voice = findBedVoice(id);
+    this.bedId = voice.id;
+    this.bedSpec = voice.spec;
+  }
+
+  get leadVoice(): string { return this.leadId; }
+  get bedVoice(): string { return this.bedId; }
+
   /**
    * Point the tempo-locked effects at a new tempo.
    *
@@ -355,35 +408,74 @@ export class AudioEngine {
 
     const v = clamp01(velocity);
     const freq = noteToFreq(note);
+    const spec = this.leadSpec;
+    const { filter: f, env } = spec;
 
     const amp = ctx.createGain();
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     // Brightness tracks how hard the key was hit: this is most of why a synth
     // reads as an instrument rather than a beep.
-    filter.frequency.setValueAtTime(clamp(freq * (1.6 + v * v * 11), 180, 15000), t);
-    filter.Q.value = 3.2 + v * 3;
+    filter.frequency.setValueAtTime(clamp(freq * (f.base + v * v * f.track), 180, 15000), t);
+    filter.Q.value = f.q + v * f.qVel;
 
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sawtooth';
-    osc1.frequency.setValueAtTime(freq, t);
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'square';
-    osc2.frequency.setValueAtTime(freq, t);
-    osc2.detune.setValueAtTime(7.5, t);
-    const sub = ctx.createOscillator();
-    sub.type = 'triangle';
-    sub.frequency.setValueAtTime(freq / 2, t);
+    // Every layer of the instrument, and every operator modulating one. The
+    // two lists differ only in what expression is allowed to bend.
+    const oscs: OscillatorNode[] = [];
+    const voiced: OscillatorNode[] = [];
+    for (const layer of spec.layers) {
+      const osc = ctx.createOscillator();
+      osc.type = layer.type;
+      osc.frequency.setValueAtTime(freq * layer.ratio, t);
+      if (layer.detune) osc.detune.setValueAtTime(layer.detune, t);
 
-    const g1 = ctx.createGain(); g1.gain.value = 0.5;
-    const g2 = ctx.createGain(); g2.gain.value = 0.18 + v * 0.2;
-    const g3 = ctx.createGain(); g3.gain.value = 0.24;
-    osc1.connect(g1).connect(filter);
-    osc2.connect(g2).connect(filter);
-    sub.connect(g3).connect(filter);
+      if (layer.fm) {
+        // Bright at the strike and gone a moment later, which is what turns a
+        // sine into a tine. `ping` has always done this; now it is a field.
+        const mod = ctx.createOscillator();
+        mod.type = 'sine';
+        mod.frequency.value = freq * layer.fm.ratio;
+        const modGain = ctx.createGain();
+        modGain.gain.setValueAtTime(freq * layer.fm.index, t);
+        modGain.gain.exponentialRampToValueAtTime(1, t + layer.fm.decay);
+        mod.connect(modGain).connect(osc.frequency);
+        mod.start(t);
+        oscs.push(mod);
+      }
 
-    // Expression rides on top of whatever the envelopes below are doing.
-    for (const osc of [osc1, osc2, sub]) {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(layer.level + v * (layer.velLevel ?? 0), t);
+      // A layer given a decay of its own dies before the note does: the
+      // difference between a bell's strike and the tone left ringing under it.
+      if (layer.decay) g.gain.exponentialRampToValueAtTime(0.0001, t + layer.decay);
+      osc.connect(g).connect(filter);
+      osc.start(t);
+      oscs.push(osc);
+      voiced.push(osc);
+    }
+
+    // Breath, or the knock of the key itself: a slice of the shared buffer,
+    // the same layer the drums are mostly made of.
+    if (spec.noise) {
+      const n = spec.noise;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = n.freq;
+      bp.Q.value = n.q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(n.gain * (0.5 + v * 0.5), t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + n.decay);
+      src.connect(bp).connect(g).connect(filter);
+      src.start(t, Math.random() * 0.9, n.decay + 0.02);
+    }
+
+    // Expression rides on top of whatever the envelopes below are doing. Only
+    // the layers: an operator runs at its own ratio and bending it would move
+    // the timbre rather than the pitch.
+    for (const osc of voiced) {
       this.bendSource.connect(osc.detune);
       this.lfoVibrato.connect(osc.detune);
     }
@@ -394,22 +486,25 @@ export class AudioEngine {
     filter.connect(amp).connect(pannerNode);
     pannerNode.connect(this.musicBus);
 
-    const rev = ctx.createGain(); rev.gain.value = 0.2 + v * 0.14;
-    const dly = ctx.createGain(); dly.gain.value = 0.1 + v * 0.14;
+    // Harder notes go wetter, whatever the instrument's own send level is.
+    const rev = ctx.createGain(); rev.gain.value = spec.reverb * (1 + v * 0.7);
+    const dly = ctx.createGain(); dly.gain.value = spec.delay * (1 + v * 1.4);
     pannerNode.connect(rev).connect(this.reverbSend);
     pannerNode.connect(dly).connect(this.delaySend);
 
-    const peak = 0.06 + v * 0.3;
+    const peak = (0.06 + v * 0.3) * spec.gain;
     amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.exponentialRampToValueAtTime(peak, t + 0.004);
-    amp.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.34), t + 0.16);
+    amp.gain.exponentialRampToValueAtTime(peak, t + env.attack);
+    // `decay` is measured from the strike, not from the top of the attack, so
+    // a slow swell and a fast one still arrive at the same place.
+    amp.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * env.sustain), t + env.decay);
     // The filter closes as the note decays, the way a struck string does.
     filter.frequency.exponentialRampToValueAtTime(
-      clamp(freq * (1.1 + v * 2.4), 160, 12000), t + 0.35);
+      clamp(freq * (f.settle + v * f.settleVel), 160, 12000), t + f.settleTime);
 
-    osc1.start(t); osc2.start(t); sub.start(t);
-
-    const voice: KeyVoice = { note, startedAt: t, osc1, osc2, sub, filter, amp, releasing: false };
+    const voice: KeyVoice = {
+      note, startedAt: t, oscs, voiced, filter, amp, release: env.release, releasing: false,
+    };
     this.voices.set(note, voice);
     this.active.push(voice);
     this.cull();
@@ -420,7 +515,7 @@ export class AudioEngine {
     if (this.sustainOn && !immediate) { this.sustained.add(note); return; }
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
-    this.release(voice, immediate ? 0.02 : 0.22);
+    this.release(voice, immediate ? 0.02 : voice.release);
     this.voices.delete(note);
   }
 
@@ -432,10 +527,11 @@ export class AudioEngine {
     voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
     const stop = t + seconds + 0.02;
-    voice.osc1.stop(stop); voice.osc2.stop(stop); voice.sub.stop(stop);
+    for (const osc of voice.oscs) osc.stop(stop);
     // The expression sources are permanent and hold a reference to every param
     // they feed, so a voice that is not explicitly unhooked never goes away.
-    for (const osc of [voice.osc1, voice.osc2, voice.sub]) {
+    // Only what was hooked up: an FM operator was never wired to either.
+    for (const osc of voice.voiced) {
       this.bendSource.disconnect(osc.detune);
       this.lfoVibrato.disconnect(osc.detune);
     }
@@ -708,25 +804,28 @@ export class AudioEngine {
     // A struck chord opens brighter and faster than a swell; without this the
     // filter is still on its way up by the time a short stab has gone.
     const struck = rise < seconds * 0.2;
+    const spec = this.bedSpec;
+    const cut = spec.filter;
+    const share = (gain / notes.length) * spec.gain;
     for (let i = 0; i < notes.length; i++) {
       const freq = noteToFreq(notes[i]);
-      for (const detune of [-6, 6]) {
+      for (const layer of spec.layers) {
         const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.value = freq;
-        osc.detune.value = detune;
+        osc.type = layer.type;
+        osc.frequency.value = freq * layer.ratio;
+        osc.detune.value = layer.detune ?? 0;
         const f = ctx.createBiquadFilter();
         f.type = 'lowpass';
-        f.frequency.setValueAtTime(struck ? 900 : 420, t);
+        f.frequency.setValueAtTime(struck ? cut.startStruck : cut.start, t);
         f.frequency.linearRampToValueAtTime(
-          struck ? 1700 : 1100,
+          struck ? cut.peakStruck : cut.peak,
           t + (struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
         );
-        f.frequency.linearRampToValueAtTime(500, t + seconds);
-        f.Q.value = 1.4;
+        f.frequency.linearRampToValueAtTime(cut.end, t + seconds);
+        f.Q.value = cut.q;
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(gain / notes.length, t + rise);
+        g.gain.linearRampToValueAtTime(share * layer.level, t + rise);
         g.gain.linearRampToValueAtTime(0.0001, t + seconds);
         const pannerNode = ctx.createStereoPanner();
         pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
