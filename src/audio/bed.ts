@@ -54,7 +54,8 @@ export class ChordBed {
 
   private readonly engine: AudioEngine;
   private readonly music: MusicState;
-  private timer = 0;
+  /** Bare rather than `window.`-qualified, so the bed runs where it is tested. */
+  private timer: ReturnType<typeof setInterval> | null = null;
   private nextBar = 0;
   /** Bars still owed to the current chord. */
   private barsLeft: number;
@@ -94,7 +95,7 @@ export class ChordBed {
     music.bus.on('tempo', () => { this.groove.bpm = music.bpm; });
   }
 
-  get running(): boolean { return this.timer !== 0; }
+  get running(): boolean { return this.timer !== null; }
 
   get enabled(): boolean { return this.on; }
 
@@ -117,9 +118,12 @@ export class ChordBed {
 
   /** Begin scheduling. Safe to call repeatedly; only the first one takes. */
   start(): void {
-    if (this.timer) return;
+    if (this.timer !== null) return;
     this.align();
-    this.timer = window.setInterval(() => this.schedule(), TICK_MS);
+    // `stop` leaves the pads faded out, so starting has to bring them back —
+    // to whatever this mode asked for rather than unconditionally on.
+    this.engine.setBedAudible(this.on);
+    this.timer = setInterval(() => this.schedule(), TICK_MS);
   }
 
   /** Put the next bar at the front of the queue, with nothing to lead from. */
@@ -129,9 +133,14 @@ export class ChordBed {
   }
 
   stop(): void {
-    if (this.timer) window.clearInterval(this.timer);
-    this.timer = 0;
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null;
     this.pending.length = 0;
+    // Dropping the queue only stops what has not been written yet. A chord
+    // already handed to the engine rings for its whole length — nearly four
+    // seconds of Drift's swell — so the pads themselves have to be faded, or
+    // the harmony plays on over the screen the run just left for.
+    this.engine.setBedAudible(false);
   }
 
   /**

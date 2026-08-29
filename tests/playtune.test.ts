@@ -197,9 +197,49 @@ describe('judging', () => {
     // The count-in is exactly when a player finds the keys.
     j.press(71, specs[0].time - 1);
     j.press(65, specs[0].time - 0.5);
+    // Including the last breath of it: half a hit window before the downbeat
+    // is still the count-in, and is not where the rule should turn over.
+    j.press(71, specs[0].time - 0.001);
     expect(j.tally.wrong).toBe(0);
     for (const s of specs) j.press(s.note, s.time);
     expect(j.accuracy).toBe(1);
+  });
+
+  it('starts charging for wrong keys from the first note onwards', () => {
+    const j = new Judge(specs);
+    j.press(71, specs[0].time);
+    expect(j.tally.wrong).toBe(1);
+  });
+
+  it('prices a tail at the multiplier its own onset earned', () => {
+    // A long note struck first, then shorter notes on top of it: by the time
+    // the tail settles the combo has moved on, and the note must not be paid
+    // at whatever it happens to be then.
+    const mixed: TargetSpec[] = [
+      { note: 60, beat: 0, len: 4, time: 1, end: 5 },
+      { note: 62, beat: 1, len: 1, time: 2, end: 3 },
+      { note: 64, beat: 2, len: 1, time: 3, end: 4 },
+    ];
+    const j = new Judge(mixed);
+    const first = j.press(60, 1);
+    expect(first.combo).toBe(1);
+    j.press(62, 2);
+    j.press(64, 3);
+    expect(j.combo).toBe(3);
+
+    const settled = j.release(60, 5);
+    expect(settled).not.toBeNull();
+    expect(settled!.combo, 'the combo it was struck on, not the one it ends on')
+      .toBe(1);
+  });
+
+  it('holds that price when a wrong key breaks the combo under it', () => {
+    const long: TargetSpec[] = [{ note: 60, beat: 0, len: 4, time: 1, end: 5 }];
+    const j = new Judge(long);
+    j.press(60, 1);
+    j.press(71, 2);                       // a wrong key while the note is held
+    expect(j.combo).toBe(0);
+    expect(j.release(60, 5)!.combo).toBe(1);
   });
 
   it('breaks the combo on a wrong note', () => {

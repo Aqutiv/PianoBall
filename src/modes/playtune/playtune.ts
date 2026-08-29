@@ -23,6 +23,11 @@ const WORTH: Record<Verdict, number> = {
 
 type Phase = 'idle' | 'countin' | 'playing' | 'finished';
 
+/** What a run of notes in a row is worth, capped so a long tune cannot run away. */
+function comboMultiplier(combo: number): number {
+  return 1 + Math.min(6, Math.floor(combo / 8)) * 0.5;
+}
+
 /**
  * Learning a melody.
  *
@@ -421,9 +426,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
     // A note with a tail is only part paid for on the way in; the rest arrives
     // when the hold settles, so dropping it at once genuinely costs points.
-    const combo = 1 + Math.min(6, Math.floor(result.combo / 8)) * 0.5;
     const share = result.target?.holdJudged ? HOLD_FLOOR : 1;
-    this.scoring.add(WORTH[result.verdict] * combo * share, g.cx, g.cy + 60, {
+    this.scoring.add(WORTH[result.verdict] * comboMultiplier(result.combo) * share, g.cx, g.cy + 60, {
       flat: true, quiet: result.verdict !== 'perfect', label: result.verdict === 'perfect' ? 'PERFECT' : '',
       tone: hue / 360,
     });
@@ -431,13 +435,16 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   /** The rest of a held note's worth, paid out when its tail resolves. */
   private onHoldSettled(target: Target): void {
-    const judge = this.judge;
-    if (!judge || !target.verdict || target.hold === null) return;
+    if (!target.verdict || target.hold === null) return;
     const key = this.deck.byNote.get(target.note);
     if (!key) return;
     const g = key.geom;
-    const combo = 1 + Math.min(6, Math.floor(judge.combo / 8)) * 0.5;
-    const worth = WORTH[target.verdict] * (1 - HOLD_FLOOR) * target.hold * combo;
+    // The note's own multiplier, not whatever the combo has become since. A
+    // tail settles a frame or a bar after the onset that priced it, and by
+    // then the next note may have raised the combo or a wrong key sent it to
+    // zero — neither of which is anything this note did.
+    const worth = WORTH[target.verdict] * (1 - HOLD_FLOOR) * target.hold
+      * comboMultiplier(target.combo);
     if (worth > 0) this.scoring.add(worth, g.cx, g.cy + 60, { flat: true, quiet: true });
     if (target.hold < 0.6) {
       // The same colourless nudge a wrong note gets. The tune did not stop, but

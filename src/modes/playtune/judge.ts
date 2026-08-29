@@ -57,6 +57,15 @@ export interface Target extends TargetSpec {
   hold: number | null;
   /** Whether this note is long enough for its length to count. */
   holdJudged: boolean;
+  /**
+   * Notes in a row at the moment this one was struck, or 0.
+   *
+   * Kept on the target because a long note is paid twice — once for the onset
+   * and once for the tail — and the two instalments have to be worth the same
+   * multiplier. Reading the live combo when the tail settles would price it by
+   * whatever happened while the key was held down.
+   */
+  combo: number;
 }
 
 export interface PressResult {
@@ -106,6 +115,7 @@ export class Judge {
         holding: false,
         pressedAt: -1,
         hold: null,
+        combo: 0,
         holdJudged: s.len > HOLD_FROM && s.end > s.time,
       }))
       .sort((a, b) => a.time - b.time || a.note - b.note);
@@ -164,7 +174,12 @@ export class Judge {
       // A press before the tune has started is the player finding the keys, and
       // the count-in is exactly when that happens. Charging for it would make
       // the calibration bars part of the score.
-      if (at >= this.firstTime - this.windows.ok) this.tally.wrong++;
+      //
+      // The boundary is the first note itself rather than the opening of its
+      // window: a wrong pitch struck in the last breath before the downbeat is
+      // still inside the count-in, and half a hit window is not where a rule
+      // about whether the tune has begun should turn over.
+      if (at >= this.firstTime) this.tally.wrong++;
       return { verdict: 'wrong', target: null, combo: 0 };
     }
 
@@ -184,6 +199,7 @@ export class Judge {
     this.tally[verdict]++;
     this.combo++;
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+    best.combo = this.combo;
 
     if (best.holdJudged) {
       best.holding = true;
