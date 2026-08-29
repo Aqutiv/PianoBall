@@ -274,6 +274,14 @@ interface ChordShape {
   name: string;
   /** Core tones, including the root at 0. */
   intervals: number[];
+  /**
+   * Whether extensions may stack on it.
+   *
+   * Extended harmony is built on a seventh: a triad can take one added note —
+   * that is what `add9` and `6/9` are — but a triad carrying two or more
+   * tensions is a handful of notes with a name forced onto it.
+   */
+  stackable: boolean;
   /** Nudge for the shape that should win an otherwise exact tie. */
   weight: number;
 }
@@ -287,23 +295,23 @@ interface ChordShape {
  * a dominant seventh with two notes on top, not a shape of its own.
  */
 const SHAPES: ChordShape[] = [
-  { name: '', intervals: [0, 4, 7], weight: 3 },
-  { name: 'min', intervals: [0, 3, 7], weight: 3 },
-  { name: 'maj7', intervals: [0, 4, 7, 11], weight: 3 },
-  { name: 'min7', intervals: [0, 3, 7, 10], weight: 3 },
-  { name: '7', intervals: [0, 4, 7, 10], weight: 3 },
-  { name: 'sus4', intervals: [0, 5, 7], weight: 2 },
-  { name: 'sus2', intervals: [0, 2, 7], weight: 1 },
-  { name: '6', intervals: [0, 4, 7, 9], weight: 2 },
-  { name: 'min6', intervals: [0, 3, 7, 9], weight: 2 },
-  { name: '7sus4', intervals: [0, 5, 7, 10], weight: 2 },
-  { name: 'min7b5', intervals: [0, 3, 6, 10], weight: 2 },
-  { name: 'dim', intervals: [0, 3, 6], weight: 1 },
-  { name: 'dim7', intervals: [0, 3, 6, 9], weight: 1 },
-  { name: 'minMaj7', intervals: [0, 3, 7, 11], weight: 1 },
-  { name: '7#5', intervals: [0, 4, 8, 10], weight: 1 },
-  { name: 'aug', intervals: [0, 4, 8], weight: 0 },
-  { name: 'maj7#5', intervals: [0, 4, 8, 11], weight: 0 },
+  { name: '', intervals: [0, 4, 7], stackable: false, weight: 3 },
+  { name: 'min', intervals: [0, 3, 7], stackable: false, weight: 3 },
+  { name: 'maj7', intervals: [0, 4, 7, 11], stackable: true, weight: 3 },
+  { name: 'min7', intervals: [0, 3, 7, 10], stackable: true, weight: 3 },
+  { name: '7', intervals: [0, 4, 7, 10], stackable: true, weight: 3 },
+  { name: 'sus4', intervals: [0, 5, 7], stackable: false, weight: 2 },
+  { name: 'sus2', intervals: [0, 2, 7], stackable: false, weight: 1 },
+  { name: '6', intervals: [0, 4, 7, 9], stackable: false, weight: 2 },
+  { name: 'min6', intervals: [0, 3, 7, 9], stackable: false, weight: 2 },
+  { name: '7sus4', intervals: [0, 5, 7, 10], stackable: true, weight: 2 },
+  { name: 'min7b5', intervals: [0, 3, 6, 10], stackable: true, weight: 2 },
+  { name: 'dim', intervals: [0, 3, 6], stackable: false, weight: 1 },
+  { name: 'dim7', intervals: [0, 3, 6, 9], stackable: true, weight: 1 },
+  { name: 'minMaj7', intervals: [0, 3, 7, 11], stackable: true, weight: 1 },
+  { name: '7#5', intervals: [0, 4, 8, 10], stackable: true, weight: 1 },
+  { name: 'aug', intervals: [0, 4, 8], stackable: false, weight: 0 },
+  { name: 'maj7#5', intervals: [0, 4, 8, 11], stackable: true, weight: 0 },
 ];
 
 /**
@@ -316,8 +324,29 @@ const TENSIONS: Record<number, string> = {
   1: 'b9', 2: '9', 3: '#9', 5: '11', 6: '#11', 8: 'b13', 9: '13',
 };
 
-/** More than this many unexplained notes and it is a cluster, not a chord. */
-const MAX_TENSIONS = 2;
+/**
+ * Most notes a shape may carry on top of itself.
+ *
+ * Three, because a full thirteenth chord is a seventh with a ninth, an
+ * eleventh and a thirteenth stacked above it. What keeps that from also
+ * admitting clusters is the adjacency rule below rather than the count.
+ */
+const MAX_TENSIONS = 3;
+
+/** The natural stack. A chord is named for the highest step it reaches. */
+const NATURAL_STACK = ['9', '11', '13'];
+
+/**
+ * Weakest explanation worth asserting.
+ *
+ * A reading that is missing a chord tone *and* carrying tensions *and* does not
+ * own the bass is a guess, and it will still win if it is the only match — so
+ * there has to be a point below which no name beats a bad one. Twelve sits
+ * between such a guess (nine, for a gapped shape with two tensions and no bass)
+ * and the thinnest real voicing (fifteen, for a ninth chord with the fifth left
+ * out and the third in the bass).
+ */
+const MIN_SCORE = 12;
 
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -335,11 +364,17 @@ function withNinth(shape: string): string {
 
 function suffixFor(shape: string, tensions: readonly string[]): string {
   if (!tensions.length) return shape;
-  const t = tensions.join(' ');
-  if (t === '9') return withNinth(shape);
-  if (shape === '7' && t === '9 13') return '13';
-  if (shape === 'min7' && t === '9 11') return 'min11';
-  if (shape === 'maj7' && t === '9 #11') return 'maj9#11';
+  if (shape === 'maj7' && tensions.join(' ') === '9 #11') return 'maj9#11';
+  // A ninth, an eleventh and a thirteenth stack: reaching the thirteenth is
+  // called a thirteenth chord, not a seventh with three things bolted on. The
+  // stack has to start at the ninth — a lone eleventh is an added note.
+  if (tensions[0] === '9' && tensions.every((t) => NATURAL_STACK.includes(t))) {
+    const top = tensions[tensions.length - 1];
+    if (top === '9') return withNinth(shape);
+    if (shape === '7') return top;
+    if (shape === 'min7') return `min${top}`;
+    if (shape === 'maj7') return `maj${top}`;
+  }
   return `${shape}(${tensions.join(',')})`;
 }
 
@@ -379,6 +414,10 @@ export function identifyChord(notes: readonly number[]): string | null {
       const extras = [...rel].filter((i) => !shape.intervals.includes(i)).sort((a, b) => a - b);
       if (extras.length > MAX_TENSIONS) continue;
       if (extras.some((i) => TENSIONS[i] === undefined)) continue;
+      // Two tensions a semitone apart are a cluster, not a stack: a chord has
+      // a flat ninth or a natural ninth, never both.
+      if (extras.some((i, k) => k > 0 && i - extras[k - 1] === 1)) continue;
+      if (extras.length > 1 && !shape.stackable) continue;
 
       // Order of precedence, and the reason for these numbers: a complete
       // shape beats an incomplete one even when the incomplete one owns the
@@ -389,6 +428,7 @@ export function identifyChord(notes: readonly number[]): string | null {
         - extras.length * 4
         + (root === bass ? 12 : 0)
         + shape.weight;
+      if (score < MIN_SCORE) continue;
       if (!best || score > best.score) {
         best = { score, root, shape: shape.name, tensions: extras.map((i) => TENSIONS[i]) };
       }
