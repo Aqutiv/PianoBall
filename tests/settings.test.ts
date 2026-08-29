@@ -5,6 +5,8 @@ import { InputHub } from '../src/midi/inputHub';
 import { DEFAULT_VELOCITY } from '../src/midi/velocityCurve';
 import { MidiInput } from '../src/midi/midiInput';
 import { DEFAULT_QUALITY, Renderer } from '../src/render/renderer';
+import { DEFAULT_MODE_CHOICE, Game } from '../src/game/game';
+import { AURORA } from '../src/game/table/tables/aurora';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -54,6 +56,16 @@ describe('settings persistence', () => {
     expect(new Renderer(fakeCanvas()).quality).toMatchObject({
       bloom: false, labels: false, reducedMotion: true, colorBlind: true,
     });
+  });
+
+  it('uses a random scale by default and still remembers an explicit choice', () => {
+    const input = new InputHub();
+    const game = new Game(input, AURORA);
+
+    expect(game.modeChoice).toBe(DEFAULT_MODE_CHOICE);
+    game.setModeChoice('lydian');
+
+    expect(new Game(new InputHub(), AURORA).modeChoice).toBe('lydian');
   });
 
   it('restores defaults without removing the best score', () => {

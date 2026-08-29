@@ -1,4 +1,4 @@
-import type { Game } from '../game/game';
+import { DEFAULT_MODE_CHOICE, type Game } from '../game/game';
 import type { InputHub } from '../midi/inputHub';
 import type { AudioDirector } from '../audio/director';
 import type { Renderer } from '../render/renderer';
@@ -278,7 +278,7 @@ export class Overlay {
       input.mapping.resetSettings();
       input.resetVelocitySettings();
       input.midi.resetSettings();
-      game.setModeChoice(game.def.music.mode);
+      game.setModeChoice(DEFAULT_MODE_CHOICE);
       game.remapKeybed();
       renderer.resetSettings();
       this.show('settings');

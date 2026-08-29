@@ -60,6 +60,8 @@ export const DEFAULT_GAME: GameConfig = {
   maxBalls: 6,
 };
 
+export const DEFAULT_MODE_CHOICE = 'random';
+
 export class Game {
   readonly bus = new EventBus<GameEvents>();
   readonly world: World;
@@ -112,7 +114,7 @@ export class Game {
     // switching scale over and over can never compound into a drift.
     for (const el of this.table.elements) this.baseNotes.set(el.id, el.note);
     this.baseMode = findMode(def.music.mode) ?? MODES[0];
-    this.modeChoice = load<{ mode: string }>('music', { mode: def.music.mode }).mode;
+    this.modeChoice = load<{ mode: string }>('music', { mode: DEFAULT_MODE_CHOICE }).mode;
     this.setMode(this.resolveModeId());
 
     const m = input.mapping.settings;
