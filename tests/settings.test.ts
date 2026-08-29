@@ -96,6 +96,25 @@ describe('settings persistence', () => {
     expect(new MusicState({ ...AURORA.music }).root % 12).toBe(0);
   });
 
+  it('draws a fresh scale on every roll while the choice is random', () => {
+    const music = new MusicState({ ...AURORA.music });
+    expect(music.choice).toBe(RANDOM);
+
+    // Over enough draws it must actually vary, or "random each game" is a lie.
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i++) { music.roll(); seen.add(music.id); }
+    expect(seen.size).toBeGreaterThan(1);
+
+    // A named choice pins it, and picking random again un-pins it.
+    music.setChoice('blues');
+    const pinned = new Set<string>();
+    for (let i = 0; i < 20; i++) { music.roll(); pinned.add(music.id); }
+    expect([...pinned]).toEqual(['blues']);
+
+    music.setChoice(RANDOM);
+    expect(music.choice).toBe(RANDOM);
+  });
+
   it('uses a random scale by default and still remembers an explicit choice', () => {
     const music = new MusicState({ ...AURORA.music });
 

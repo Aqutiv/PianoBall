@@ -72,8 +72,12 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.ctx.hud.clearPanels();
   }
 
-  /** Freestyle has no run to restart; entering it is all there is. */
+  /**
+   * Freestyle has no run to restart, but picking it from the menu is the same
+   * moment the table calls a new game — so it is where a random scale is drawn.
+   */
   newGame(): void {
+    this.ctx.music.roll();
     this.field.reset();
   }
 

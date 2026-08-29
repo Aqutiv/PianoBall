@@ -2,7 +2,8 @@ import type { Hud } from '../../ui/hud';
 import type { MusicState } from '../../audio/musicState';
 import type { AudioEngine } from '../../audio/engine';
 import { MODES } from '../../audio/music';
-import { NOTE_NAMES } from '../../midi/notes';
+import { RANDOM } from '../../audio/musicState';
+import { NOTE_NAMES, noteName } from '../../midi/notes';
 import { freestyleSettings, setFreestyleSettings } from './settings';
 
 /**
@@ -16,6 +17,8 @@ export class FreestyleHud {
   private chordEl!: HTMLElement;
   private keyEl!: HTMLSelectElement;
   private scaleEl!: HTMLSelectElement;
+  private rollEl!: HTMLButtonElement;
+  private nowEl!: HTMLElement;
   private bedEl!: HTMLButtonElement;
   private reverbEl!: HTMLInputElement;
   private wheelsEl!: HTMLElement;
@@ -30,8 +33,10 @@ export class FreestyleHud {
   mount(): void {
     const keys = NOTE_NAMES
       .map((n, i) => `<option value="${i}">${n}</option>`).join('');
-    const scales = MODES
-      .map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
+    // Random belongs here as much as in the panel: picking a named scale used
+    // to overwrite it globally, quietly ending random-each-game for the table.
+    const scales = `<option value="${RANDOM}">random</option>`
+      + MODES.map((m) => `<option value="${m.id}">${m.label}</option>`).join('');
 
     this.hud.left.innerHTML = `
       <div class="score-block">
@@ -39,7 +44,9 @@ export class FreestyleHud {
         <div class="hud-controls">
           <select id="fs-key" aria-label="Key">${keys}</select>
           <select id="fs-scale" aria-label="Scale">${scales}</select>
+          <button id="fs-roll" title="Draw a scale at random">&#9860;</button>
         </div>
+        <div class="score-sub" id="fs-now"></div>
       </div>
     `;
     this.hud.right.innerHTML = `
@@ -53,12 +60,17 @@ export class FreestyleHud {
     this.chordEl = q('#fs-chord');
     this.keyEl = q<HTMLSelectElement>('#fs-key');
     this.scaleEl = q<HTMLSelectElement>('#fs-scale');
+    this.rollEl = q<HTMLButtonElement>('#fs-roll');
+    this.nowEl = q('#fs-now');
     this.bedEl = q<HTMLButtonElement>('#fs-bed');
     this.reverbEl = q<HTMLInputElement>('#fs-reverb');
     this.wheelsEl = q('#fs-wheels');
 
     this.keyEl.addEventListener('change', () => this.music.setRoot(Number(this.keyEl.value)));
     this.scaleEl.addEventListener('change', () => this.music.setChoice(this.scaleEl.value));
+    // Re-picking the option already selected fires no change event, so drawing
+    // again needs a control of its own.
+    this.rollEl.addEventListener('click', () => this.music.setChoice(RANDOM));
     this.bedEl.addEventListener('click', () => {
       setFreestyleSettings({ bed: !freestyleSettings().bed });
       this.onBedChange();
@@ -73,8 +85,14 @@ export class FreestyleHud {
 
   /** Push the current music and audio state into the controls. */
   sync(): void {
+    const random = this.music.choice === RANDOM;
     this.keyEl.value = String(((this.music.root % 12) + 12) % 12);
-    this.scaleEl.value = this.music.id;
+    // Show the preference, not what it resolved to — otherwise a player on
+    // random sees a named scale and has no way to know, or to get back.
+    this.scaleEl.value = random ? RANDOM : this.music.id;
+    // Which is why what it resolved to has to be said out loud.
+    this.nowEl.textContent = `${noteName(this.music.root)} ${this.music.label}`;
+    this.nowEl.style.opacity = random ? '1' : '0.5';
     this.reverbEl.value = String(this.engine.settings.reverb);
     this.paintReverb();
   }

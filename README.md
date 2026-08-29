@@ -54,8 +54,10 @@ note from outside the scale is a note from outside the scale.
 
 Key, scale, the backing bed and the size of the room are all on screen, because
 having to leave what you are playing in order to change what you are playing in
-is the opposite of freestyle. **The bed starts off** — you came here to make
-your own sound, so the backing is offered rather than assumed.
+is the opposite of freestyle. **Random** is one of the scales, and the die beside
+it draws again; whatever it lands on is named underneath. **The bed starts off** —
+you came here to make your own sound, so the backing is offered rather than
+assumed.
 
 ## Pinball
 
