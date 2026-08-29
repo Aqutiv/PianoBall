@@ -30,6 +30,8 @@ export class Overlay {
   private d: Deps;
   private body!: HTMLElement;
   private live: (() => void) | null = null;
+  /** Drops whatever input subscription the current screen took out. */
+  private offInput: (() => void) | null = null;
 
   constructor(root: HTMLElement, deps: Deps) {
     this.root = root;
@@ -50,6 +52,8 @@ export class Overlay {
   show(screen: Screen): void {
     this.screen = screen;
     this.live = null;
+    this.offInput?.();
+    this.offInput = null;
     if (!screen) { this.root.classList.remove('show'); return; }
     this.root.classList.add('show');
     if (screen === 'start') this.renderStart();
@@ -130,27 +134,43 @@ export class Overlay {
   private renderCalibrate(): void {
     const m = this.d.input.mapping;
     m.beginCalibration();
-    const draw = () => {
-      const step = m.phase === 'low'
+    this.body.innerHTML = `
+      <h1>Calibrate</h1>
+      <p class="lede" id="cal-step"></p>
+      <p class="diag">Works with any controller from 25 to 88 keys.</p>
+      <div class="actions">
+        <button id="btn-done">Cancel</button>
+      </div>
+    `;
+    const step = this.body.querySelector('#cal-step') as HTMLElement;
+    const done = this.body.querySelector('#btn-done') as HTMLElement;
+    done.addEventListener('click', () => {
+      m.cancelCalibration();
+      this.show('settings');
+    });
+
+    // Nothing else feeds the calibration: without this the panel asks for a key
+    // and then ignores every one it is given. The subscription lives exactly as
+    // long as the screen does.
+    this.offInput = this.d.input.on((e) => {
+      if (e.type !== 'noteon' || m.phase === 'done') return;
+      if (m.calibrate(e.note) === 'done') this.d.game.remapKeybed();
+    });
+
+    // Only the wording changes as keys are pressed, so only the wording is
+    // rewritten. Rebuilding the panel each frame — which is what this used to
+    // do — replaced the button between mousedown and mouseup, and a real click
+    // could never complete on it.
+    this.live = () => {
+      if (this.screen !== 'calibrate') return;
+      step.innerHTML = m.phase === 'low'
         ? 'Press the <strong>lowest</strong> key on your controller.'
         : m.phase === 'high'
           ? 'Now press the <strong>highest</strong> key.'
           : `Mapped ${noteLabel(m.low)}&ndash;${noteLabel(m.high)} &middot; ${m.settings.count} keys.`;
-      this.body.innerHTML = `
-        <h1>Calibrate</h1>
-        <p class="lede">${step}</p>
-        <p class="diag">Works with any controller from 25 to 88 keys.</p>
-        <div class="actions">
-          <button id="btn-done">${m.phase === 'done' ? 'Done' : 'Cancel'}</button>
-        </div>
-      `;
-      this.body.querySelector('#btn-done')!.addEventListener('click', () => {
-        m.cancelCalibration();
-        this.show('settings');
-      });
+      done.textContent = m.phase === 'done' ? 'Done' : 'Cancel';
     };
-    draw();
-    this.live = () => { if (this.screen === 'calibrate') draw(); };
+    this.live();
   }
 
   private renderSettings(): void {

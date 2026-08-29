@@ -57,7 +57,10 @@ export class NoteMapping {
   observe(note: number): boolean {
     if (note < this.observedLow) this.observedLow = note;
     if (note > this.observedHigh) this.observedHigh = note;
-    if (!this.settings.autoLatch) return false;
+    // Calibration is on its way to setting the window explicitly. Latching it
+    // around each press in the meantime just makes the keybed jump about while
+    // the player is still being asked for their second key.
+    if (this.phase !== 'idle' || !this.settings.autoLatch) return false;
 
     const { baseNote, count } = this.settings;
     if (note >= baseNote && note < baseNote + count) return false;
