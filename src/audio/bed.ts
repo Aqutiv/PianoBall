@@ -40,6 +40,15 @@ export class ChordBed {
    */
   barsPerChord = 2;
 
+  /**
+   * Whether this mode wants a bed at all.
+   *
+   * Separate from the engine's `bed` setting, which is a master mute: Freestyle
+   * starts silent underneath because the player came to make their own sound,
+   * while the table wants its harmony from the first ball.
+   */
+  enabled = true;
+
   private readonly engine: AudioEngine;
   private readonly music: MusicState;
   private timer = 0;
@@ -130,7 +139,7 @@ export class ChordBed {
 
   /** Bar-level lookahead. The only place in the app that schedules ahead. */
   private schedule(): void {
-    if (!this.engine.running) return;
+    if (!this.engine.running || !this.enabled) return;
     if (this.track && this.clock) { this.scheduleTrack(this.track, this.clock); return; }
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;

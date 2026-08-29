@@ -10,6 +10,8 @@ export interface AudioSettings {
   assist: boolean;
   /** The rhythmic backing bed. */
   bed: boolean;
+  /** How much of the room is heard, 0..1. */
+  reverb: number;
   /** Pitch-bend travel at full wheel, in semitones. */
   bendRange: number;
   /** What the mod wheel moves. */
@@ -28,6 +30,7 @@ export const DEFAULT_AUDIO: AudioSettings = {
   effects: 0.9,
   assist: true,
   bed: true,
+  reverb: 0.5,
   bendRange: 2,
   modTarget: 'both',
 };
@@ -57,6 +60,9 @@ const IMPACTS: Record<string, ImpactProfile> = {
 };
 
 const MAX_VOICES = 48;
+
+/** Wet gain at a full reverb setting. Half of it is the original fixed value. */
+const REVERB_MAX = 1.7;
 
 interface KeyVoice {
   note: number;
@@ -90,6 +96,7 @@ export class AudioEngine {
   private musicBus!: GainNode;
   private fxBus!: GainNode;
   private reverbSend!: GainNode;
+  private reverbWet!: GainNode;
   private delaySend!: GainNode;
   private noise!: AudioBuffer;
   /**
@@ -180,9 +187,11 @@ export class AudioEngine {
     // exponential decay, with the high end rolling off faster than the low.
     const convolver = ctx.createConvolver();
     convolver.buffer = makeImpulse(ctx, 2.1, 2.6);
-    const wet = ctx.createGain();
-    wet.gain.value = 0.85;
-    convolver.connect(wet).connect(this.master);
+    // Half travel reproduces the fixed 0.85 the room used to have, so the
+    // default is where the sound has always been.
+    this.reverbWet = ctx.createGain();
+    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
+    convolver.connect(this.reverbWet).connect(this.master);
     this.reverbSend = ctx.createGain();
     this.reverbSend.gain.value = 1;
     this.reverbSend.connect(convolver);
@@ -230,6 +239,7 @@ export class AudioEngine {
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
     this.fxBus.gain.value = this.settings.effects;
+    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
     if (patch.bendRange !== undefined) this.setBend(this.bendValue);
     if (patch.modTarget !== undefined) this.applyMod();
   }

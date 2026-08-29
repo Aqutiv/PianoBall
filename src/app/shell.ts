@@ -239,8 +239,9 @@ export class Shell {
       extra: this.active?.debugLines?.(),
     });
     if (this.overlay.visible) this.overlay.update();
-    // Typing in the settings panel must not play the piano.
-    this.input.keyboard.enabled = !this.overlay.visible;
+    // Typing in a panel — or arrowing through a control in the HUD — must not
+    // play the piano or bend the table underneath it.
+    this.input.keyboard.enabled = !this.overlay.visible && !this.hudHasFocus();
   }
 
   /**
@@ -273,6 +274,12 @@ export class Shell {
     }
   }
 
+  /** True while the keyboard belongs to an on-screen control rather than the piano. */
+  private hudHasFocus(): boolean {
+    const el = document.activeElement;
+    return el !== null && el !== document.body && this.hud.root.contains(el);
+  }
+
   private resize(): void {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.stage.resize(window.innerWidth, window.innerHeight, dpr);
@@ -286,7 +293,7 @@ export class Shell {
    */
   async startAudio(): Promise<boolean> {
     const ok = await this.audio.start();
-    if (ok) this.bed.start();
+    if (ok && this.bed.enabled) this.bed.start();
     this.refreshSound();
     return ok;
   }

@@ -12,6 +12,12 @@ export interface MusicStateEvents {
   change: ActiveMusic;
 }
 
+interface StoredMusic {
+  mode: string;
+  /** Pitch class of the tonic, or null to follow whatever names the default. */
+  key: number | null;
+}
+
 export interface MusicDefaults {
   root: number;
   bpm: number;
@@ -45,8 +51,14 @@ export class MusicState {
     this.root = defaults.root;
     this.bpm = defaults.bpm;
     // Random by default: a fresh player should meet a different colour each
-    // game rather than the one the table happens to be authored in.
-    this.choice = load<{ mode: string }>(STORAGE_KEY, { mode: RANDOM }).mode;
+    // game rather than the one the table happens to be authored in. The key is
+    // remembered as a plain pitch class so a saved D survives whatever octave
+    // the table happens to be authored in.
+    const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: null });
+    this.choice = stored.mode;
+    if (stored.key !== null && stored.key >= 0 && stored.key < 12) {
+      this.root = defaults.root - ((defaults.root - stored.key) % 12 + 12) % 12;
+    }
     this.set(this.resolve(), true);
   }
 
@@ -66,8 +78,26 @@ export class MusicState {
   /** Remember what the player picked, and apply it now so they can hear it. */
   setChoice(choice: string): void {
     this.choice = choice;
-    save(STORAGE_KEY, { mode: choice });
+    this.persist();
     this.set(this.resolve());
+  }
+
+  /**
+   * Move the tonic to a pitch class, staying in the register the app is
+   * written around rather than leaping an octave to reach it.
+   */
+  setRoot(pitchClass: number): void {
+    const want = ((pitchClass % 12) + 12) % 12;
+    const base = this.defaults.root;
+    const root = base - ((base - want) % 12 + 12) % 12;
+    if (root === this.root) return;
+    this.root = root;
+    this.persist();
+    this.bus.emit('change', this.active);
+  }
+
+  private persist(): void {
+    save(STORAGE_KEY, { mode: this.choice, key: ((this.root % 12) + 12) % 12 });
   }
 
   /**
@@ -94,6 +124,7 @@ export class MusicState {
   /** Back to the tonic and tempo the app starts in. */
   resetTuning(): void {
     this.setTuning(this.defaults.root, this.defaults.bpm);
+    this.persist();
   }
 
   /** Re-draw the scale. Under `RANDOM` this is a fresh one; otherwise a no-op. */

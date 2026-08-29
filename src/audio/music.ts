@@ -2,6 +2,7 @@ import { pitchClass } from '../midi/notes';
 import type { ChordQuality } from '../game/table/schema';
 
 export const SCALES = {
+  ionian: [0, 2, 4, 5, 7, 9, 11],
   minorPentatonic: [0, 3, 5, 7, 10],
   majorPentatonic: [0, 2, 4, 7, 9],
   dorian: [0, 2, 3, 5, 7, 9, 10],
@@ -31,6 +32,21 @@ export interface MusicMode {
  * — the colour of a chord tone from just outside the scale is the point.
  */
 export const MODES: MusicMode[] = [
+  {
+    id: 'ionian',
+    label: 'major',
+    scale: [...SCALES.ionian],
+    progression: [
+      { degree: 0, quality: 'maj' },
+      { degree: 4, quality: 'maj' },
+      { degree: 5, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 0, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+      { degree: 1, quality: 'min' },
+      { degree: 4, quality: 'dom7' },
+    ],
+  },
   {
     id: 'minorPentatonic',
     label: 'minor pentatonic',

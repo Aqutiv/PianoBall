@@ -1,4 +1,4 @@
-import { noteLabel, noteName } from '../midi/notes';
+import { noteLabel, noteName, NOTE_NAMES } from '../midi/notes';
 import { MODES } from '../audio/music';
 import { RANDOM } from '../audio/musicState';
 import type { CurveName } from '../midi/velocityCurve';
@@ -353,10 +353,12 @@ export class Overlay {
     const opts = midi.devices.map((dv) =>
       `<option value="${dv.id}" ${dv.id === midi.selectedId ? 'selected' : ''}>${dv.name}</option>`).join('');
     const curves: CurveName[] = ['soft', 'linear', 'hard', 'gamma', 'fixed'];
-    const root = noteName(music.root);
+    const nowKey = ((music.root % 12) + 12) % 12;
+    const keys = NOTE_NAMES
+      .map((n, i) => `<option value="${i}" ${i === nowKey ? 'selected' : ''}>${n}</option>`).join('');
     const scales = [`<option value="${RANDOM}" ${music.choice === RANDOM ? 'selected' : ''}>Random each game</option>`]
       .concat(MODES.map((mode) =>
-        `<option value="${mode.id}" ${music.choice === mode.id ? 'selected' : ''}>${root} ${mode.label}</option>`))
+        `<option value="${mode.id}" ${music.choice === mode.id ? 'selected' : ''}>${mode.label}</option>`))
       .join('');
 
     this.body.innerHTML = `
@@ -379,13 +381,20 @@ export class Overlay {
       <div class="row"><label>Master</label><input type="range" id="vol-master" min="0" max="1" step="0.01" value="${audio.settings.master}"></div>
       <div class="row"><label>Music</label><input type="range" id="vol-music" min="0" max="1" step="0.01" value="${audio.settings.music}"></div>
       <div class="row"><label>Impacts</label><input type="range" id="vol-fx" min="0" max="1" step="0.01" value="${audio.settings.effects}"></div>
+      <div class="row"><label>Room</label><input type="range" id="vol-reverb" min="0" max="1" step="0.01" value="${audio.settings.reverb}"></div>
+      <div class="row"><label>Key</label>
+        <select id="key">${keys}</select></div>
       <div class="row"><label>Scale</label>
         <select id="scale">${scales}</select></div>
       <p class="diag" id="scale-now"></p>
-      <div class="row"><label>Snap off-scale notes into the key</label>
-        <button id="assist">${audio.settings.assist ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Backing bed</label>
         <button id="bed">${audio.settings.bed ? 'On' : 'Off'}</button></div>
+
+      <h2>Pinball</h2>
+      <div class="row"><label>Snap off-scale notes into the key</label>
+        <button id="assist">${audio.settings.assist ? 'On' : 'Off'}</button></div>
+      <p class="diag">Pinball only. Freestyle plays exactly what you press, and
+        PlayTune takes the chart as the authority on what the note should be.</p>
 
       <h2>Freestyle</h2>
       <div class="row"><label>Pitch bend range</label>
@@ -451,8 +460,10 @@ export class Overlay {
       input.setVelocitySettings({ curve: (e.target as HTMLSelectElement).value as CurveName }));
     $<HTMLSelectElement>('#scale').addEventListener('change', (e) =>
       music.setChoice((e.target as HTMLSelectElement).value));
+    $<HTMLSelectElement>('#key').addEventListener('change', (e) =>
+      music.setRoot(Number((e.target as HTMLSelectElement).value)));
 
-    const bindSlider = (sel: string, key: 'master' | 'music' | 'effects') => {
+    const bindSlider = (sel: string, key: 'master' | 'music' | 'effects' | 'reverb') => {
       const el = $<HTMLInputElement>(sel);
       // The track's fill is painted from this, so it needs setting on the way in
       // as well as on every move.
@@ -466,6 +477,7 @@ export class Overlay {
     bindSlider('#vol-master', 'master');
     bindSlider('#vol-music', 'music');
     bindSlider('#vol-fx', 'effects');
+    bindSlider('#vol-reverb', 'reverb');
 
     const toggle = (sel: string, get: () => boolean, set: (v: boolean) => void) => {
       const btn = $(sel);
