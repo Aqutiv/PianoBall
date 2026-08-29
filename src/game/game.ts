@@ -14,8 +14,8 @@ import {
   identifyChord, findMode, retuneNote, MODES,
   type ActiveMusic, type MusicMode,
 } from '../audio/music';
-import { load, save } from '../core/storage';
 import type { InputHub } from '../midi/inputHub';
+import type { MusicState } from '../audio/musicState';
 import type { InputEvent } from '../midi/types';
 
 export type GameState = 'attract' | 'serve' | 'play' | 'drained' | 'over';
@@ -69,11 +69,14 @@ export class Game {
   readonly scoring = new Scoring();
   readonly cfg: GameConfig;
   /** The scale and chord loop currently in play. Set by `setMode`. */
-  music!: ActiveMusic;
+  /** The key the table is currently in. Owned by the shared music state. */
+  get music(): ActiveMusic { return this.musicState.active; }
   /** A `MODES` id, or 'random' to re-roll at the start of every game. */
-  modeChoice: string;
+  get modeChoice(): string { return this.musicState.choice; }
 
   state: GameState = 'attract';
+  /** True only while the pinball mode is the one on screen. */
+  active = false;
   time = 0;
   ballsLeft = 0;
   /** Ball waiting at the top for the player to drop it with a key press. */
@@ -97,9 +100,11 @@ export class Game {
   private readonly baseNotes = new Map<string, number | null>();
   /** The mode those notes were written in, and the source of every retune. */
   private baseMode!: MusicMode;
+  private readonly musicState: MusicState;
 
-  constructor(input: InputHub, def: TableDef, cfg: Partial<GameConfig> = {}, seed = 0x5eed) {
+  constructor(input: InputHub, def: TableDef, music: MusicState, cfg: Partial<GameConfig> = {}, seed = 0x5eed) {
     this.input = input;
+    this.musicState = music;
     this.cfg = { ...DEFAULT_GAME, ...cfg };
     this.rng = makeRng(seed);
 
@@ -112,8 +117,9 @@ export class Game {
     // switching scale over and over can never compound into a drift.
     for (const el of this.table.elements) this.baseNotes.set(el.id, el.note);
     this.baseMode = findMode(def.music.mode) ?? MODES[0];
-    this.modeChoice = load<{ mode: string }>('music', { mode: def.music.mode }).mode;
-    this.setMode(this.resolveModeId());
+    // The table's own notes are the source of every retune, so apply whatever
+    // scale is already selected before anything reads a note off the playfield.
+    this.retune();
 
     const m = input.mapping.settings;
     this.keybed = new Keybed(this.world, m.baseNote, m.count, def.keybed ?? {});
@@ -134,12 +140,12 @@ export class Game {
   // ---------------------------------------------------------------- input ---
 
   private onInput(e: InputEvent): void {
+    // The table outlives the mode that shows it, and the input hub is shared.
+    // Without this a note played in another mode would still work the keybed —
+    // and queue launches that nothing is stepping to drain.
+    if (!this.active) return;
     switch (e.type) {
       case 'noteon': {
-        if (this.input.mapping.observe(e.note)) {
-          const m = this.input.mapping.settings;
-          this.keybed.remap(m.baseNote, m.count);
-        }
         const force = this.input.force(e.raw);
         const key = this.keybed.noteOn(e.note, force);
         if (!key) return;
@@ -197,7 +203,7 @@ export class Game {
 
   newGame(): void {
     // Where 'random' re-rolls — before anything reads a note off the table.
-    this.setMode(this.resolveModeId());
+    this.musicState.roll();
     this.scoring.reset();
     this.ballsLeft = this.cfg.ballsPerGame;
     this.tilt.reset();
@@ -531,41 +537,32 @@ export class Game {
    * saved preference looks like.
    */
   setMode(id: string): void {
+    this.musicState.set(id);
+  }
+
+  /**
+   * Carry the playfield into whatever scale is now selected.
+   *
+   * Elements are retuned from the notes they were *authored* with rather than
+   * from their live ones, so switching scale over and over can never compound
+   * into a drift.
+   */
+  retune(): void {
     const def = this.def;
-    const mode = findMode(id) ?? this.baseMode;
-    this.music = {
-      root: def.music.root,
-      bpm: def.music.bpm,
-      id: mode.id,
-      label: mode.label,
-      scale: mode.scale,
-      progression: mode.progression,
-    };
+    const m = this.musicState;
     for (const el of this.table.elements) {
       const base = this.baseNotes.get(el.id);
       if (base === null || base === undefined) continue;
-      el.note = retuneNote(base, def.music.root, this.baseMode.scale, this.music.root, this.music.scale);
+      el.note = retuneNote(base, def.music.root, this.baseMode.scale, m.root, m.scale);
       // Contacts carry the collider's note, not the element's.
       for (const col of el.colliders) col.note = el.note;
     }
-    this.bus.emit('music', {
-      id: this.music.id, label: this.music.label,
-      root: this.music.root, scale: this.music.scale,
-    });
+    this.bus.emit('music', { id: m.id, label: m.label, root: m.root, scale: m.scale });
   }
 
   /** Remember what the player picked, and apply it now so they can hear it. */
   setModeChoice(choice: string): void {
-    this.modeChoice = choice;
-    save('music', { mode: choice });
-    this.setMode(this.resolveModeId());
-  }
-
-  private resolveModeId(): string {
-    // Deliberately not the seeded rng: that one exists so a run can be
-    // replayed, whereas which scale you land in should genuinely vary.
-    if (this.modeChoice === 'random') return MODES[Math.floor(Math.random() * MODES.length)].id;
-    return this.modeChoice;
+    this.musicState.setChoice(choice);
   }
 
   /** Rebuild the keybed after the mapped range changes. */

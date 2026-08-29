@@ -1,5 +1,6 @@
 import type { TableDef } from '../schema';
 import { v2, type Vec2 } from '../../../physics/vec2';
+import { DEFAULT_PALETTE } from '../../../render/theme';
 
 
 const W = 1024;
@@ -60,17 +61,7 @@ export const AURORA: TableDef = {
   outline: SHELL,
   keybed: { left: 84, right: 940, baseY: 176, crown: 46 },
   music: { root: D4, bpm: 96, mode: 'minorPentatonic' },
-  palette: {
-    void: '#04050d',
-    floorNear: '#1a2145',
-    floorFar: '#080c1e',
-    neon: '#57dcff',
-    neon2: '#a678ff',
-    accent: '#ffc978',
-    rail: '#232c52',
-    railTop: '#8494cf',
-    ink: '#e3ebff',
-  },
+  palette: DEFAULT_PALETTE,
 
   build(b) {
     // ---- Outer shell ----

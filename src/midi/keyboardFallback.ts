@@ -30,6 +30,8 @@ export class KeyboardFallback {
   private held = new Set<string>();
   private opts: KeyboardOptions;
   private bendTarget = 0;
+  /** Held ramp for the mod wheel: the arrow keys have no travel of their own. */
+  private modLevel = 0;
 
   constructor(opts: KeyboardOptions) { this.opts = opts; }
 
@@ -54,6 +56,15 @@ export class KeyboardFallback {
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
       this.bendTarget = e.code === 'ArrowLeft' ? -1 : 1;
       this.opts.emit({ type: 'bend', value: this.bendTarget, time: now, source: 'keyboard' });
+      e.preventDefault();
+      return;
+    }
+    // Up and down step the mod wheel. A keyboard has no continuous control, so
+    // it gets five detents rather than a sweep.
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      const step = e.code === 'ArrowUp' ? 0.25 : -0.25;
+      this.modLevel = Math.max(0, Math.min(1, this.modLevel + step));
+      this.opts.emit({ type: 'cc', controller: 1, value: this.modLevel, time: now, source: 'keyboard' });
       e.preventDefault();
       return;
     }
@@ -106,6 +117,10 @@ export class KeyboardFallback {
     if (this.bendTarget !== 0) {
       this.bendTarget = 0;
       this.opts.emit({ type: 'bend', value: 0, time: now, source: 'keyboard' });
+    }
+    if (this.modLevel !== 0) {
+      this.modLevel = 0;
+      this.opts.emit({ type: 'cc', controller: 1, value: 0, time: now, source: 'keyboard' });
     }
   }
 }

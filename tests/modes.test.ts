@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { Game } from '../src/game/game';
+import { AURORA } from '../src/game/table/tables/aurora';
+import { InputHub } from '../src/midi/inputHub';
+import { AudioEngine } from '../src/audio/engine';
+import { MusicState } from '../src/audio/musicState';
+import { ChordBed } from '../src/audio/bed';
+import { PinballAudio } from '../src/modes/pinball/audio';
+import { ModeBase } from '../src/app/mode';
+
+/**
+ * Nothing in this codebase used to be torn down, because nothing was ever left.
+ * With three modes sharing one input hub and one audio graph, a subscription
+ * that outlives its mode keeps playing after the player has walked away — so
+ * the contract is asserted rather than trusted.
+ */
+describe('mode teardown', () => {
+  function harness() {
+    const input = new InputHub();
+    const engine = new AudioEngine();
+    const music = new MusicState({ ...AURORA.music });
+    const bed = new ChordBed(engine, music);
+    const game = new Game(input, AURORA, music);
+    return { input, engine, music, bed, game };
+  }
+
+  it('leaves no bus handlers behind after repeated attach/detach', () => {
+    const { engine, bed, game } = harness();
+    const audio = new PinballAudio(engine, bed, game);
+    const baseline = game.bus.handlerCount;
+
+    for (let i = 0; i < 10; i++) {
+      audio.attach();
+      expect(game.bus.handlerCount).toBeGreaterThan(baseline);
+      audio.detach();
+      expect(game.bus.handlerCount).toBe(baseline);
+    }
+  });
+
+  it('keeps the input hub subscriber count flat across cycles', () => {
+    const { input, engine, bed, game } = harness();
+    const audio = new PinballAudio(engine, bed, game);
+    const baseline = input.listenerCount;
+
+    for (let i = 0; i < 10; i++) { audio.attach(); audio.detach(); }
+
+    expect(input.listenerCount).toBe(baseline);
+  });
+
+  it('a detached director no longer reacts to the game', () => {
+    const { engine, bed, game } = harness();
+    const audio = new PinballAudio(engine, bed, game);
+    audio.attach();
+    audio.detach();
+
+    // The bed's groove is reset on every drain while attached; detached it
+    // must be left alone.
+    bed.groove.streak = 4;
+    game.bus.emit('drain', { x: 0, y: 0, ballId: 1, saved: false });
+
+    expect(bed.groove.streak).toBe(4);
+  });
+});
+
+describe('ModeBase subscriptions', () => {
+  class Probe extends ModeBase {
+    add(off: () => void): void { this.track(off); }
+    drop(): void { this.release(); }
+  }
+
+  it('runs every tracked closure exactly once and forgets them', () => {
+    const probe = new Probe();
+    let calls = 0;
+    for (let i = 0; i < 5; i++) probe.add(() => { calls++; });
+
+    expect(probe.tracked).toBe(5);
+    probe.drop();
+    expect(calls).toBe(5);
+    expect(probe.tracked).toBe(0);
+
+    probe.drop();
+    expect(calls).toBe(5);
+  });
+});

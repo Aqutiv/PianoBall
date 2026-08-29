@@ -26,4 +26,11 @@ export class EventBus<M extends object> {
   }
 
   clear(): void { this.map.clear(); }
+
+  /** Total live handlers. The mode teardown test asserts on this. */
+  get handlerCount(): number {
+    let n = 0;
+    for (const set of this.map.values()) n += set.size;
+    return n;
+  }
 }
