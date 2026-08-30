@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { LIBRARY, TUNE_ORDER, findTune } from '../src/modes/playtune/library';
 import { FUR_ELISE } from '../src/modes/playtune/library/classics';
+import type { Tune } from '../src/modes/playtune/chart';
 import {
   fitToRange, fittedMelody, harmonyProblems, lastBeat, noteRange,
   slowestChordChange, validate,
 } from '../src/modes/playtune/chart';
 import {
-  HOLD_FLOOR, HOLD_GRACE, Judge, WINDOWS, grade, type TargetSpec,
+  HOLD_FLOOR, HOLD_GRACE, Judge, WINDOWS, WORTH, grade, type TargetSpec,
 } from '../src/modes/playtune/judge';
 import { noteShape } from '../src/modes/playtune/render';
 import { APPROACH_BPM_CAP, Transport } from '../src/modes/playtune/transport';
@@ -16,6 +17,30 @@ import { SCALES, degreeToNote, inScale } from '../src/audio/music';
 import {
   BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, LEAD_VOICES,
 } from '../src/audio/voices';
+
+/**
+ * A run of `tune` that hits every note on the worst timing still called good.
+ *
+ * `release: true` lets go of each key the instant it goes down, which is what
+ * playing a melody detached does to a note long enough to be hold-judged.
+ */
+function playedWell(tune: Tune, opts: { release?: boolean } = {}): Judge {
+  const t = new Transport();
+  t.bpm = tune.bpm;
+  t.beatsPerBar = tune.beatsPerBar;
+  t.start(0, 0);
+  const specs: TargetSpec[] = fittedMelody(tune, 0).map((n) => ({
+    note: n.note, beat: n.beat, len: n.len,
+    time: t.timeOf(n.beat), end: t.timeOf(n.beat + n.len),
+  }));
+  const judge = new Judge(specs);
+  const late = WINDOWS.good * 0.999;
+  for (const target of judge.targets) {
+    judge.press(target.note, target.time + late);
+    if (opts.release) judge.release(target.note, target.time + late);
+  }
+  return judge;
+}
 
 describe('the tune library', () => {
   it('has no chart problems', () => {
@@ -83,6 +108,46 @@ describe('the tune library', () => {
         expect(shown, `${tune.id} from ${start.toFixed(2)}s`).toBeLessThanOrEqual(8);
       }
     }
+  });
+
+  it('clears every pass mark for a run that is right but never perfect', () => {
+    // What a player who has learned the melody does: every note, correct key,
+    // held for its length, landing at the edge of the good window rather than
+    // dead centre. Strictly above the mark, not equal to it: good was 0.75 and
+    // Canon in D and Jesu, Joy ask for exactly 0.75, so a competent run passed
+    // those two on the last bit of a float rather than on merit.
+    //
+    // Timed just inside WINDOWS.good, the worst press still called good, so
+    // this is the floor of a competent run and not a fair sample of one. Just
+    // inside rather than exactly on it: `time + WINDOWS.good` lands a float's
+    // breadth outside for some onsets and is judged ok, which would be testing
+    // arithmetic rather than the mode.
+    for (const tune of LIBRARY) {
+      const judge = playedWell(tune);
+      judge.finish();
+
+      expect(judge.tally.good, tune.id).toBe(judge.total);
+      expect(judge.tally.perfect + judge.tally.ok + judge.tally.miss, tune.id).toBe(0);
+      expect(judge.accuracy, `${tune.id} needs ${tune.pass}`).toBeGreaterThan(tune.pass);
+    }
+  });
+
+  it('does not fail Greensleeves for playing it correctly but detached', () => {
+    // The run this came from: every key right, nothing missed, 71%. Ten of the
+    // tune's thirty-seven notes are longer than a beat, so letting go of each
+    // as the next arrived took them all to the hold floor, and 0.75 of that
+    // was 68.9% against a 70% mark. Playing detached is a style, not an error,
+    // and Greensleeves is not a tune about holding — unlike Drift, which is,
+    // and which should still fail a run that holds nothing.
+    const tune = findTune('greensleeves')!;
+    const judge = playedWell(tune, { release: true });
+    judge.finish();
+
+    expect(judge.tally.good).toBe(judge.total);
+    // Not zero: a tail is credited from where the note was due, so letting go
+    // straight after a late press still banks the time spent being late.
+    expect(judge.holdAccuracy).toBeLessThan(0.2);
+    expect(judge.accuracy).toBeGreaterThan(tune.pass);
   });
 
   it('resolves every chord degree inside its own scale', () => {
@@ -398,9 +463,9 @@ describe('judging', () => {
   it('weights accuracy by verdict', () => {
     const j = new Judge(specs);
     j.press(60, 1);                                   // perfect  -> 1
-    j.press(62, 2 + WINDOWS.perfect + 0.001);         // good     -> 0.75
+    j.press(62, 2 + WINDOWS.perfect + 0.001);         // good
     j.expire(10);                                     // miss     -> 0
-    expect(j.accuracy).toBeCloseTo((1 + 0.75) / 3, 5);
+    expect(j.accuracy).toBeCloseTo((WORTH.perfect + WORTH.good) / 3, 5);
   });
 
   it('hands out grades at the documented thresholds', () => {
