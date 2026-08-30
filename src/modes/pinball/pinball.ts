@@ -67,7 +67,6 @@ export class PinballMode extends ModeBase implements GameMode {
     const { stage, music } = this.ctx;
     const game = this.game;
 
-    stage.palette = game.def.palette;
     stage.cam.configure({ width: game.def.width, height: game.def.height });
     stage.resize(stage.cssW, stage.cssH, stage.dpr);
 

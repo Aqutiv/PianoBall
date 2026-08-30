@@ -42,7 +42,7 @@ export function bakeField(ctx: CanvasRenderingContext2D, stage: Stage): void {
   const floor = ctx.createLinearGradient(near.x, near.y, far.x, far.y);
   floor.addColorStop(0, pal.floorNear);
   floor.addColorStop(0.6, pal.floorFar);
-  floor.addColorStop(1, '#03040c');
+  floor.addColorStop(1, pal.floorDeep);
   fillPoly(ctx, cam, outline, 0, floor);
 
   ctx.save();

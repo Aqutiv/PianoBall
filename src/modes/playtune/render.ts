@@ -1,6 +1,7 @@
 import type { Stage } from '../../render/stage';
 import type { KeyDeck, KeyLit } from '../../game/keys';
 import { FIELD } from '../../render/field';
+import { tone } from '../../render/palette';
 import { tracePath, circlePoints, fillPoly } from '../../render/geom';
 import { clamp01, lerp } from '../../core/math';
 import type { Judge, Target } from './judge';
@@ -142,7 +143,7 @@ export class AuraStage {
     for (const note of lanes) {
       const key = this.deck.byNote.get(note);
       if (!key) continue;
-      em.strokeStyle = `hsl(${this.stage.hue(note)} 80% 60%)`;
+      em.strokeStyle = tone(this.stage.hue(note), 80, 60);
       tracePath(em, cam, [
         { x: key.geom.cx, y: key.geom.cy + 20 },
         { x: key.geom.cx, y: SPAWN_Y },
@@ -185,7 +186,7 @@ export class AuraStage {
     // A tail being held is the one thing on screen that is running out, so it
     // burns brighter than one that is merely on its way.
     em.globalAlpha = alpha * (v.held ? 0.42 : 0.28);
-    em.strokeStyle = `hsl(${hue} 90% ${v.held ? 70 : 62}%)`;
+    em.strokeStyle = tone(hue, 90, v.held ? 70 : 62);
     em.lineWidth = Math.max(2, 16 * scale);
     em.lineCap = 'round';
     tracePath(em, this.stage.cam, [{ x: g.cx, y: v.y }, { x: g.cx, y: back }], 10);
@@ -218,7 +219,7 @@ export class AuraStage {
     em.save();
     em.globalCompositeOperation = 'lighter';
     em.globalAlpha = alpha * (0.5 + v.progress * 0.5);
-    const light = `hsl(${hue} 95% ${64 + v.progress * 22}%)`;
+    const light = tone(hue, 95, 64 + v.progress * 22);
     em.strokeStyle = light;
     em.lineWidth = Math.max(1.2, 3 * scale);
 
@@ -257,7 +258,9 @@ export class AuraStage {
     em.save();
     em.globalCompositeOperation = 'lighter';
     em.globalAlpha = 0.18 + pulse * 0.3;
-    em.strokeStyle = 'hsl(200 80% 72%)';
+    // Chrome rather than pitch: the line is the same whatever note is landing
+    // on it, so it takes the theme's primary and goes brass under Velvet.
+    em.strokeStyle = this.stage.palette.neon;
     em.lineWidth = 2.5;
     em.lineCap = 'round';
     tracePath(em, c, [

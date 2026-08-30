@@ -1,9 +1,9 @@
 import { TableCamera } from './project';
 import { Particles } from './particles';
-import { circlePoints, fillPoly } from './geom';
-import { mix, withAlpha, pitchHue, pitchHueSafe, LIGHT } from './palette';
+import { circlePoints, fillPoly, tracePath } from './geom';
+import { mix, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
 import { shadowSprite, glowSprite } from './sprites';
-import { DEFAULT_PALETTE, type TablePalette } from './theme';
+import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
 import { clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
 
@@ -67,7 +67,11 @@ export class Stage {
   readonly ctx: CanvasRenderingContext2D;
   /** What is being drawn right now, after any adaptive shedding. */
   quality: RenderQuality;
-  palette: TablePalette = DEFAULT_PALETTE;
+  /** The look in force. The single source of every colour on the canvas. */
+  theme: Theme = DEFAULT_THEME;
+
+  /** Shorthand for the theme's colours, which is all most drawing wants. */
+  get palette(): TablePalette { return this.theme.palette; }
 
   /** The static layer. A mode bakes into this and it is blitted every frame. */
   baked: Layer = makeLayer(1, 1);
@@ -99,6 +103,24 @@ export class Stage {
     this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
+    this.publishMotionPreference();
+  }
+
+  /**
+   * Mirror the motion preference onto the document, so the DOM chrome obeys it
+   * too.
+   *
+   * `prefers-reduced-motion` covers the player who set it at the OS level, but
+   * the in-app toggle used to reach only the canvas shake — a player who
+   * turned it on here still got every panel animation. Optional chaining
+   * because the headless tests stub a document with no root element.
+   */
+  private publishMotionPreference(): void {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement as HTMLElement | undefined;
+    if (!root?.dataset) return;
+    if (this.quality.reducedMotion) root.dataset.reducedMotion = 'true';
+    else delete root.dataset.reducedMotion;
   }
 
   get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
@@ -109,6 +131,7 @@ export class Stage {
     this.quality = { ...this.quality, ...patch };
     if (patch.particles !== undefined) this.particles.budget = patch.particles;
     if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
+    if (patch.reducedMotion !== undefined) this.publishMotionPreference();
     save('quality', this.qualityPreference);
   }
 
@@ -116,6 +139,7 @@ export class Stage {
     this.qualityPreference = defaultQuality();
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
+    this.publishMotionPreference();
     this.invalidate();
     save('quality', this.qualityPreference);
   }
@@ -146,7 +170,7 @@ export class Stage {
    * change what was painted into it.
    */
   needsBake(key: string): boolean {
-    const full = `${key}|${this.cssW}x${this.cssH}|${this.dpr}|${this.quality.colorBlind}`;
+    const full = `${key}|${this.cssW}x${this.cssH}|${this.dpr}|${this.quality.colorBlind}|${this.theme.id}`;
     if (this.bakedFor === full) return false;
     this.bakedFor = full;
     return true;
@@ -219,9 +243,9 @@ export class Stage {
       b.ctx.imageSmoothingEnabled = true;
       b.ctx.drawImage(a.canvas, 0, 0, b.canvas.width, b.canvas.height);
 
-      ctx.globalAlpha = 0.62;
+      ctx.globalAlpha = this.theme.bloom.alphaA;
       ctx.drawImage(a.canvas, 0, 0, em.width, em.height);
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = this.theme.bloom.alphaB;
       ctx.drawImage(b.canvas, 0, 0, em.width, em.height);
     }
     ctx.globalAlpha = 1;
@@ -262,6 +286,23 @@ export class Stage {
     }
   }
 
+  /**
+   * A hard stroke around a projected disc.
+   *
+   * A no-op for every theme but Toybox, which is the point: the call sites read
+   * as "outline this if the look wants outlines" rather than each having to ask
+   * whether it does.
+   */
+  outlineDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
+    const o = this.theme.outline;
+    if (!o) return;
+    tracePath(ctx, this.cam, circlePoints(x, y, r, 34), z, true);
+    ctx.strokeStyle = o.color;
+    ctx.lineWidth = Math.max(1, o.width * this.cam.scaleAt(x, y, z));
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
   groundShadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, strength = 1): void {
     if (!this.quality.shadows) return;
     const p = { x: 0, y: 0 };
@@ -294,7 +335,7 @@ export class Stage {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
-    ctx.font = `700 ${Math.max(10, 21 * scale)}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.font = `700 ${Math.max(10, 21 * scale)}px ${this.theme.fonts.display}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.65)';
@@ -309,19 +350,20 @@ export class Stage {
     const w = this.cssW, h = this.cssH;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    const tint = this.theme.glass.sheen;
     const sheen = ctx.createLinearGradient(0, h * 0.1, w * 0.75, h);
-    sheen.addColorStop(0, 'rgba(255,255,255,0)');
-    sheen.addColorStop(0.42, 'rgba(190,215,255,0.035)');
-    sheen.addColorStop(0.52, 'rgba(190,215,255,0.055)');
-    sheen.addColorStop(0.62, 'rgba(190,215,255,0.02)');
-    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    sheen.addColorStop(0, withAlpha(tint, 0));
+    sheen.addColorStop(0.42, withAlpha(tint, 0.035));
+    sheen.addColorStop(0.52, withAlpha(tint, 0.055));
+    sheen.addColorStop(0.62, withAlpha(tint, 0.02));
+    sheen.addColorStop(1, withAlpha(tint, 0));
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
 
     const vig = ctx.createRadialGradient(w / 2, h * 0.52, Math.min(w, h) * 0.32, w / 2, h * 0.52, Math.max(w, h) * 0.78);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, withAlpha(this.palette.void, 0.82));
+    vig.addColorStop(1, withAlpha(this.palette.void, this.theme.glass.vignette));
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
   }
@@ -380,7 +422,7 @@ export class Stage {
       guide.addColorStop(1, withAlpha(pal.railTop, 0));
       ctx.strokeStyle = guide;
       ctx.lineWidth = 1;
-      ctx.font = '600 9px ui-monospace, monospace';
+      ctx.font = `600 9px ${this.theme.fonts.mono}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = withAlpha(pal.railTop, 0.5);
       for (let n = Math.ceil(low / 12) * 12; n <= high; n += 12) {
@@ -406,7 +448,7 @@ export class Stage {
         const barW = 5 + ev.force * 11;
         const fade = 1 - age / WINDOW;
         ctx.globalAlpha = Math.max(0, fade * fade) * (0.5 + ev.force * 0.5);
-        ctx.fillStyle = `hsl(${this.hue(ev.note)} 92% 64%)`;
+        ctx.fillStyle = tone(this.hue(ev.note), 92, 64);
         const top = Math.min(yStart, yEnd);
         const height = Math.max(3, Math.abs(yEnd - yStart));
         ctx.beginPath();

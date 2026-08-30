@@ -1,5 +1,6 @@
 import type { TableCamera } from './project';
 import { glowSprite } from './sprites';
+import { tone } from './palette';
 
 export type ParticleKind = 'spark' | 'ember' | 'ring' | 'shard' | 'note';
 
@@ -138,7 +139,7 @@ export class Particles {
         // hard edge, which is what makes it the opposite of a bloom.
         const r = p.size * scale * (0.4 + t * 0.8);
         ctx.globalAlpha = t * t * 0.9;
-        ctx.strokeStyle = `hsl(${p.hue} 40% ${45 + t * 30}%)`;
+        ctx.strokeStyle = tone(p.hue, 40, 45 + t * 30);
         ctx.lineWidth = Math.max(1, 1.6 * scale);
         ctx.beginPath();
         for (let v = 0; v < 3; v++) {
@@ -157,7 +158,7 @@ export class Particles {
         const w = p.size * scale * 0.5;
         const h = p.size * scale * (0.4 + t * 1.6);
         ctx.globalAlpha = t * t * 0.8;
-        ctx.fillStyle = `hsl(${p.hue} 92% 68%)`;
+        ctx.fillStyle = tone(p.hue, 92, 68);
         ctx.beginPath();
         ctx.roundRect(pt.x - w / 2, pt.y - h / 2, w, h, w / 2);
         ctx.fill();
@@ -167,7 +168,7 @@ export class Particles {
       if (p.kind === 'ring') {
         const r = p.size * (1.9 - t * 1.5) * scale;
         ctx.globalAlpha = t * t * 0.85;
-        ctx.strokeStyle = `hsl(${p.hue} 95% 72%)`;
+        ctx.strokeStyle = tone(p.hue, 95, 72);
         ctx.lineWidth = Math.max(1, 3.5 * t * scale);
         ctx.beginPath();
         ctx.ellipse(pt.x, pt.y, r, r * 0.62, 0, 0, Math.PI * 2);

@@ -13,6 +13,8 @@ import { CHORDS_ROLE, MELODY_ROLE, type RoleId, type TuneRole } from '../modes/p
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 import type { Tune } from '../modes/playtune/chart';
 import { findBedVoice, findLeadVoice } from '../audio/voices';
+import { THEMES } from '../render/theme';
+import { themeSettings } from '../render/themeSettings';
 
 export type Screen =
   | 'home'
@@ -398,8 +400,26 @@ export class Overlay {
         `<option value="${mode.id}" ${music.choice === mode.id ? 'selected' : ''}>${mode.label}</option>`))
       .join('');
 
+    // Swatches rather than a dropdown: a theme is a thing you look at, and a
+    // list of names tells you nothing about what you are choosing between.
+    const nowTheme = themeSettings().id;
+    const themeCards = THEMES.map((t) => `
+      <button class="theme-card${t.id === nowTheme ? ' on' : ''}" data-theme-id="${t.id}"
+              aria-pressed="${t.id === nowTheme}">
+        <span class="theme-swatch" aria-hidden="true">
+          <i style="background:${t.palette.void}"></i><i style="background:${t.palette.neon}"></i>
+          <i style="background:${t.palette.neon2}"></i><i style="background:${t.palette.accent}"></i>
+          <i style="background:${t.palette.ink}"></i>
+        </span>
+        <span class="theme-name">${t.name}</span>
+        <span class="theme-blurb">${t.blurb}</span>
+      </button>`).join('');
+
     this.body.innerHTML = `
       <h1>Settings</h1>
+
+      <h2>Theme</h2>
+      <div class="theme-grid" id="themes">${themeCards}</div>
 
       <h2>Controller</h2>
       <div class="row"><label>MIDI device</label>
@@ -495,6 +515,17 @@ export class Overlay {
     `;
 
     const $ = <T extends HTMLElement>(sel: string) => this.body.querySelector(sel) as T;
+
+    // Switching redraws this very panel, so the handler is attached to the
+    // container rather than to cards that are about to be replaced.
+    $('#themes').addEventListener('click', (e) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('[data-theme-id]');
+      if (!card) return;
+      const picked = THEMES.find((t) => t.id === card.dataset.themeId);
+      if (!picked || picked.id === themeSettings().id) return;
+      this.shell.setTheme(picked);
+      this.show('settings');
+    });
 
     $('#close').addEventListener('click', () => this.back());
     $('#cal').addEventListener('click', () => this.show('calibrate'));
