@@ -1,7 +1,15 @@
 import { load, save } from '../../core/storage';
 import type { Grade } from './judge';
 
-const STORAGE_KEY = 'playtune';
+/**
+ * Where a role's progress is kept.
+ *
+ * One key per role rather than one store with two halves: the melody chain and
+ * the chord chain are separate courses, they are reset separately, and a player
+ * who has never touched one should not carry an empty half of it around.
+ */
+export const MELODY_STORE = 'playtune';
+export const CHORD_STORE = 'playchords';
 
 export interface TuneRecord {
   accuracy: number;
@@ -39,8 +47,8 @@ export interface RunOutcome {
  * rather than an error — losing progress is bad, but refusing to launch is
  * worse.
  */
-export function loadProgress(order: readonly string[]): Progress {
-  const raw = load<Progress>(STORAGE_KEY, { unlocked: [], best: {} });
+export function loadProgress(key: string, order: readonly string[]): Progress {
+  const raw = load<Progress>(key, { unlocked: [], best: {} });
   const known = new Set(order);
   const unlocked = Array.isArray(raw.unlocked)
     ? raw.unlocked.filter((id) => known.has(id))
@@ -60,8 +68,8 @@ export function loadProgress(order: readonly string[]): Progress {
   return { unlocked, best };
 }
 
-export function saveProgress(progress: Progress): void {
-  save(STORAGE_KEY, progress);
+export function saveProgress(key: string, progress: Progress): void {
+  save(key, progress);
 }
 
 export function isUnlocked(progress: Progress, id: string): boolean {
@@ -79,6 +87,7 @@ export function unlockedBy(order: readonly string[], id: string): string | null 
  * Bests only ever improve: a bad run after a good one loses nothing.
  */
 export function recordRun(
+  key: string,
   progress: Progress,
   id: string,
   order: readonly string[],
@@ -103,13 +112,13 @@ export function recordRun(
     }
   }
 
-  saveProgress(progress);
+  saveProgress(key, progress);
   return { unlocked, improved, best };
 }
 
 /** Wipe every unlock and record. The settings panel confirms before calling. */
-export function resetProgress(order: readonly string[]): Progress {
+export function resetProgress(key: string, order: readonly string[]): Progress {
   const fresh: Progress = { unlocked: order.length ? [order[0]] : [], best: {} };
-  saveProgress(fresh);
+  saveProgress(key, fresh);
   return fresh;
 }

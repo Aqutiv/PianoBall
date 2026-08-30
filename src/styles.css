@@ -564,6 +564,25 @@ kbd {
 
 /* ------------------------------------------------------------ song list --- */
 
+/* Which half of the arrangement you are playing. A pair of tabs rather than a
+   toggle: they are two curves side by side, not one setting turned on. */
+.role-switch { display: flex; gap: 6px; margin: 10px 0 2px; }
+.role-switch .role {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--stroke);
+  color: var(--dim);
+}
+.role-switch .role:hover { background: rgba(255, 255, 255, 0.09); }
+.role-switch .role.on {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .song-list { display: grid; gap: 7px; margin: 14px 0 4px; max-height: 46vh; overflow: auto; padding-right: 4px; }
 
 .song-card {
@@ -1267,6 +1286,59 @@ kbd {
 [data-reduced-motion] .mode-card:hover:not(:disabled),
 [data-reduced-motion] .theme-card:hover,
 [data-reduced-motion] .song-card:hover:not(:disabled) { transform: none; }
+
+/* ------------------------------------------------ role switch, themed --- */
+/*
+ * The Melody/Chords tabs arrived on main while the themes were being built, so
+ * they are drawn the way the rest of the panel was before there were themes:
+ * white at 4.5%, 9% and 11% over a dark ground. That is invisible on Toybox's
+ * cream, and reads as unthemed everywhere else, so each look states its own.
+ */
+
+[data-theme="rush"] .role-switch .role {
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  transform: skewX(-11deg);
+}
+[data-theme="rush"] .role-switch .role.on {
+  background: linear-gradient(96deg, var(--danger), rgba(139, 92, 255, 0.5));
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+[data-theme="velvet"] .role-switch .role {
+  border-radius: 1px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+  background: transparent;
+  color: var(--dim);
+}
+[data-theme="velvet"] .role-switch .role.on {
+  background: rgba(217, 164, 65, 0.16);
+  border-color: var(--neon);
+  color: var(--neon);
+}
+
+[data-theme="toybox"] .role-switch .role {
+  background: #ded0b6;
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  box-shadow: 0 3px 0 var(--stroke);
+  font-weight: 600;
+}
+[data-theme="toybox"] .role-switch .role:hover { background: #e9dcc6; }
+[data-theme="toybox"] .role-switch .role.on {
+  background: var(--ok);
+  color: var(--void);
+  border-color: var(--stroke);
+}
+[data-theme="toybox"] .role-switch .role:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--stroke);
+}
 
 /* ============================================== NARROW VIEWPORTS === */
 /*

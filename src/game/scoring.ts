@@ -6,6 +6,17 @@ import { clamp } from '../core/math';
  */
 const MAX_MULTIPLIER = 32;
 
+/**
+ * How long a combo survives with nothing scoring.
+ *
+ * The combo used to be broken every time the ball came back to the keybed,
+ * which meant it could never count past a single trip up the table and the
+ * multiplier it feeds was decorative. A rally is the thing worth rewarding, so
+ * what ends a combo is going quiet — long enough for a normal return, short
+ * enough that a fumble costs you.
+ */
+const COMBO_HOLD = 2.6;
+
 export interface ScorePop {
   x: number;
   y: number;
@@ -51,14 +62,18 @@ export class Scoring {
   /** Local clock, advanced in step with the game clock. */
   time = 0;
 
+  /** When the combo last grew. A combo lapses rather than being cut short. */
+  private lastChainAt = -99;
+
   update(dt: number): void {
     this.time += dt;
+    if (this.combo > 0 && this.time - this.lastChainAt > COMBO_HOLD) this.combo = 0;
     // Pops live about a second; drop them from the front once expired.
     while (this.pops.length && this.time - this.pops[0].at > 1.2) this.pops.shift();
   }
 
   get comboMultiplier(): number {
-    return 1 + Math.min(6, Math.floor(this.combo / 4)) * 0.5;
+    return 1 + Math.min(6, Math.floor(this.combo / 3)) * 0.5;
   }
 
   get multiplier(): number {
@@ -88,10 +103,11 @@ export class Scoring {
   /** A scoring element was struck: extend the combo. */
   chain(): void {
     this.combo++;
+    this.lastChainAt = this.time;
     if (this.combo > this.comboBest) this.comboBest = this.combo;
   }
 
-  /** The ball came back to the keybed: the combo ends there. */
+  /** The ball is gone, or the run has restarted: the combo ends there. */
   breakChain(): void { this.combo = 0; }
 
   setGroove(v: number): void { this.groove = clamp(v, 1, 5); }

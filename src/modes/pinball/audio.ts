@@ -39,6 +39,14 @@ export class PinballAudio {
 
     offs.push(bus.on('key', ({ key, note, force }) => {
       engine.noteOn(this.tune(note), force, this.pan(key.geom.cx));
+      // Groove is judged on the press, not on the ball's arrival. When a ball
+      // landing on an element was what got judged, the thing being scored was
+      // something the player could not aim at — a near-random gate that reset
+      // the streak far more often than it extended it. Playing in time is a
+      // thing a player can actually do.
+      if (!engine.running) return;
+      const groove = this.bed.groove;
+      this.game.scoring.setGroove(groove.judge(engine.now) ? groove.multiplier : 1);
     }));
 
     offs.push(bus.on('keyup', ({ note }) => {
@@ -58,11 +66,6 @@ export class PinballAudio {
       if (el.note === null) return;
       const gain = clamp(0.18 + impact / 2600, 0.12, 0.62) * (energised ? 1.5 : 1);
       engine.mallet(el.note, gain, this.pan(x), energised ? 0.85 : 0.45);
-      // Judge against the beat grid, and let the streak drive the multiplier.
-      // With no audio clock running there is no grid to be on time with.
-      if (!engine.running) return;
-      const groove = this.bed.groove;
-      this.game.scoring.setGroove(groove.judge(engine.now) ? groove.multiplier : 1);
     }));
 
     // A recognised chord gets a lift; a random cluster does not.

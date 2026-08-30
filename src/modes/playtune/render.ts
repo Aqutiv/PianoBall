@@ -135,7 +135,10 @@ export class AuraStage {
     const lanes = new Set(views.map((v) => v.target.note));
     em.save();
     em.globalCompositeOperation = 'lighter';
-    em.globalAlpha = 0.09;
+    // Additive, so guides accumulate: a melody lights two or three lanes and a
+    // chord chart can light a dozen, which at a fixed alpha stops being a hint
+    // about where to look and becomes a wash over the whole board.
+    em.globalAlpha = lanes.size > 6 ? 0.09 * (6 / lanes.size) : 0.09;
     em.lineWidth = 1.5;
     for (const note of lanes) {
       const key = this.deck.byNote.get(note);
@@ -255,7 +258,9 @@ export class AuraStage {
     em.save();
     em.globalCompositeOperation = 'lighter';
     em.globalAlpha = 0.18 + pulse * 0.3;
-    em.strokeStyle = 'hsl(200 80% 72%)';
+    // Chrome rather than pitch: the line is the same whatever note is landing
+    // on it, so it takes the theme's primary and goes brass under Velvet.
+    em.strokeStyle = this.stage.palette.neon;
     em.lineWidth = 2.5;
     em.lineCap = 'round';
     tracePath(em, c, [

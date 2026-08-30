@@ -2,7 +2,7 @@ import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../.
 import { KeyDeck } from '../../game/keys';
 import { drawKeys } from '../../render/keys';
 import { identifyChord, inScale } from '../../audio/music';
-import { clamp, clamp01 } from '../../core/math';
+import { clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { RhythmBox } from '../../audio/rhythmBox';
@@ -218,8 +218,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     const key = this.deck.pick(x, y);
     if (!key) return null;
     const g = key.geom;
-    const depth = (x - g.cx) * g.nx + (y - g.cy) * g.ny;
-    const force = clamp(0.42 + (depth + g.depth * 0.35) / (g.depth * 0.9), 0.18, 1);
+    const force = this.deck.strikeForce(key, x, y);
     this.ctx.input.press(g.note, force, 'pointer');
     return g.note;
   }

@@ -18,6 +18,15 @@ export class TuneHud {
   private accEl!: HTMLElement;
   private comboEl!: HTMLElement;
   private tallyEl!: HTMLElement;
+  /**
+   * Whether the elements below exist yet.
+   *
+   * The panel belongs to the mode's time on screen, but the things that write
+   * to it do not: changing role resets the title, and that can be asked for
+   * before the first `enter` has built anything. Writing to nothing is the
+   * right answer there — there is no panel to be wrong.
+   */
+  private mounted = false;
 
   constructor(private readonly hud: Hud) {}
 
@@ -50,14 +59,17 @@ export class TuneHud {
     this.accEl = q('#pt-acc');
     this.comboEl = q('#pt-combo');
     this.tallyEl = q('#pt-tally');
+    this.mounted = true;
   }
 
   setTune(tune: Tune | null): void {
+    if (!this.mounted) return;
     this.titleEl.textContent = tune?.title ?? ' ';
     this.subEl.textContent = tune ? `${tune.composer} · ${tune.bpm} bpm` : 'Choose a tune';
   }
 
   update(judge: Judge | null, progress: number, harmony: Harmony = { now: null, next: null }): void {
+    if (!this.mounted) return;
     this.barEl.style.width = `${Math.round(progress * 100)}%`;
     this.setHarmony(harmony);
     if (!judge) {

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { LIBRARY, TUNE_ORDER, findTune } from '../src/modes/playtune/library';
+import { FUR_ELISE } from '../src/modes/playtune/library/classics';
 import type { Tune } from '../src/modes/playtune/chart';
 import {
-  fitToRange, fittedMelody, harmonyProblems, lastBeat, noteRange,
+  fitToRange, fitted, harmonyProblems, lastBeat, noteRange,
   slowestChordChange, validate,
 } from '../src/modes/playtune/chart';
 import {
@@ -28,7 +29,7 @@ function playedWell(tune: Tune, opts: { release?: boolean } = {}): Judge {
   t.bpm = tune.bpm;
   t.beatsPerBar = tune.beatsPerBar;
   t.start(0, 0);
-  const specs: TargetSpec[] = fittedMelody(tune, 0).map((n) => ({
+  const specs: TargetSpec[] = fitted(tune.melody, 0).map((n) => ({
     note: n.note, beat: n.beat, len: n.len,
     time: t.timeOf(n.beat), end: t.timeOf(n.beat + n.len),
   }));
@@ -188,6 +189,30 @@ describe('the tune library', () => {
     }
   });
 
+  it('bars the two runs in Für Elise the same way', () => {
+    // The tune plays one six-note figure twice, and used to bar it two
+    // different ways. The upbeat it opens on was never declared, and the A the
+    // opening run lands on was struck twice — once to end the run and again to
+    // hold it — which padded the missing beat back and left the opening run
+    // sitting a beat off the bar line the closing one sits on. The broken chord
+    // then put its bass under a different note of the figure each time, which
+    // is what a listener hears as the tune being out.
+    const run = [76, 75, 76, 71, 74, 72];       // E5 D sharp 5 E5 B4 D5 C5
+    const at = FUR_ELISE.melody
+      .map((_, i) => i)
+      .filter((i) => run.every((note, k) => FUR_ELISE.melody[i + k]?.note === note));
+    expect(at).toHaveLength(2);
+    for (const i of at) {
+      const start = FUR_ELISE.melody[i];
+      const bar = (start.beat - (FUR_ELISE.pickup ?? 0)) % FUR_ELISE.beatsPerBar;
+      expect(bar, `run at beat ${start.beat}`).toBe(0);
+      // And each run lands on one A, held, rather than on an A struck twice.
+      const landing = FUR_ELISE.melody[i + run.length];
+      expect(landing.note, `landing of the run at beat ${start.beat}`).toBe(69);
+      expect(landing.len, `landing of the run at beat ${start.beat}`).toBe(3);
+    }
+  });
+
   it('names only instruments that are in the bank', () => {
     // `validate` already reports this and the first test would catch it, but a
     // typo in a voice id is a silent fault everywhere else in the app — the
@@ -244,9 +269,9 @@ describe('fitting a chart to a keyboard', () => {
   it('places every tune inside a 49- and 61-key range', () => {
     for (const [name, low, high] of KEYBOARDS.slice(1)) {
       for (const tune of LIBRARY) {
-        const shift = fitToRange(tune, low, high);
+        const shift = fitToRange(tune.melody, low, high);
         expect(shift, `${tune.id} on ${name}`).not.toBeNull();
-        const moved = fittedMelody(tune, shift!);
+        const moved = fitted(tune.melody, shift!);
         for (const n of moved) {
           expect(n.note, `${tune.id} on ${name}`).toBeGreaterThanOrEqual(low);
           expect(n.note, `${tune.id} on ${name}`).toBeLessThanOrEqual(high);
@@ -257,25 +282,25 @@ describe('fitting a chart to a keyboard', () => {
 
   it('reports honestly when a melody is wider than the keyboard', () => {
     const wide = LIBRARY.find((t) => {
-      const r = noteRange(t);
+      const r = noteRange(t.melody);
       return r.high - r.low > 24;
     });
-    if (wide) expect(fitToRange(wide, 60, 60 + 12)).toBeNull();
+    if (wide) expect(fitToRange(wide.melody, 60, 60 + 12)).toBeNull();
     // A tune that does fit still fits on the smallest board when narrow enough.
     const narrow = LIBRARY[0];
-    expect(fitToRange(narrow, 48, 72)).not.toBeNull();
+    expect(fitToRange(narrow.melody, 48, 72)).not.toBeNull();
   });
 
   it('only ever moves a chart by whole octaves', () => {
     for (const tune of LIBRARY) {
-      const shift = fitToRange(tune, 36, 96);
+      const shift = fitToRange(tune.melody, 36, 96);
       expect(Math.abs(shift! % 12), tune.id).toBe(0);
     }
   });
 
   it('leaves the melody sorted after fitting', () => {
     for (const tune of LIBRARY) {
-      const moved = fittedMelody(tune, 0);
+      const moved = fitted(tune.melody, 0);
       for (let i = 1; i < moved.length; i++) {
         expect(moved[i].beat, tune.id).toBeGreaterThanOrEqual(moved[i - 1].beat);
       }
@@ -706,30 +731,31 @@ describe('the transport', () => {
 
 describe('progression', () => {
   const order = ['a', 'b', 'c'];
+  const KEY = 'playtune';
 
   it('starts with only the first tune open', () => {
-    const p = resetProgress(order);
+    const p = resetProgress(KEY, order);
     expect(p.unlocked).toEqual(['a']);
     expect(p.best).toEqual({});
   });
 
   it('opens exactly the next tune on a pass, and nothing on a fail', () => {
-    const p = resetProgress(order);
-    const failed = recordRun(p, 'a', order, { accuracy: 0.4, score: 10, grade: null, passed: false });
+    const p = resetProgress(KEY, order);
+    const failed = recordRun(KEY, p, 'a', order, { accuracy: 0.4, score: 10, grade: null, passed: false });
     expect(failed.unlocked).toBeNull();
     expect(p.unlocked).toEqual(['a']);
 
-    const passed = recordRun(p, 'a', order, { accuracy: 0.9, score: 99, grade: 'A', passed: true });
+    const passed = recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 99, grade: 'A', passed: true });
     expect(passed.unlocked).toBe('b');
     expect(p.unlocked).toEqual(['a', 'b']);
-    expect(recordRun(p, 'a', order, { accuracy: 0.95, score: 120, grade: 'A', passed: true }).unlocked)
+    expect(recordRun(KEY, p, 'a', order, { accuracy: 0.95, score: 120, grade: 'A', passed: true }).unlocked)
       .toBeNull();
   });
 
   it('only ever improves a best', () => {
-    const p = resetProgress(order);
-    recordRun(p, 'a', order, { accuracy: 0.9, score: 500, grade: 'A', passed: true });
-    const worse = recordRun(p, 'a', order, { accuracy: 0.3, score: 20, grade: null, passed: false });
+    const p = resetProgress(KEY, order);
+    recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 500, grade: 'A', passed: true });
+    const worse = recordRun(KEY, p, 'a', order, { accuracy: 0.3, score: 20, grade: null, passed: false });
     expect(worse.improved).toBe(false);
     expect(p.best.a.accuracy).toBe(0.9);
     expect(p.best.a.score).toBe(500);
@@ -743,18 +769,18 @@ describe('progression', () => {
   });
 
   it('recovers from unreadable storage', () => {
-    resetProgress(order);
-    const p = loadProgress(order);
+    resetProgress(KEY, order);
+    const p = loadProgress(KEY, order);
     expect(p.unlocked).toContain('a');
   });
 
   it('drops ids that are no longer in the library', () => {
-    const p = resetProgress(order);
+    const p = resetProgress(KEY, order);
     p.unlocked.push('gone');
     p.best.gone = { accuracy: 1, score: 1, grade: 'S', plays: 1 };
     // Round-trip through storage the way a later release would.
-    recordRun(p, 'a', order, { accuracy: 0.9, score: 1, grade: 'A', passed: true });
-    const reloaded = loadProgress(order);
+    recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 1, grade: 'A', passed: true });
+    const reloaded = loadProgress(KEY, order);
     expect(reloaded.unlocked).not.toContain('gone');
     expect(reloaded.best.gone).toBeUndefined();
   });

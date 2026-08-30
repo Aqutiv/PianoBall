@@ -9,6 +9,7 @@ import { PinballAudio } from '../src/modes/pinball/audio';
 import { ModeBase, type ModeContext } from '../src/app/mode';
 import { PlayTuneMode } from '../src/modes/playtune/playtune';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../src/audio/voices';
+import { resetPlayTuneSettings } from '../src/modes/playtune/settings';
 import type { Stage } from '../src/render/stage';
 import type { Hud } from '../src/ui/hud';
 
@@ -216,5 +217,40 @@ describe('ModeBase subscriptions', () => {
 
     probe.drop();
     expect(calls).toBe(5);
+  });
+});
+
+/**
+ * A mode is built once and kept for the life of the session, so anything it
+ * caches from settings has to be able to hear that the settings moved.
+ */
+describe('playtune role', () => {
+  it('goes back to the melody when the settings are reset under it', () => {
+    // "Reset settings" restores the saved role without going through
+    // `setRole`, and it only reaches the mode that happens to be on screen.
+    // Without a re-read the mode goes on playing chords against a preference
+    // that says melody, until the player presses a tab.
+    const { mode } = playtuneRig();
+    mode.setRole('chords');
+    expect(mode.role.id).toBe('chords');
+
+    resetPlayTuneSettings();
+    mode.applySettings();
+
+    expect(mode.role.id).toBe('melody');
+    expect(mode.tunes[0].id).toBe('first-light');
+  });
+
+  it('re-reads the role on the way in, not only when the shell asks', () => {
+    // The reset reaches the active mode; PlayTune is usually not it.
+    const { mode } = playtuneRig();
+    mode.setRole('chords');
+    mode.exit();
+
+    resetPlayTuneSettings();
+    mode.enter();
+
+    expect(mode.role.id).toBe('melody');
+    mode.exit();
   });
 });

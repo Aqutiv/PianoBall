@@ -58,7 +58,15 @@ export const AURORA: TableDef = {
   height: H,
   serve: v2(W / 2, 1216),
   outline: SHELL,
-  keybed: { left: 84, right: 940, baseY: 176, crown: 46 },
+  // The keybed stops short of the slingshot assemblies at x<174 and x>850.
+  // Spanning the full cabinet put the four outermost keys at each end under a
+  // roof 30 units above their own faces: a quarter of the keyboard could not
+  // throw a ball anywhere, and those are exactly the keys the crown rolls a
+  // ball towards when the player is already in trouble.
+  //
+  // The crown comes down with the span so that the slope at the outer edge —
+  // which is what sets how long a landed ball gives you — stays where it was.
+  keybed: { left: 180, right: 844, baseY: 176, crown: 36 },
   music: { root: D4, bpm: 96, mode: 'minorPentatonic' },
 
   build(b) {
@@ -83,6 +91,11 @@ export const AURORA: TableDef = {
     // ---- Slingshots above each outlane ----
     // The vertical side of each triangle forms the inner wall of the outlane,
     // so the only way to drain is to roll off the end of the keybed.
+    //
+    // The horizontal member is a roof, and deliberately so: it is what stops a
+    // ball from below reaching the sling's underside, where the kick points
+    // into the outlane. The keybed is kept clear of it instead — see `keybed`
+    // above — so no key is ever trapped under one.
     b.wall([v2(80, 344), v2(80, 206), v2(174, 206)], { thickness: 7, height: 32, style: 'rubber' });
     b.sling('sling-l', v2(80, 344), v2(174, 208), D3, 220);
     b.wall([v2(944, 344), v2(944, 206), v2(850, 206)], { thickness: 7, height: 32, style: 'rubber' });
@@ -112,15 +125,43 @@ export const AURORA: TableDef = {
     // ---- Spinner in the left orbit ----
     b.spinner('spinner', v2(30, 952), v2(138, 952), A3, 160);
 
+    // ---- The mid layer ----
+    // Everything that scores used to live at y >= 764, behind a drop-target
+    // bank that is solid until it is cleared. A ball returned up the middle
+    // therefore travelled a third of the table, touched nothing that scores,
+    // and came back — which is most of what made the game feel empty.
+    //
+    // The arc is sensors and the gate is a sensor, so neither can block the
+    // route to the bank; the two plates replace posts that only ever scattered.
+
+    // Five rollovers, one per scale degree, low enough for a soft return.
+    const arcNotes = [D4, F4, A4, C5, D5];
+    const arcY = [452, 486, 498, 486, 452];
+    for (let i = 0; i < 5; i++) {
+      b.rollover(`arc-${i}`, 300 + i * 106, arcY[i], 22, arcNotes[i], 260, 'arc');
+    }
+
+    // A gate across the centre lane. Every trip up the middle crosses it twice,
+    // which is what makes "a return always hits something" true rather than
+    // aspirational. Scored low precisely because it fires on both passes.
+    b.spinner('spin-mid', v2(414, 620), v2(610, 620), G4, 200);
+
     // ---- Posts: the scatter that keeps the middle unpredictable ----
-    b.post('post-l', 244, 556, 13);
-    b.post('post-r', 780, 556, 13);
-    b.post('post-c', 512, 578, 15);
-    b.post('post-ul', 332, 424, 12);
-    b.post('post-ur', 692, 424, 12);
+    // There is deliberately no post on the centre line. One at (512, 578) used
+    // to cap *every* centre shot at y ~= 543 no matter how hard the key was
+    // pressed, which made press velocity meaningless exactly where the ball
+    // spends most of its time.
+    b.target('mid-l', 246, 556, 34, PI / 2 + 0.26, F4, 460, 'side');
+    b.target('mid-r', 778, 556, 34, PI / 2 - 0.26, G4, 460, 'side');
+    // Seated in the gaps *between* arc rollovers, not under them: a post lined
+    // up with a seat blocks the shot it is supposed to feed.
+    b.post('post-ul', 353, 390, 12);
+    b.post('post-ur', 671, 390, 12);
     // Save posts at the outlane mouths: a slow ball can still be rescued here.
-    b.post('save-l', 214, 300, 11);
-    b.post('save-r', 810, 300, 11);
+    // Far enough out that they guard the mouth without clipping a shot from the
+    // keys below them.
+    b.post('save-l', 190, 300, 11);
+    b.post('save-r', 834, 300, 11);
 
     // ---- The only way to lose a ball ----
     b.drain('drain', v2(0, 26), v2(W, 26), 26);
@@ -133,7 +174,11 @@ export const AURORA: TableDef = {
     for (let i = 0; i < 5; i++) {
       b.decal({ kind: 'inset', x: 342 + i * 85, y: 764, w: 62, h: 16, angle: 0, color: '#57dcff', alpha: 0.16 });
     }
-    b.decal({ kind: 'line', x: W / 2, y: 470, w: 560, h: 3, angle: 0, color: '#8494cf', alpha: 0.16 });
+    // Seats for the arc rollovers, matching the bank's treatment above.
+    for (let i = 0; i < 5; i++) {
+      b.decal({ kind: 'inset', x: 300 + i * 106, y: arcY[i], w: 50, h: 14, angle: 0, color: '#a678ff', alpha: 0.18 });
+    }
+    b.decal({ kind: 'line', x: W / 2, y: 620, w: 200, h: 3, angle: 0, color: '#8494cf', alpha: 0.16 });
     // Outlane mouths, marked so the danger reads at a glance.
     for (const x of [48, 976]) {
       b.decal({ kind: 'glow', x, y: 120, r: 150, color: '#ff5470', alpha: 0.16 });
