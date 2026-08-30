@@ -58,6 +58,11 @@ export interface WorldConfig {
   stuckSpeed: number;
   stuckSeconds: number;
   cell: number;
+  /**
+   * Sideways force per unit of spin per unit of speed. Zero by default, so a
+   * world that has not asked for it behaves exactly as it always did.
+   */
+  magnus: number;
 }
 
 export const DEFAULT_WORLD: WorldConfig = {
@@ -70,6 +75,7 @@ export const DEFAULT_WORLD: WorldConfig = {
   stuckSpeed: 26,
   stuckSeconds: 2.6,
   cell: 72,
+  magnus: 0,
 };
 
 const MAX_TOI_ITER = 8;
@@ -154,6 +160,16 @@ export class World {
 
       ball.v.x = (ball.v.x + gx * dt) * dampFactor;
       ball.v.y = (ball.v.y + gy * dt) * dampFactor;
+      // A spinning ball curves. The keybed puts real spin on a launch — from
+      // where the key was struck, and from how the ball was sliding across it —
+      // so this is what makes an aimed shot bend rather than just leave at an
+      // angle. A contact re-derives the spin, so a bounce ends the curve.
+      if (this.cfg.magnus !== 0 && ball.spin !== 0) {
+        const a = this.cfg.magnus * ball.spin * dt;
+        const vx = ball.v.x;
+        ball.v.x -= a * ball.v.y;
+        ball.v.y += a * vx;
+      }
       this.clampSpeed(ball);
 
       this.solveBall(ball, dt);

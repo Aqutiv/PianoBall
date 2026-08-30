@@ -53,11 +53,11 @@ export interface GameConfig {
 export const DEFAULT_GAME: GameConfig = {
   ballsPerGame: 3,
   saveTime: 6,
-  energiseTime: 0.42,
+  energiseTime: 1.1,
   slowFactor: 0.42,
   slowCapacity: 3.2,
   slowRecharge: 0.28,
-  maxBalls: 6,
+  maxBalls: 4,
 };
 
 export class Game {
@@ -95,7 +95,14 @@ export class Game {
   /** Seconds left on the pause between losing a ball and serving the next. */
   private drainedFor = -1;
   private chordBuffer: number[] = [];
+  /** Largest chord already scored from the current buffer. */
+  private chordScored = 0;
   private bankResetAt = -1;
+  /** Notes the attract demo is holding, and the sim time each is due to release. */
+  private readonly attractHolds: { note: number; until: number }[] = [];
+  /** Last tilt state broadcast, so `tilt` is an edge rather than a per-step spam. */
+  private tiltWarned = false;
+  private tiltedNow = false;
   /** The notes the table was authored with, by element id. */
   private readonly baseNotes = new Map<string, number | null>();
   /** The mode those notes were written in, and the source of every retune. */
@@ -108,7 +115,7 @@ export class Game {
     this.cfg = { ...DEFAULT_GAME, ...cfg };
     this.rng = makeRng(seed);
 
-    this.world = new World({ width: def.width, height: def.height }, this.rng);
+    this.world = new World({ width: def.width, height: def.height, magnus: 3e-3 }, this.rng);
     this.table = buildTable(def);
     this.world.add(this.table.colliders);
     this.world.reindex();
@@ -184,19 +191,51 @@ export class Game {
     }
   }
 
-  /** Notes landing within a few tens of milliseconds count as one chord. */
+  /**
+   * Energising is a hold, not a flash.
+   *
+   * A press used to light its elements for a fraction of a second, which is far
+   * too short to aim at — so the one mechanic that asks the player to *play*
+   * rather than merely flip was unreachable. Keeping the note down keeps its
+   * elements lit, which makes "hold the note you are shooting at" a real
+   * decision with a real cost: that finger is not on a flipper.
+   */
+  private refreshEnergised(): void {
+    let mask = 0;
+    for (const k of this.keybed.keys) if (k.down) mask |= 1 << pitchClass(k.geom.note);
+    if (!mask) return;
+    const until = this.time + this.cfg.energiseTime;
+    for (const el of this.table.elements) {
+      if (el.note !== null && (mask & (1 << pitchClass(el.note)))) el.energisedUntil = until;
+    }
+  }
+
+  /**
+   * Notes landing within a few tens of milliseconds count as one chord.
+   *
+   * Every note from the third onwards re-scores, rather than only the third: a
+   * four-note voicing is harder than a triad and used to be worth exactly the
+   * same, because the fourth note arrived after the one test that could fire.
+   */
   private trackChord(note: number): void {
-    if (this.time - this.lastNoteTime > 0.045) this.chordBuffer.length = 0;
+    if (this.time - this.lastNoteTime > 0.045) {
+      this.chordBuffer.length = 0;
+      this.chordScored = 0;
+    }
     this.lastNoteTime = this.time;
     if (!this.chordBuffer.includes(note)) this.chordBuffer.push(note);
-    if (this.chordBuffer.length === 3) {
-      const name = identifyChord(this.chordBuffer);
-      this.bus.emit('chord', { notes: [...this.chordBuffer], name: name ?? '' });
-      // A named chord is worth more than three notes that merely arrived together.
-      this.scoring.add(name ? 1200 : 500, this.def.width / 2, 520, {
-        label: name ? name.toUpperCase() : 'CLUSTER', tone: 0.6, flat: true,
-      });
-    }
+    const n = this.chordBuffer.length;
+    if (n < 3 || n <= this.chordScored) return;
+    this.chordScored = n;
+
+    const name = identifyChord(this.chordBuffer);
+    this.bus.emit('chord', { notes: [...this.chordBuffer], name: name ?? '' });
+    // A named chord is worth more than notes that merely arrived together, and
+    // a wider voicing is worth more than a narrower one.
+    const base = (name ? 1200 : 500) + 350 * (n - 3);
+    this.scoring.add(base, this.def.width / 2, 520, {
+      label: name ? name.toUpperCase() : 'CLUSTER', tone: 0.6, flat: true,
+    });
   }
 
   // ----------------------------------------------------------- ball flow ---
@@ -206,6 +245,11 @@ export class Game {
     this.musicState.roll();
     this.scoring.reset();
     this.ballsLeft = this.cfg.ballsPerGame;
+    // The demo was mid-phrase when the player pressed start.
+    this.attractHolds.length = 0;
+    this.keybed.allOff();
+    this.tiltWarned = false;
+    this.tiltedNow = false;
     this.tilt.reset();
     this.slowCharge = 1;
     for (const el of this.table.elements) this.resetElement(el);
@@ -316,30 +360,47 @@ export class Game {
     if (this.state === 'attract') this.attract(dt);
 
     this.keybed.update(dt);
+    // Cradles are resolved before the solver, like the serve's own pin, so the
+    // depenetration pass gets the last word on anything they overlap. A release
+    // queues a launch here, which is why the queue is drained after the step
+    // rather than before it.
+    this.launches.length = 0;
+    this.keybed.updateCatch(dt, this.state === 'play' && !this.tilt.tilted, this.launches);
     this.world.step(dt);
 
     if (this.state === 'attract') this.attractKeys();
 
-    this.launches.length = 0;
     this.keybed.handleContacts(this.world.contacts, this.launches);
-    for (const ev of this.launches) {
-      this.scoring.breakChain();
-      this.bus.emit('launch', ev);
-    }
+    // Returning the ball is not a failure. The combo lapses on its own if
+    // nothing scores for a while, which is what makes a rally worth building.
+    for (const ev of this.launches) this.bus.emit('launch', ev);
     this.launches.length = 0;
 
     this.processContacts(this.world.contacts);
+    this.refreshEnergised();
     this.updateElements(dt);
     this.scoring.update(dt);
-    this.scoring.setResonance(Math.max(1, this.scoring.resonance - 1.4 * dt));
+    this.scoring.setResonance(Math.max(1, this.scoring.resonance - 0.55 * dt));
 
-    if (this.tilt.warning || this.tilt.tilted) {
-      this.bus.emit('tilt', { warning: this.tilt.warning, tilted: this.tilt.tilted });
+    // Only on a change. Emitting every step made every listener responsible for
+    // de-duplicating an event that was never really repeating.
+    if (this.tilt.warning !== this.tiltWarned || this.tilt.tilted !== this.tiltedNow) {
+      this.tiltWarned = this.tilt.warning;
+      this.tiltedNow = this.tilt.tilted;
+      this.bus.emit('tilt', { warning: this.tiltWarned, tilted: this.tiltedNow });
     }
   }
 
   /** Demo play behind the menus: the table is never a still image. */
   private attract(dt: number): void {
+    // The demo's own note releases, on simulation time. A wall-clock timer here
+    // would drift out of step under slow motion, fire after the mode had left,
+    // and there is no `window` at all when the game is stepped headlessly.
+    for (let i = this.attractHolds.length - 1; i >= 0; i--) {
+      if (this.time < this.attractHolds[i].until) continue;
+      this.keybed.noteOff(this.attractHolds[i].note);
+      this.attractHolds.splice(i, 1);
+    }
     this.attractAt -= dt;
     if (this.world.balls.length >= 2 || this.attractAt > 0) return;
     this.attractAt = 1.6 + this.rng() * 1.6;
@@ -349,9 +410,28 @@ export class Game {
     for (const el of this.table.elements) if (el.group === 'bank') { el.down = false; for (const c of el.colliders) c.enabled = true; }
   }
 
+  /**
+   * True when a ball is coming down fast into the last stretch before the
+   * keybed — the moment the player has to have found a key by, and the one
+   * they are most likely to lose the ball in.
+   */
+  private get inDanger(): boolean {
+    if (this.state !== 'play') return false;
+    for (const b of this.balls) {
+      if (b.v.y < 0 && b.p.y < 470 && Math.hypot(b.v.x, b.v.y) > 900) return true;
+    }
+    return false;
+  }
+
   private updateSlowMotion(realDt: number): void {
-    if (this.slowActive && this.slowCharge > 0 && this.state === 'play') {
-      this.slowCharge = Math.max(0, this.slowCharge - realDt / this.cfg.slowCapacity);
+    // Sustain is the manual control, but it wants a thumb that is already on
+    // the low notes. The table lends the same meter automatically at the one
+    // moment it is needed, at a slower burn so it can never starve the pedal.
+    const auto = !this.slowActive && this.inDanger;
+    const on = (this.slowActive || auto) && this.slowCharge > 0 && this.state === 'play';
+    if (on) {
+      const burn = auto ? 0.6 : 1;
+      this.slowCharge = Math.max(0, this.slowCharge - realDt * burn / this.cfg.slowCapacity);
       this.timeScale = this.cfg.slowFactor;
     } else {
       this.slowCharge = clamp01(this.slowCharge + realDt * this.cfg.slowRecharge / this.cfg.slowCapacity);
@@ -370,7 +450,7 @@ export class Game {
       this.bus.emit('key', { key, note: key.geom.note, force, source: 'debug' });
       this.energise(key.geom.note);
       this.keybed.sweepNearby(key, this.launches);
-      window.setTimeout(() => this.keybed.noteOff(key.geom.note), 120);
+      this.attractHolds.push({ note: key.geom.note, until: this.time + 0.12 });
     }
   }
 
@@ -383,10 +463,7 @@ export class Game {
         });
       }
       if (!c.owner) continue;
-      if (c.owner.startsWith('key:')) {
-        if (c.kind === 'paddle' && c.impact > 60) this.scoring.breakChain();
-        continue;
-      }
+      if (c.owner.startsWith('key:')) continue;
       const el = this.table.byOwner.get(c.owner);
       if (!el || !el.enabled) continue;
 
@@ -408,7 +485,7 @@ export class Game {
     el.flash = 1;
 
     if (energised) {
-      this.scoring.setResonance(this.scoring.resonance + 0.3);
+      this.scoring.setResonance(this.scoring.resonance + 0.45);
       this.scoring.add(160, el.x, el.y, { label: 'RESONANCE', tone: 0.75, quiet: true });
     }
 
@@ -430,7 +507,7 @@ export class Game {
         }
         break;
       case 'rollover':
-        if (!el.down) { el.down = true; this.checkLanes(); }
+        if (!el.down) { el.down = true; this.checkGroup(el.group); }
         this.scoring.chain();
         this.award(el, el.score * (energised ? 2 : 1));
         break;
@@ -474,13 +551,27 @@ export class Game {
     this.startMultiball();
   }
 
-  private checkLanes(): void {
-    const lanes = this.table.elements.filter((e) => e.group === 'lanes');
-    if (!lanes.length || lanes.some((e) => !e.down)) return;
-    for (const el of lanes) el.down = false;
-    this.scoring.setGroove(Math.min(6, this.scoring.groove + 1));
-    this.scoring.add(2500, this.def.width / 2, 1236, { label: 'LANES', tone: 0.35, flat: true });
-    this.bus.emit('objective', { id: 'lanes', label: 'LANES' });
+  /**
+   * A set of rollovers was completed. Both groups reset themselves so the table
+   * keeps flowing; what they pay is what tells them apart.
+   */
+  private checkGroup(group: string | null): void {
+    if (!group) return;
+    const set = this.table.elements.filter((e) => e.group === group);
+    if (!set.length || set.some((e) => !e.down)) return;
+    for (const el of set) el.down = false;
+
+    if (group === 'lanes') {
+      this.scoring.setGroove(this.scoring.groove + 1);
+      this.scoring.add(2500, this.def.width / 2, 1236, { label: 'LANES', tone: 0.35, flat: true });
+      this.bus.emit('objective', { id: 'lanes', label: 'LANES' });
+      return;
+    }
+    if (group === 'arc') {
+      this.scoring.setResonance(this.scoring.resonance + 1);
+      this.scoring.add(3200, this.def.width / 2, 486, { label: 'ARC', tone: 0.7, flat: true });
+      this.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    }
   }
 
   startMultiball(): void {
