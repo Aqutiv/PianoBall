@@ -123,6 +123,19 @@ export class KeyDeck<K extends KeyLit = KeyLit> {
     for (const k of this.keys) { k.down = false; k.peak = 0; }
   }
 
+  /**
+   * How hard a tap at a point counts as having hit a key.
+   *
+   * A touchscreen sends no velocity, so the key has to infer one. Striking
+   * nearer the front lip is harder, like a drum pad — which is the same bargain
+   * every mode wants, so it lives here rather than three times over.
+   */
+  strikeForce(k: K, x: number, y: number): number {
+    const g = k.geom;
+    const depth = (x - g.cx) * g.nx + (y - g.cy) * g.ny;
+    return clamp(0.42 + (depth + g.depth * 0.35) / (g.depth * 0.9), 0.18, 1);
+  }
+
   /** Advance the key envelopes. */
   update(dt: number): void {
     this.time += dt;

@@ -4,7 +4,7 @@ import { drawKeys } from '../../render/keys';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
-import { clamp, clamp01 } from '../../core/math';
+import { clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
 import type { ChartChord, Tune } from './chart';
@@ -430,8 +430,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const key = this.deck.pick(x, y);
     if (!key) return null;
     const g = key.geom;
-    const depth = (x - g.cx) * g.nx + (y - g.cy) * g.ny;
-    const force = clamp(0.42 + (depth + g.depth * 0.35) / (g.depth * 0.9), 0.18, 1);
+    const force = this.deck.strikeForce(key, x, y);
     this.ctx.input.press(g.note, force, 'pointer');
     return g.note;
   }

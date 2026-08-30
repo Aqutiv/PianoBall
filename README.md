@@ -85,16 +85,34 @@ a good run is also a piece of music.
 - **The keybed is a crown.** A ball that lands on it always rolls towards an
   outlane; you get between 1.2 and 3 seconds to find the right key, depending on
   where it lands. Dead centre buys you the most time.
+- **The table tells you which key.** Thirty-two flippers is only playable if you
+  can see which one is yours, so the key a falling ball is heading for lights up
+  and names its note, with the flight drawn in behind it. The hint is silent
+  rather than wrong: while anything solid is still in the way, where the ball
+  ends up is not ballistics, and nothing is shown.
+- **Hold the key to catch it.** A key already down when the ball settles on it
+  cradles the ball instead of batting it, and the throw happens when your finger
+  lifts. One at a time, and only for a moment — but it turns finding the right
+  key from a countdown into a decision.
 - **Aim with the key, not just the note.** Striking the left of a key throws the
-  ball left, the right throws it right — roughly 60° of aim per key, on top of
-  the 25° lean that the outer keys already have towards the middle.
+  ball left, the right throws it right — roughly 70° of aim per key, on top of
+  the 13° lean that the outer keys already have towards the middle. The throw
+  answers the ball as well as the finger: what a key gives back is the speed the
+  ball arrived with, and how much of it comes back is what pressing harder buys.
+- **Press velocity picks a layer.** Soft reaches the resonance arc, medium the
+  drop-target bank, hard the dome — and a ball returned hot off a rally carries
+  its own speed round the orbit.
 - **Everything is tuned.** Bumpers, targets, rollovers and the spinner each own a
   note from the table's scale. Hitting one sounds it. *Playing* that note
-  energises it for a moment: it glows, kicks harder and scores double.
-- **Multipliers reward musicianship.** Groove (landing hits on the beat),
-  Resonance (hitting energised elements), Combo and Multiball all stack.
+  energises it: it glows, kicks harder and scores double, and it stays lit for
+  as long as you hold the note down.
+- **Multipliers reward musicianship.** Groove (playing on the beat), Resonance
+  (hitting energised elements), Combo and Multiball all stack. A combo survives
+  the ball coming back to the keybed and lapses only when play goes quiet, so
+  what it measures is a rally rather than a single trip up the table.
 - **Clear the scale-degree bank** — the five drop targets, one per note of the
-  scale — to start multiball.
+  scale — to start multiball. Clear the five-note arc across the middle for
+  resonance.
 
 ## PlayTune
 
@@ -191,10 +209,14 @@ belongs and no black key does.
 | Slow time (Pinball) | sustain pedal | `Space` | — |
 | Shift an octave | your controller's octave buttons | `[` `]` | Settings |
 
+Pinball also lends you the slow-motion meter automatically when a ball is coming
+down fast, and burns it slower than the pedal does, so holding sustain always
+still has something left in it.
+
 On the home screen, `1` `2` `3` pick a mode and `Enter` plays the highlighted
 one. `Esc` steps back — out of a screen, out of play, out to the menu.
-`Backspace` starts the tune you are on again, from its count-in, without going
-back through the song list. `F3` shows the frame budget.
+`Backspace` starts again from the top — the tune you are on, from its count-in
+and without going back through the song list, or the pinball run, from ball one. `F3` shows the frame budget.
 
 ## Your controller
 
@@ -232,7 +254,9 @@ another 200 through a half-unit plate at 625 units per step; none get through.
 
 **Every key gets its own slice of the keybed.** Black keys own their width and
 the white keys either side own what is left, so the 32 striking slots tile the
-table exactly. `KeyDeck` is that piano on its own; the pinball `Keybed` extends
+keybed exactly — which is what lets the table name one key for a falling ball.
+The pinball keybed stops short of the slingshots at either end, because a key
+roofed by one has nowhere to throw. `KeyDeck` is that piano on its own; the pinball `Keybed` extends
 it and adds the paddle each key drives, which is why Freestyle and PlayTune get
 a real keyboard without a physics world behind it.
 

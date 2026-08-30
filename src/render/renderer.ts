@@ -8,6 +8,19 @@ import type { WallStyle, TablePalette } from '../game/table/schema';
 import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
+import type { Landing } from '../game/predict';
+
+/**
+ * What the mode knows about the immediate future and the renderer does not.
+ *
+ * The landing predictor is a display affordance, so it runs once per drawn
+ * frame in the mode rather than in the simulation, and arrives here as advice.
+ */
+export interface DrawHints {
+  /** Extra light per note, for the key a ball is falling towards. */
+  highlight(note: number): number;
+  landings: Landing[];
+}
 
 /** Bottom and top colours of each extruded wall style. */
 function wallColors(style: WallStyle, pal: TablePalette): [string, string] {
@@ -229,7 +242,7 @@ export class PinballRenderer {
 
   // -------------------------------------------------------------- frame ---
 
-  draw(game: Game, alpha: number, dt: number): void {
+  draw(game: Game, alpha: number, dt: number, hints?: DrawHints): void {
     const stage = this.stage;
     // The table owns the colours while it is on screen.
     stage.palette = game.def.palette;
@@ -243,7 +256,8 @@ export class PinballRenderer {
     const sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
     for (const el of sorted) this.drawElement(ctx, em, game, el);
 
-    drawKeys(ctx, em, stage, game.keybed);
+    drawKeys(ctx, em, stage, game.keybed, hints ? { highlight: hints.highlight } : {});
+    if (hints) this.drawLandings(ctx, em, game, hints);
     this.drawBalls(ctx, em, game, alpha);
     stage.particles.draw(em, stage.cam);
 
@@ -252,6 +266,51 @@ export class PinballRenderer {
     this.drawPops(ctx, game);
     stage.drawGlass();
     stage.endFrame();
+  }
+
+  /**
+   * Where each ball is coming down, and what to press when it does.
+   *
+   * The lit key is the affordance that matters; this adds the two things the
+   * light alone cannot say — *where* on the keybed, and *which note*. Drawn
+   * faintly and only once the landing is close enough to act on, so the table
+   * does not turn into a diagram.
+   */
+  private drawLandings(
+    ctx: CanvasRenderingContext2D,
+    em: CanvasRenderingContext2D,
+    game: Game,
+    hints: DrawHints,
+  ): void {
+    const stage = this.stage;
+    const pal = game.def.palette;
+
+    for (const L of hints.landings) {
+      const near = clamp01((1.4 - L.t) / 1.1);
+      if (near <= 0.02) continue;
+      const hue = this.hue(L.note);
+
+      // The flight path, as a hairline. Faint enough to read past.
+      ctx.save();
+      ctx.globalAlpha = 0.16 * near;
+      ctx.strokeStyle = pitchColor(L.note);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 9]);
+      tracePath(ctx, this.cam, L.path, 8);
+      ctx.stroke();
+      ctx.restore();
+
+      // The touchdown point, and the name of the key under it.
+      stage.halo(em, L.x, L.y, 6, hue, 40, 0.5 * near);
+      const k = game.keybed.keys[L.lane];
+      if (!k) continue;
+      const g = k.geom;
+      stage.label(
+        ctx,
+        g.drawCx + g.nx * 12, g.drawCy + g.ny * 12, g.z + 18,
+        noteName(g.note), pal.ink, 0.75 * near,
+      );
+    }
   }
 
   // ----------------------------------------------------------- elements ---

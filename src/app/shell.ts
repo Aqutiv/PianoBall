@@ -218,7 +218,7 @@ export class Shell {
     this.remapKeys();
     // Nothing a mode owns is re-read until the mode is entered again, so the
     // one that is running has to be told the preferences moved under it.
-    (this.active as GameMode & { applySettings?: () => void }).applySettings?.();
+    (this.active as (GameMode & { applySettings?: () => void }) | null)?.applySettings?.();
     this.refreshStatus(this.input.midi.status);
   }
 

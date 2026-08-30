@@ -1,11 +1,12 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
 import { Game } from '../../game/game';
 import { AURORA } from '../../game/table/tables/aurora';
-import { PinballRenderer } from '../../render/renderer';
+import { PinballRenderer, type DrawHints } from '../../render/renderer';
+import { predictLanding, type Landing } from '../../game/predict';
 import { PinballAudio } from './audio';
 import { PinballHud } from './hud';
 import { pitchHue } from '../../render/palette';
-import { clamp } from '../../core/math';
+import { clamp01 } from '../../core/math';
 import { load, save } from '../../core/storage';
 
 export interface Scores { pinball: number }
@@ -40,8 +41,16 @@ export class PinballMode extends ModeBase implements GameMode {
   private readonly audio: PinballAudio;
   private readonly panel: PinballHud;
   private readonly ctx: ModeContext;
-  private tiltAnnounced = false;
   private overTimer = 0;
+
+  /** Where each live ball is coming down, refreshed once per drawn frame. */
+  private readonly landings: Landing[] = [];
+  /** Extra light per note, keyed off those landings. */
+  private readonly lit = new Map<number, number>();
+  private readonly hints: DrawHints = {
+    highlight: (note) => this.lit.get(note) ?? 0,
+    landings: this.landings,
+  };
 
   constructor(ctx: ModeContext) {
     super();
@@ -106,7 +115,35 @@ export class PinballMode extends ModeBase implements GameMode {
   }
 
   draw(alpha: number, frameDt: number): void {
-    this.renderer.draw(this.game, alpha, frameDt);
+    this.predict();
+    this.renderer.draw(this.game, alpha, frameDt, this.hints);
+  }
+
+  /**
+   * Work out which key each falling ball is heading for.
+   *
+   * Once per drawn frame, not once per simulation step: this is an affordance
+   * rather than physics, and sixty a second is as often as anyone can read it.
+   */
+  private predict(): void {
+    const L = this.landings;
+    L.length = 0;
+    this.lit.clear();
+    // Not while serving. The held ball is pinned, so it would predict a landing
+    // for a drop that has not happened — and pointing at one key would be a
+    // lie, because at the serve *any* key drops the ball and the one chosen is
+    // what aims it.
+    if (this.game.state !== 'play') return;
+
+    for (const ball of this.game.balls) {
+      const landing = predictLanding(ball, this.game.world, this.game.keybed);
+      if (!landing) continue;
+      L.push(landing);
+      // Full brightness as it arrives, with a floor so the key is visible from
+      // far enough out to actually move a hand there.
+      const s = clamp01((1.4 - landing.t) / 1.1) * 0.75 + 0.25;
+      this.lit.set(landing.note, Math.max(this.lit.get(landing.note) ?? 0, s));
+    }
   }
 
   hud(): void {
@@ -120,16 +157,41 @@ export class PinballMode extends ModeBase implements GameMode {
 
   /** Start a fresh run. The shell calls this when the mode is chosen. */
   newGame(): void {
+    // A run can be restarted inside the pause between GAME OVER and the
+    // results screen. Left pending, that timer would drop the screen over the
+    // run that has just begun — and opening a screen does not stop the
+    // simulation, so the new ball would play on unattended behind it.
+    if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
     this.game.newGame();
+  }
+
+  /**
+   * Backspace: this run again, from ball one. Only while a run is actually in
+   * front of the player — behind a menu the key belongs to whatever has focus.
+   */
+  restart(): boolean {
+    if (!this.game.active) return false;
+    this.newGame();
+    return true;
+  }
+
+  /**
+   * Preferences moved under a running table. The keybed's mapped range and the
+   * playfield's scale are both read once on the way in, so both have to be
+   * re-read here; the static layer holds the painted note names, so it goes too.
+   */
+  applySettings(): void {
+    this.game.remapKeybed();
+    this.game.retune();
+    this.panel.showMusic();
+    this.ctx.stage.invalidate();
   }
 
   pointerDown(x: number, y: number): number | null {
     const key = this.game.keybed.pick(x, y);
     if (!key) return null;
-    // Striking nearer the front lip counts as a harder hit, like a drum pad.
     const g = key.geom;
-    const depth = (x - g.cx) * g.nx + (y - g.cy) * g.ny;
-    const force = clamp(0.42 + (depth + g.depth * 0.35) / (g.depth * 0.9), 0.18, 1);
+    const force = this.game.keybed.strikeForce(key, x, y);
     this.ctx.input.press(g.note, force, 'pointer');
     return g.note;
   }
@@ -186,9 +248,9 @@ export class PinballMode extends ModeBase implements GameMode {
     this.track(bus.on('objective', (e) => hud.banner(e.label, 1.8)));
     this.track(bus.on('chord', (e) => hud.banner(e.name || 'CLUSTER', 1.1)));
 
+    // `tilt` is an edge, so this fires exactly once per tilt-out.
     this.track(bus.on('tilt', (e) => {
-      if (e.tilted && !this.tiltAnnounced) { hud.banner('TILT', 2, 'bad'); this.tiltAnnounced = true; }
-      if (!e.tilted) this.tiltAnnounced = false;
+      if (e.tilted) hud.banner('TILT', 2, 'bad');
     }));
 
     this.track(bus.on('state', ({ to }) => {
