@@ -1,8 +1,17 @@
 import { load, save } from '../../core/storage';
+import type { RoleId } from './role';
 
 const KEY = 'playtuneSettings';
 
 export interface PlayTuneSettings {
+  /**
+   * Which half of the arrangement the player takes.
+   *
+   * A preference and not a saved score, which is why it lives here: resetting
+   * settings should put the player back on the melody without touching either
+   * chain of unlocks, and both roles want the same offset, lane and assist.
+   */
+  role: RoleId;
   /**
    * Milliseconds added to the device's own reported latency.
    *
@@ -37,6 +46,7 @@ export const MIN_LEAD_BEATS = LEAD_BEAT_CHOICES[0];
 export const MAX_LEAD_BEATS = LEAD_BEAT_CHOICES[LEAD_BEAT_CHOICES.length - 1];
 
 export const DEFAULT_PLAYTUNE: PlayTuneSettings = {
+  role: 'melody',
   offsetMs: 0,
   leadBeats: 4,
   assist: true,

@@ -29,7 +29,7 @@ export const MODE_INFO: readonly ModeInfo[] = [
   {
     id: 'playtune',
     title: 'PlayTune',
-    tagline: 'Learn a melody. The game plays the chords.',
+    tagline: 'Learn a melody, or learn the chords under one.',
     glyph: '◈',
   },
 ];

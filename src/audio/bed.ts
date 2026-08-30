@@ -2,7 +2,7 @@ import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
 import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
-import { compEvents, type CompEvent, type CompPattern } from './comp';
+import { compEvents, type CompEvent, type CompPart, type CompPattern } from './comp';
 
 /** A chord placed at a beat, for a bed driven by a written piece. */
 export interface TrackChord {
@@ -11,6 +11,21 @@ export interface TrackChord {
   degree: number;
   quality: ChordQuality;
 }
+
+/** A single note placed at a beat, for a tune the game plays itself. */
+export interface TrackNote {
+  beat: number;
+  len: number;
+  note: number;
+}
+
+/** Every part of an accompaniment, which is what a bed normally sounds. */
+const ALL_PARTS: readonly CompPart[] = ['chord', 'bass', 'wash'];
+
+/** Peak gain of a note the game plays. A chord stab is 0.055 across three tones. */
+const NOTE_GAIN = 0.05;
+/** Struck rather than swelled, in beats. The same figure `comp.ts` uses. */
+const NOTE_ATTACK = 0.02;
 
 /** What a track needs from a clock: where a beat falls, on the audio clock. */
 export interface BeatClock {
@@ -68,6 +83,18 @@ export class ChordBed {
   private trackScale: readonly number[] = [];
   private trackCursor = 0;
   private pattern: CompPattern = 'sustain';
+  /** Which parts of the accompaniment this bed sounds. */
+  private parts: readonly CompPart[] = ALL_PARTS;
+  /**
+   * A tune the game plays itself, when the player is busy with the chords.
+   *
+   * It rides the same lookahead as the chord track rather than a scheduler of
+   * its own, so that `stop` — which fades the pad bus — still kills everything
+   * in one call. Two timers and two fades is exactly the shape of bug this
+   * class has already had once.
+   */
+  private notes: readonly TrackNote[] | null = null;
+  private noteCursor = 0;
   /** Beat the track's first bar line falls on. Non-zero when it has a pickup. */
   private barOrigin = 0;
   /**
@@ -155,6 +182,7 @@ export class ChordBed {
     scale: readonly number[] = [],
     pattern: CompPattern = 'sustain',
     barOrigin = 0,
+    parts: readonly CompPart[] = ALL_PARTS,
   ): void {
     this.track = track;
     this.clock = clock;
@@ -163,8 +191,32 @@ export class ChordBed {
     this.trackCursor = 0;
     this.pattern = pattern;
     this.barOrigin = barOrigin;
+    this.parts = parts;
     this.pending.length = 0;
     this.lastVoicing = [];
+  }
+
+  /**
+   * A written tune the game plays, against the same clock as the chord track.
+   *
+   * Handed to the engine as single-note pads with a stab of an attack, which is
+   * what already makes a comped chord sound struck rather than swelled — so no
+   * new engine path, and it stops when the pad bus does. One call per note
+   * rather than grouping the simultaneous ones, because `pad` divides its gain
+   * by how many notes it is given and grouping would quietly halve a
+   * harmonised phrase.
+   */
+  setNoteTrack(notes: readonly TrackNote[] | null, clock: BeatClock | null): void {
+    this.notes = notes;
+    if (clock) this.clock = clock;
+    this.noteCursor = 0;
+  }
+
+  /** Drop both written tracks. What has already been handed over still rings. */
+  clearTracks(): void {
+    this.setTrack(null, null);
+    this.notes = null;
+    this.noteCursor = 0;
   }
 
   /** Back to the top of the progression, with no voicing to lead from. */
@@ -202,7 +254,14 @@ export class ChordBed {
   /** Bar-level lookahead. The only place in the app that schedules ahead. */
   private schedule(): void {
     if (!this.engine.running || !this.on) return;
-    if (this.track && this.clock) { this.scheduleTrack(this.track, this.clock); return; }
+    if (this.clock && (this.track || this.notes)) {
+      if (this.notes) this.scheduleNotes(this.notes, this.clock);
+      if (this.track) this.scheduleTrack(this.track, this.clock);
+      // `scheduleTrack` flushes for itself; a note track on its own still has
+      // to be handed over.
+      else this.flush(this.engine.now, this.clock.beatSeconds);
+      return;
+    }
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;
     // A long stall (a hidden tab, a slow load) must not turn into a burst of
@@ -249,10 +308,34 @@ export class ChordBed {
       // scheduler wakes than the single pad it replaces.
       const phase = c.beat - this.barOrigin;
       for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase)) {
+        // A role may keep only part of the accompaniment: PlayTune's chord role
+        // leaves the bed the bass and takes the chords for the player.
+        if (!this.parts.includes(ev.part)) continue;
         this.pending.push({ at: at + ev.offset * beat, ev });
       }
     }
     this.flush(now, beat);
+  }
+
+  /** The game's own tune, placed note by note against the same clock. */
+  private scheduleNotes(notes: readonly TrackNote[], clock: BeatClock): void {
+    if (!clock.running) return;
+    const now = this.engine.now;
+    while (this.noteCursor < notes.length) {
+      const n = notes[this.noteCursor];
+      const at = clock.timeOf(n.beat);
+      if (at > now + LOOKAHEAD) break;
+      this.noteCursor++;
+      // A note whose moment has passed is dropped, not piled onto the present.
+      if (at < now - 0.2) continue;
+      this.pending.push({
+        at,
+        ev: {
+          offset: 0, len: n.len, notes: [n.note],
+          gain: NOTE_GAIN, attack: NOTE_ATTACK, part: 'chord',
+        },
+      });
+    }
   }
 
   /** Hand the engine everything now due, and drop whatever the tab slept past. */

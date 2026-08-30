@@ -71,7 +71,7 @@ describe('settings persistence', () => {
   it('remembers the PlayTune calibration', () => {
     setPlayTuneSettings({ offsetMs: 45, leadBeats: 6, assist: false });
 
-    expect(playTuneSettings()).toEqual({ offsetMs: 45, leadBeats: 6, assist: false });
+    expect(playTuneSettings()).toEqual({ role: 'melody', offsetMs: 45, leadBeats: 6, assist: false });
   });
 
   it('starts Freestyle with no bed under it', () => {
