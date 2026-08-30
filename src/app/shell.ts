@@ -1,7 +1,8 @@
 import { GameLoop } from '../core/loop';
 import { load, save } from '../core/storage';
 import { Stage } from '../render/stage';
-import { DEFAULT_PALETTE, applyPalette } from '../render/theme';
+import { applyTheme, type Theme } from '../render/theme';
+import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSettings';
 import { InputHub } from '../midi/inputHub';
 import { AudioEngine } from '../audio/engine';
 import { ChordBed } from '../audio/bed';
@@ -67,8 +68,8 @@ export class Shell {
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, overlayRoot: HTMLElement) {
     this.canvas = canvas;
     this.stage = new Stage(canvas);
-    this.stage.palette = DEFAULT_PALETTE;
-    applyPalette(DEFAULT_PALETTE);
+    this.stage.theme = currentTheme();
+    applyTheme(this.stage.theme);
 
     this.music = new MusicState({ ...AURORA.music });
     this.bed = new ChordBed(this.audio, this.music);
@@ -214,12 +215,29 @@ export class Shell {
     resetFreestyleSettings();
     resetRhythmSettings();
     resetPlayTuneSettings();
+    resetThemeSettings();
+    this.setTheme(currentTheme());
     this.stage.resetSettings();
     this.remapKeys();
     // Nothing a mode owns is re-read until the mode is entered again, so the
     // one that is running has to be told the preferences moved under it.
     (this.active as GameMode & { applySettings?: () => void }).applySettings?.();
     this.refreshStatus(this.input.midi.status);
+  }
+
+  /**
+   * Switch look, live.
+   *
+   * The static playfield layer is baked once and blitted every frame, so a new
+   * theme has to invalidate it or the old colours stay on screen until the
+   * viewport happens to change. `Stage.needsBake` folds the theme id into its
+   * key, so the next frame re-bakes on its own.
+   */
+  setTheme(theme: Theme): void {
+    setThemeId(theme.id);
+    this.stage.theme = theme;
+    applyTheme(theme);
+    this.stage.invalidate();
   }
 
   /** The keybed range changed; every built mode has to follow. */

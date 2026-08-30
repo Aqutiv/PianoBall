@@ -1,18 +1,121 @@
+/*
+ * The theme faces, vendored.
+ *
+ * All four are SIL Open Font License 1.1. They live in `src/fonts/` rather
+ * than `public/` so Vite fingerprints them and rewrites these URLs against the
+ * configured base, which the GitHub Pages build depends on.
+ *
+ * Only the faces a theme actually renders with are ever fetched: a @font-face
+ * rule whose family nothing on the page uses is never downloaded. So Nocturne,
+ * which asks for system stacks, costs nothing at all.
+ *
+ * Latin only. Every non-ASCII character the app ships -- the umlaut in Fur
+ * Elise, the acute in Faure, the em dash -- lives in the latin subset; the
+ * extended block was a quarter of a megabyte of glyphs nothing rendered. A
+ * tune added later with, say, a Czech name falls back to the system face for
+ * that one glyph, which unicode-range handles on its own.
+ */
+@font-face {
+  font-family: 'Archivo';
+  font-style: italic;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('./fonts/archivo-italic-100_900-62_125-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('./fonts/archivo-normal-100_900-62_125-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/cormorant-garamond-italic-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('./fonts/cormorant-garamond-normal-300-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/cormorant-garamond-normal-600-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Jost';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('./fonts/jost-normal-300_700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 300 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('./fonts/fredoka-normal-300_700-100-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Tells the browser to draw its own widgets — select popups, scrollbars — to
      match the app instead of defaulting to a light palette. */
   color-scheme: dark;
 
+  /*
+   * Nocturne's values, so the page is fully painted before the first frame.
+   * `applyTheme` overwrites every one of them at boot and on every switch —
+   * these are the starting point, not the source of truth.
+   */
   --void: #04050d;
+  --floor-near: #1a2145;
+  --floor-far: #080c1e;
+  --floor-deep: #03040c;
   --ink: #e3ebff;
   --dim: #8593c4;
   --neon: #57dcff;
   --neon2: #a678ff;
   --accent: #ffc978;
+  --rail: #232c52;
+  --rail-top: #8494cf;
   --panel: rgba(10, 14, 30, 0.82);
   --stroke: rgba(132, 148, 207, 0.22);
+  /* The unfilled half of a slider track, and the slider's own knob. */
+  --track: rgba(255, 255, 255, 0.13);
+  --knob: var(--ink);
+  --ok: #45e2a0;
+  --warn: #ffc978;
+  --danger: #ff5470;
+  --v-perfect: #9be7ff;
+  --v-good: #7fe0b0;
+  --v-ok: #ffc978;
+  --v-miss: #ff7a92;
+  --v-wrong: #ffb46b;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  /* The face a theme puts its headline numbers in. Nocturne uses one family
+     throughout, so this matches --font until a theme says otherwise. */
+  --font-display: var(--font);
+  --font-ui: var(--font);
+  --font-mono: var(--mono);
 }
 
 * { box-sizing: border-box; }
@@ -56,6 +159,7 @@ html, body {
 
 .score-block { display: flex; flex-direction: column; gap: 2px; }
 .score {
+  font-family: var(--font-display);
   font-size: clamp(26px, 4.6vh, 52px);
   font-weight: 750;
   letter-spacing: -0.02em;
@@ -86,21 +190,22 @@ html, body {
 .meter-bar { flex: 1; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.09); overflow: hidden; }
 .meter-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 90ms linear; }
 .meter-fill.slow { background: linear-gradient(90deg, #2f7fff, #57dcff); }
-.meter-fill.tilt { background: linear-gradient(90deg, #ffb038, #ff5470); }
+.meter-fill.tilt { background: linear-gradient(90deg, var(--warn), var(--danger)); }
 
 .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
 
 .status { font-size: 11px; color: var(--dim); letter-spacing: 0.04em; display: flex; gap: 10px; align-items: center; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: #3a4468; }
-.dot.ok { background: #45e2a0; box-shadow: 0 0 8px #45e2a0; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .dot.warn { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.dot.err { background: #ff5470; box-shadow: 0 0 8px #ff5470; }
+.dot.err { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
 .status .sep { width: 1px; height: 11px; background: var(--stroke); }
 .status .nudge { color: var(--accent); animation: nudge 2.4s ease-in-out infinite; }
 @keyframes nudge { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .status .nudge { animation: none; opacity: 1; } }
 
 .banner {
+  font-family: var(--font-display);
   position: absolute;
   left: 50%; top: 22%;
   transform: translate(-50%, -50%);
@@ -108,13 +213,14 @@ html, body {
   font-weight: 800;
   letter-spacing: 0.02em;
   text-align: center;
+  white-space: nowrap;
   opacity: 0;
   transition: opacity 180ms ease;
   text-shadow: 0 0 34px rgba(87, 220, 255, 0.55);
 }
 .banner.show { opacity: 1; }
 .banner.warn { color: var(--accent); }
-.banner.bad { color: #ff5470; }
+.banner.bad { color: var(--danger); }
 
 /* ------------------------------------------------------------ overlay --- */
 
@@ -141,6 +247,7 @@ html, body {
 }
 
 .panel h1 {
+  font-family: var(--font-display);
   margin: 0 0 4px;
   font-size: 34px;
   letter-spacing: -0.02em;
@@ -211,7 +318,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 999px;
   background: linear-gradient(90deg,
-    var(--neon) 0 var(--fill, 0%), rgba(255, 255, 255, 0.13) var(--fill, 0%) 100%);
+    var(--neon) 0 var(--fill, 0%), var(--track) var(--fill, 0%) 100%);
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -222,21 +329,21 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: -4px;
   border: 0;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--knob);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
 }
 input[type="range"]::-moz-range-track {
   height: 6px;
   border-radius: 999px;
   background: linear-gradient(90deg,
-    var(--neon) 0 var(--fill, 0%), rgba(255, 255, 255, 0.13) var(--fill, 0%) 100%);
+    var(--neon) 0 var(--fill, 0%), var(--track) var(--fill, 0%) 100%);
 }
 input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border: 0;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--knob);
 }
 input[type="range"]:focus-visible { outline: 2px solid var(--neon); outline-offset: 3px; }
 button:active { transform: translateY(1px); }
@@ -325,6 +432,7 @@ kbd {
 .mode-card.on .mode-glyph { color: var(--ink); text-shadow: 0 0 22px rgba(166, 120, 255, 0.7); }
 
 .mode-name {
+  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -356,6 +464,7 @@ kbd {
 /* -------------------------------------------------------- freestyle HUD --- */
 
 .chord {
+  font-family: var(--font-display);
   font-size: clamp(26px, 4.6vh, 52px);
   font-weight: 750;
   letter-spacing: -0.02em;
@@ -487,11 +596,12 @@ kbd {
 
 /* ------------------------------------------------------- playtune HUD --- */
 
-.tune-title { font-size: clamp(18px, 3vh, 30px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
+.tune-title { font-family: var(--font-display); font-size: clamp(18px, 3vh, 30px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
 .tune-bar { width: 190px; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-top: 7px; overflow: hidden; }
 .tune-bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--neon), var(--neon2)); transition: width 120ms linear; }
 
 .accuracy {
+  font-family: var(--font-display);
   font-size: clamp(22px, 3.6vh, 40px);
   font-weight: 750;
   line-height: 1;
@@ -499,11 +609,11 @@ kbd {
 }
 .tally { display: flex; gap: 6px; font-family: var(--mono); font-size: 11px; justify-content: flex-end; }
 .tally span::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-.t-perfect { color: #9be7ff; } .t-perfect::before { background: #9be7ff; }
-.t-good { color: #7fe0b0; } .t-good::before { background: #7fe0b0; }
-.t-ok { color: var(--accent); } .t-ok::before { background: var(--accent); }
-.t-miss { color: #ff7a92; } .t-miss::before { background: #ff7a92; }
-.t-wrong { color: #ffb46b; } .t-wrong::before { background: #ffb46b; }
+.t-perfect { color: var(--v-perfect); } .t-perfect::before { background: var(--v-perfect); }
+.t-good { color: var(--v-good); } .t-good::before { background: var(--v-good); }
+.t-ok { color: var(--v-ok); } .t-ok::before { background: var(--v-ok); }
+.t-miss { color: var(--v-miss); } .t-miss::before { background: var(--v-miss); }
+.t-wrong { color: var(--v-wrong); } .t-wrong::before { background: var(--v-wrong); }
 
 /* The chord under the tune. Smaller than Freestyle's, where it is the headline
    rather than a hint sitting beneath a song title. */
@@ -534,3 +644,660 @@ kbd {
 .wheel input[type="range"]::-webkit-slider-thumb { width: 10px; height: 10px; margin-top: -3px; }
 .wheel input[type="range"]::-moz-range-track { height: 4px; }
 .wheel input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; }
+
+/* ------------------------------------------------------------- themes --- */
+
+/*
+ * The picker shows what it is offering. A dropdown of names would make the
+ * player try each one to find out what it looks like, which is the opposite of
+ * what a swatch costs to read.
+ */
+.theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 4px; }
+
+.theme-card {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--stroke);
+}
+.theme-card:hover { background: rgba(255, 255, 255, 0.085); }
+.theme-card.on {
+  background: linear-gradient(96deg, rgba(87, 220, 255, 0.16), rgba(166, 120, 255, 0.16));
+  border-color: var(--neon);
+  box-shadow: 0 0 0 1px rgba(87, 220, 255, 0.18);
+}
+
+.theme-swatch { display: flex; gap: 3px; }
+/* An outline on every chip, so a theme whose void is near-black still shows
+   five swatches rather than four and a hole. */
+.theme-swatch i {
+  flex: 1;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.theme-name { font-family: var(--font-display); font-size: 14px; font-weight: 650; }
+.theme-blurb { font-size: 11.5px; line-height: 1.35; color: var(--dim); }
+
+@media (max-width: 520px) { .theme-grid { grid-template-columns: 1fr; } }
+
+/* =========================================================== NEON RUSH === */
+/*
+ * Keeps Nocturne's structure and slants it. The skew is applied to blocks and
+ * undone on their children, so slabs lean while the text they carry stays
+ * upright and readable — a wholly slanted HUD is a poster, not an instrument.
+ */
+
+[data-theme="rush"] .score-block {
+  transform: skewX(-11deg);
+  padding-left: 11px;
+  border-left: 4px solid var(--accent);
+}
+[data-theme="rush"] .score-block > * { transform: skewX(11deg); transform-origin: left; }
+
+[data-theme="rush"] .score,
+[data-theme="rush"] .chord,
+[data-theme="rush"] .accuracy,
+[data-theme="rush"] .banner,
+[data-theme="rush"] .tune-title,
+[data-theme="rush"] .panel h1,
+[data-theme="rush"] .mode-name {
+  font-weight: 900;
+  font-style: italic;
+  font-variation-settings: 'wdth' 78;
+  letter-spacing: -0.03em;
+}
+
+/* Cyan left, magenta right: the split-channel look, done with two shadows
+   rather than three stacked copies of the element. */
+[data-theme="rush"] .score,
+[data-theme="rush"] .accuracy {
+  text-shadow: -2px 0 0 rgba(47, 246, 255, 0.9), 2px 0 0 rgba(255, 47, 160, 0.85),
+    0 0 34px rgba(139, 92, 255, 0.6);
+}
+[data-theme="rush"] .banner {
+  font-size: clamp(26px, 6vh, 68px);
+  text-shadow: -3px 0 0 var(--neon), 3px 0 0 var(--danger), 0 0 60px rgba(139, 92, 255, 0.8);
+}
+[data-theme="rush"] .chord { color: var(--accent); text-shadow: 0 0 30px rgba(196, 255, 61, 0.5); }
+[data-theme="rush"] .score-sub,
+[data-theme="rush"] .meter,
+[data-theme="rush"] .wheel,
+[data-theme="rush"] .hud-knob b { color: var(--accent); font-weight: 700; letter-spacing: 0.2em; }
+[data-theme="rush"] .status { text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+
+/* The multiplier's slab leans; its digits do not. A pseudo-element carries the
+   skew so the text never needs unskewing. */
+[data-theme="rush"] .mult {
+  position: relative;
+  /* Without a stacking context of its own the negative-z pseudo below escapes
+     all the way past the canvas and paints under the table. */
+  isolation: isolate;
+  padding: 3px 15px;
+  color: var(--ink);
+  text-shadow: 0 0 18px rgba(255, 47, 160, 0.7);
+}
+[data-theme="rush"] .mult::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: skewX(-11deg);
+  background: linear-gradient(96deg, var(--danger), rgba(139, 92, 255, 0.55));
+  border-right: 4px solid var(--accent);
+  box-shadow: 0 0 26px rgba(255, 47, 160, 0.5);
+}
+
+/* Chevrons rather than spheres — there is no chrome in this world. */
+[data-theme="rush"] .ball-pip {
+  width: 7px;
+  height: 18px;
+  border-radius: 1px;
+  transform: skewX(-14deg);
+  background: var(--neon);
+  box-shadow: 0 0 12px rgba(47, 246, 255, 0.9);
+}
+[data-theme="rush"] .ball-pip.spent { background: var(--track); box-shadow: none; }
+
+[data-theme="rush"] .meter-bar,
+[data-theme="rush"] .tune-bar,
+[data-theme="rush"] .wheel > span,
+[data-theme="rush"] .steps i { border-radius: 0; transform: skewX(-14deg); }
+[data-theme="rush"] .meter-fill,
+[data-theme="rush"] .tune-bar i,
+[data-theme="rush"] .wheel i { border-radius: 0; }
+[data-theme="rush"] .meter-fill.slow { box-shadow: 0 0 14px rgba(47, 246, 255, 0.8); }
+[data-theme="rush"] .meter-fill.tilt { box-shadow: 0 0 14px rgba(255, 47, 160, 0.8); }
+[data-theme="rush"] .steps i.on { box-shadow: 0 0 10px var(--neon); }
+
+[data-theme="rush"] .overlay {
+  background: linear-gradient(118deg, rgba(139, 92, 255, 0.28), rgba(5, 3, 15, 0.94) 46%, rgba(255, 47, 160, 0.2));
+}
+[data-theme="rush"] .panel {
+  border: 0;
+  border-left: 6px solid var(--danger);
+  border-radius: 0;
+  box-shadow: 0 0 70px rgba(139, 92, 255, 0.35), 22px 22px 0 rgba(47, 246, 255, 0.09);
+}
+[data-theme="rush"] .panel h1 {
+  font-size: 46px;
+  text-transform: uppercase;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--ink);
+  text-shadow: -3px 0 0 var(--neon), 3px 0 0 var(--danger);
+}
+[data-theme="rush"] .panel h2 { color: var(--accent); font-weight: 700; }
+
+[data-theme="rush"] button,
+[data-theme="rush"] select,
+[data-theme="rush"] .hud-select,
+[data-theme="rush"] .pill,
+[data-theme="rush"] kbd { border-radius: 0; font-weight: 600; }
+[data-theme="rush"] button.primary {
+  background: linear-gradient(96deg, var(--danger), var(--neon2));
+  border-color: var(--accent);
+  box-shadow: 0 0 26px rgba(255, 47, 160, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="rush"] .mode-card,
+[data-theme="rush"] .theme-card,
+[data-theme="rush"] .song-card {
+  border-radius: 0;
+  border: 0;
+  border-left: 4px solid rgba(47, 246, 255, 0.5);
+  background: linear-gradient(96deg, rgba(139, 92, 255, 0.18), transparent);
+}
+[data-theme="rush"] .mode-card.on,
+[data-theme="rush"] .theme-card.on {
+  background: linear-gradient(96deg, rgba(255, 47, 160, 0.55), rgba(139, 92, 255, 0.3));
+  border-left-color: var(--accent);
+  box-shadow: 0 0 34px rgba(255, 47, 160, 0.35);
+}
+[data-theme="rush"] .mode-name { text-transform: uppercase; letter-spacing: 0; }
+[data-theme="rush"] .rhythm,
+[data-theme="rush"] .bed {
+  border-radius: 0;
+  border: 0;
+  border-left: 4px solid var(--danger);
+  background: linear-gradient(160deg, rgba(139, 92, 255, 0.22), rgba(5, 3, 15, 0.9));
+}
+
+/* ====================================================== VELVET & BRASS === */
+/*
+ * Weight and finish instead of noise. Hairline brass rules, engraved caps, and
+ * a panel that reads as a recital programme — centred, generously margined,
+ * with a deco frame drawn from the panel's own corners rather than from
+ * decorative elements the markup would have to carry.
+ */
+
+[data-theme="velvet"] .score,
+[data-theme="velvet"] .chord,
+[data-theme="velvet"] .accuracy,
+[data-theme="velvet"] .tune-title,
+[data-theme="velvet"] .panel h1,
+[data-theme="velvet"] .banner {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Lit from above, to match the virtual key light the canvas draws with. */
+[data-theme="velvet"] .score,
+[data-theme="velvet"] .accuracy {
+  color: var(--neon);
+  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.45), 0 -1px 0 rgba(0, 0, 0, 0.7),
+    0 0 34px rgba(217, 164, 65, 0.3);
+}
+[data-theme="velvet"] .chord { color: var(--ink); text-shadow: 0 0 30px rgba(217, 164, 65, 0.35); }
+[data-theme="velvet"] .mult { font-family: var(--font-display); font-weight: 600; }
+
+[data-theme="velvet"] .banner {
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 14px 44px;
+  border-top: 1px solid rgba(217, 164, 65, 0.5);
+  border-bottom: 1px solid rgba(217, 164, 65, 0.5);
+  text-shadow: 0 0 40px rgba(217, 164, 65, 0.5);
+}
+
+[data-theme="velvet"] .score-sub,
+[data-theme="velvet"] .meter,
+[data-theme="velvet"] .wheel,
+[data-theme="velvet"] .hud-knob b,
+[data-theme="velvet"] .status { letter-spacing: 0.22em; font-weight: 500; }
+
+/* Ivory and ebony, as on the keyboard the pips are counting. */
+[data-theme="velvet"] .ball-pip {
+  width: 8px;
+  height: 20px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(#fbf6ec, #ddd2bd);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+[data-theme="velvet"] .ball-pip.spent { background: linear-gradient(#241f28, #131017); box-shadow: none; }
+
+/* A brass gauge: ticks across the track, not a smooth bar. */
+[data-theme="velvet"] .meter-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 0;
+  background: #1a1220;
+  border: 1px solid rgba(217, 164, 65, 0.35);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+[data-theme="velvet"] .meter-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 11px, rgba(217, 164, 65, 0.4) 11px 12px);
+}
+[data-theme="velvet"] .meter-fill { border-radius: 0; }
+[data-theme="velvet"] .meter-fill.slow { background: linear-gradient(#e8bd63, #a67d28); }
+[data-theme="velvet"] .meter-fill.tilt { background: linear-gradient(#c96a52, #8a2f20); }
+[data-theme="velvet"] .tune-bar,
+[data-theme="velvet"] .wheel > span,
+[data-theme="velvet"] .steps i { border-radius: 0; }
+
+[data-theme="velvet"] .overlay {
+  background: radial-gradient(120% 92% at 50% 40%, rgba(42, 16, 48, 0.82), rgba(8, 5, 10, 0.97));
+}
+[data-theme="velvet"] .panel {
+  text-align: center;
+  border-radius: 2px;
+  border: 1px solid var(--neon);
+  background: linear-gradient(#17121c, #0f0b13);
+  box-shadow: 0 0 0 6px var(--void), 0 0 0 7px rgba(217, 164, 65, 0.35), 0 40px 90px rgba(0, 0, 0, 0.75);
+}
+[data-theme="velvet"] .panel h1 {
+  font-weight: 300;
+  font-size: 46px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--neon);
+}
+[data-theme="velvet"] .panel h2 { letter-spacing: 0.26em; font-weight: 500; }
+[data-theme="velvet"] .panel .lede { font-family: var(--font-display); font-size: 16px; font-style: italic; }
+[data-theme="velvet"] .row { text-align: left; }
+[data-theme="velvet"] .actions { justify-content: center; }
+
+[data-theme="velvet"] button,
+[data-theme="velvet"] select,
+[data-theme="velvet"] .hud-select,
+[data-theme="velvet"] kbd { border-radius: 1px; }
+[data-theme="velvet"] button {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+  background: transparent;
+  border-color: rgba(217, 164, 65, 0.45);
+  color: var(--neon);
+}
+[data-theme="velvet"] button.primary {
+  background: linear-gradient(var(--accent), #a67d28);
+  color: #17121c;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Engraved plaques: inset rather than raised, and no colour but brass. */
+[data-theme="velvet"] .mode-card,
+[data-theme="velvet"] .theme-card,
+[data-theme="velvet"] .song-card,
+[data-theme="velvet"] .rhythm,
+[data-theme="velvet"] .bed {
+  border-radius: 2px;
+  background: linear-gradient(#1d1622, #150f1a);
+  border-color: rgba(217, 164, 65, 0.3);
+  box-shadow: inset 0 1px 0 rgba(217, 164, 65, 0.12);
+}
+[data-theme="velvet"] .mode-card.on,
+[data-theme="velvet"] .theme-card.on {
+  background: linear-gradient(#2a1f30, #1a1320);
+  border-color: var(--neon);
+  box-shadow: inset 0 1px 0 rgba(217, 164, 65, 0.3), 0 0 30px rgba(217, 164, 65, 0.15);
+}
+[data-theme="velvet"] .mode-glyph { color: var(--neon); text-shadow: 0 0 18px rgba(217, 164, 65, 0.4); }
+[data-theme="velvet"] .mode-name {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+[data-theme="velvet"] .mode-tag { font-family: var(--font-display); font-size: 14.5px; font-style: italic; }
+
+/* ============================================================= TOYBOX === */
+/*
+ * Cream panels on a blueberry ground, everything outlined, and buttons that
+ * press down into their own shadow. The one theme whose panel is brighter than
+ * the game behind it, so the overlay dims harder than the others to keep that
+ * jump in brightness from stinging in a dark room.
+ */
+
+[data-theme="toybox"] .score {
+  align-self: flex-start;
+  padding: 6px 16px 8px;
+  border-radius: 14px;
+  background: var(--accent);
+  border: 3px solid var(--stroke);
+  box-shadow: 0 5px 0 var(--stroke);
+  transform: rotate(-1.6deg);
+  font-weight: 600;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+[data-theme="toybox"] .score-sub { margin-top: 9px; letter-spacing: 0.1em; }
+[data-theme="toybox"] .mult {
+  padding: 2px 13px 4px;
+  border-radius: 999px;
+  background: var(--ok);
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  box-shadow: 0 4px 0 var(--stroke);
+  font-weight: 600;
+  text-shadow: none;
+}
+
+/*
+ * A thick dark stroke around the glyphs, matching the outline the canvas draws
+ * around every object. paint-order puts the stroke behind the fill, so it
+ * thickens the letter rather than eating into it.
+ */
+[data-theme="toybox"] .banner,
+[data-theme="toybox"] .chord,
+[data-theme="toybox"] .tune-title,
+[data-theme="toybox"] .panel h1 {
+  -webkit-text-stroke: 6px var(--stroke);
+  paint-order: stroke fill;
+  text-shadow: 0 5px 0 var(--stroke);
+  font-weight: 600;
+}
+[data-theme="toybox"] .banner,
+[data-theme="toybox"] .chord { color: #ffe14d; }
+[data-theme="toybox"] .panel h1 {
+  color: var(--danger);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+[data-theme="toybox"] .accuracy {
+  padding: 3px 15px 5px;
+  border-radius: 999px;
+  background: var(--neon);
+  color: var(--ink);
+  border: 3px solid var(--stroke);
+  box-shadow: 0 5px 0 var(--stroke);
+  font-weight: 600;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="toybox"] .balls { gap: 7px; }
+[data-theme="toybox"] .ball-pip {
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(circle at 34% 28%, #fff, var(--danger) 52%, #c41f6c 88%);
+  border: 3px solid var(--stroke);
+  box-shadow: 0 3px 0 var(--stroke);
+}
+[data-theme="toybox"] .ball-pip.spent { background: #4a3f7a; box-shadow: none; }
+
+[data-theme="toybox"] .meters,
+[data-theme="toybox"] .wheels { width: 142px; }
+[data-theme="toybox"] .meter-bar,
+[data-theme="toybox"] .wheel > span {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--stroke);
+  border: 3px solid var(--stroke);
+}
+[data-theme="toybox"] .tune-bar {
+  width: 210px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--stroke);
+  border: 3px solid var(--stroke);
+}
+[data-theme="toybox"] .meter-fill,
+[data-theme="toybox"] .tune-bar i,
+[data-theme="toybox"] .wheel i { border-radius: 999px; }
+[data-theme="toybox"] .steps { gap: 3px; }
+[data-theme="toybox"] .steps i { height: 9px; border-radius: 3px; border: 2px solid var(--stroke); }
+[data-theme="toybox"] .steps i.on { background: var(--danger); box-shadow: none; }
+[data-theme="toybox"] .dot { width: 10px; height: 10px; border: 2px solid var(--stroke); }
+
+[data-theme="toybox"] .overlay {
+  background: radial-gradient(110% 84% at 50% 34%, rgba(36, 27, 77, 0.9), rgba(12, 8, 26, 0.97));
+}
+[data-theme="toybox"] .panel {
+  color: var(--void);
+  border: 4px solid var(--stroke);
+  border-radius: 26px;
+  box-shadow: 0 10px 0 var(--stroke), 0 30px 60px rgba(0, 0, 0, 0.5);
+}
+[data-theme="toybox"] .panel h2,
+[data-theme="toybox"] .panel .lede,
+[data-theme="toybox"] .panel .diag,
+[data-theme="toybox"] .panel p,
+[data-theme="toybox"] .row label,
+[data-theme="toybox"] .mode-tag,
+[data-theme="toybox"] .theme-blurb,
+[data-theme="toybox"] .song-by,
+[data-theme="toybox"] .song-teaches {
+  /* Dark enough to clear 4.5:1 against the cards' cream, which is a shade
+     deeper than the panel's -- the lighter purple passed on one and not the
+     other, which is exactly the kind of miss a single token prevents. */
+  color: #5a4a95;
+}
+[data-theme="toybox"] .row + .row { border-top-color: rgba(26, 16, 48, 0.12); }
+
+[data-theme="toybox"] .panel button,
+[data-theme="toybox"] .panel select {
+  background: #ded0b6;
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  border-radius: 12px;
+  box-shadow: 0 4px 0 var(--stroke);
+  font-weight: 600;
+}
+[data-theme="toybox"] .panel button:hover,
+[data-theme="toybox"] .panel select:hover { background: #e9dcc6; }
+/* The press is the point: the button travels down into the shadow it sat on. */
+[data-theme="toybox"] .panel button:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--stroke);
+}
+[data-theme="toybox"] .panel button.primary {
+  background: var(--danger);
+  color: var(--ink);
+  box-shadow: 0 5px 0 var(--stroke);
+}
+[data-theme="toybox"] kbd { background: #ded0b6; color: var(--void); border-color: var(--stroke); }
+[data-theme="toybox"] .pill {
+  background: var(--ok);
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  font-weight: 600;
+}
+[data-theme="toybox"] .monitor { background: #efe4cd; color: #4a3f7a; border-color: var(--stroke); }
+
+[data-theme="toybox"] .mode-card,
+[data-theme="toybox"] .theme-card,
+[data-theme="toybox"] .song-card {
+  background: #f2e6cd;
+  border: 3px solid var(--stroke);
+  border-radius: 18px;
+  box-shadow: 0 5px 0 var(--stroke);
+}
+[data-theme="toybox"] .mode-card.on,
+[data-theme="toybox"] .theme-card.on {
+  background: var(--neon2);
+  color: var(--ink);
+  box-shadow: 0 5px 0 var(--stroke), 0 0 0 4px #ffe14d;
+}
+[data-theme="toybox"] .mode-card.on .mode-tag,
+[data-theme="toybox"] .theme-card.on .theme-blurb { color: rgba(255, 246, 229, 0.88); }
+[data-theme="toybox"] .mode-card.on .mode-glyph { color: var(--ink); }
+[data-theme="toybox"] .mode-glyph { color: var(--neon2); text-shadow: none; }
+[data-theme="toybox"] .mode-name { font-weight: 600; font-size: 18px; }
+[data-theme="toybox"] .mode-key,
+[data-theme="toybox"] .theme-swatch i {
+  border: 2px solid rgba(26, 16, 48, 0.4);
+  box-shadow: none;
+}
+
+/* The HUD cards go cream too, so every control reads as one set of objects. */
+[data-theme="toybox"] .rhythm,
+[data-theme="toybox"] .bed {
+  width: 196px;
+  background: var(--panel);
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  border-radius: 18px;
+  box-shadow: 0 6px 0 var(--stroke);
+}
+[data-theme="toybox"] .hud-toggle,
+[data-theme="toybox"] .hud-select {
+  background: #ded0b6;
+  color: var(--void);
+  border: 3px solid var(--stroke);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--stroke);
+  font-weight: 600;
+}
+[data-theme="toybox"] .hud-select { border-radius: 10px; }
+[data-theme="toybox"] .hud-toggle.on { background: var(--ok); }
+[data-theme="toybox"] .rhythm-bpm,
+[data-theme="toybox"] .hud-knob b { color: #5a4a95; }
+[data-theme="toybox"] .rhythm-bpm b { color: var(--void); }
+
+/* ============================================================= MOTION === */
+/*
+ * A theme's motion is part of its voice: Neon Rush slams, Toybox bounces,
+ * Velvet arrives without hurrying. Each animation hangs off a class the app
+ * already toggles, so none of this needs new JS.
+ *
+ * Everything here is gated twice — the OS preference, and the in-app Reduced
+ * motion toggle, which `Stage` mirrors onto the root as `data-reduced-motion`.
+ * The banner still appears under both; it just stops moving to do it.
+ */
+
+@keyframes rush-slam {
+  0%   { opacity: 0; transform: translate(-50%, -50%) skewX(-16deg) scale(1.5); }
+  55%  { opacity: 1; transform: translate(-50%, -50%) skewX(-16deg) scale(0.94); }
+  100% { opacity: 1; transform: translate(-50%, -50%) skewX(-16deg) scale(1); }
+}
+[data-theme="rush"] .banner { transform: translate(-50%, -50%) skewX(-16deg); }
+[data-theme="rush"] .banner.show { animation: rush-slam 260ms cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+
+@keyframes velvet-rise {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); letter-spacing: 0.3em; }
+  to   { opacity: 1; transform: translate(-50%, -50%); letter-spacing: 0.16em; }
+}
+[data-theme="velvet"] .banner.show { animation: velvet-rise 620ms cubic-bezier(0.16, 0.8, 0.3, 1) both; }
+
+@keyframes toy-bounce {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  60%  { opacity: 1; transform: translate(-50%, -50%) scale(1.14); }
+  80%  { transform: translate(-50%, -50%) scale(0.96); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+[data-theme="toybox"] .banner.show { animation: toy-bounce 460ms cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+
+/* Cards lift under the pointer in Toybox, because everything in it is an
+   object sitting on the page rather than a region of it. */
+[data-theme="toybox"] .mode-card,
+[data-theme="toybox"] .theme-card,
+[data-theme="toybox"] .song-card { transition: transform 120ms ease, box-shadow 120ms ease; }
+[data-theme="toybox"] .mode-card:hover:not(:disabled),
+[data-theme="toybox"] .theme-card:hover,
+[data-theme="toybox"] .song-card:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 0 var(--stroke);
+}
+
+/* Neon Rush's cards slide along their own slant instead of lifting. */
+[data-theme="rush"] .mode-card,
+[data-theme="rush"] .theme-card,
+[data-theme="rush"] .song-card { transition: transform 120ms ease, border-color 120ms ease; }
+[data-theme="rush"] .mode-card:hover:not(:disabled),
+[data-theme="rush"] .theme-card:hover,
+[data-theme="rush"] .song-card:hover:not(:disabled) { transform: translateX(5px); }
+
+/* Velvet sweeps a highlight across the chosen plaque rather than moving it. */
+[data-theme="velvet"] .mode-card,
+[data-theme="velvet"] .theme-card { transition: border-color 320ms ease, box-shadow 320ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .banner.show { animation: none !important; }
+  [data-theme="rush"] .banner.show { transform: translate(-50%, -50%) skewX(-16deg); opacity: 1; }
+  [data-theme="toybox"] .mode-card:hover:not(:disabled),
+  [data-theme="toybox"] .theme-card:hover,
+  [data-theme="toybox"] .song-card:hover:not(:disabled),
+  [data-theme="rush"] .mode-card:hover:not(:disabled),
+  [data-theme="rush"] .theme-card:hover,
+  [data-theme="rush"] .song-card:hover:not(:disabled) { transform: none; }
+}
+
+[data-reduced-motion] .banner.show { animation: none !important; }
+[data-reduced-motion][data-theme="rush"] .banner.show {
+  transform: translate(-50%, -50%) skewX(-16deg);
+  opacity: 1;
+}
+[data-reduced-motion] .mode-card:hover:not(:disabled),
+[data-reduced-motion] .theme-card:hover,
+[data-reduced-motion] .song-card:hover:not(:disabled) { transform: none; }
+
+/* ============================================== NARROW VIEWPORTS === */
+/*
+ * The banner is set nowrap so a two-word shout does not split down the middle
+ * on a desktop screen. On a phone there is no room for that promise: Velvet's
+ * letterspaced caps put "PRESS A KEY TO DROP" at 623px inside a 375px window,
+ * which pushed it off both edges. Below the breakpoint it wraps instead, and
+ * the themes that pad or track it hardest ease off.
+ */
+.banner { max-width: min(92vw, 900px); }
+
+@media (max-width: 700px) {
+  .banner { white-space: normal; }
+  [data-theme="velvet"] .banner { padding: 10px 18px; letter-spacing: 0.1em; }
+  [data-theme="rush"] .banner { font-size: clamp(22px, 5vh, 40px); }
+  [data-theme="toybox"] .banner { -webkit-text-stroke-width: 4px; }
+
+  /* Toybox and Neon Rush widen the HUD cards for their heavier type; at this
+     size that costs more than it buys, so they go back to the shared width. */
+  [data-theme="toybox"] .rhythm,
+  [data-theme="toybox"] .bed { width: 184px; }
+  [data-theme="toybox"] .meters,
+  [data-theme="toybox"] .wheels { width: 132px; }
+  [data-theme="toybox"] .tune-bar { width: 190px; }
+
+  /* Neon Rush tracks its micro-labels wide, which is fine beside a 132px
+     meter and not fine inside a 34px knob label on a phone. */
+  [data-theme="rush"] .score-sub,
+  [data-theme="rush"] .meter,
+  [data-theme="rush"] .wheel,
+  [data-theme="rush"] .hud-knob b { letter-spacing: 0.08em; }
+}
+
+/*
+ * Toybox panels are cream, so the shared slider — a white wash for the empty
+ * half, a near-white knob — disappeared into them entirely. Both take the
+ * outline colour instead, which is also what every other control in this theme
+ * is drawn with.
+ */
+[data-theme="toybox"] {
+  --track: rgba(26, 16, 48, 0.16);
+  --knob: #1a1030;
+}
+[data-theme="toybox"] .hist span { background: linear-gradient(180deg, var(--neon2), rgba(160, 92, 255, 0.3)); }

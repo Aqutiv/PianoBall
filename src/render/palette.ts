@@ -1,4 +1,5 @@
 import { pitchClass } from '../midi/notes';
+import { getTheme } from './themes';
 
 /**
  * Pitch classes get their own hue, walking the circle of fifths rather than
@@ -12,9 +13,27 @@ export function pitchHue(note: number): number {
   return ((idx < 0 ? 0 : idx) / 12) * 360;
 }
 
-export function pitchColor(note: number, sat = 78, light = 62, alpha = 1): string {
-  const h = pitchHue(note);
-  return alpha >= 1 ? `hsl(${h} ${sat}% ${light}%)` : `hsl(${h} ${sat}% ${light}% / ${alpha})`;
+export function pitchColor(note: number, sat?: number, light?: number, alpha = 1): string {
+  const t = getTheme().tone;
+  return tone(pitchHue(note), sat ?? t.sat, light ?? t.light, alpha);
+}
+
+/**
+ * An `hsl()` colour, bent by the active theme.
+ *
+ * Nearly every emissive thing on the canvas is pitch-coloured — ribbons,
+ * blooms, auras, key highlights, the piano roll — and each call site used to
+ * carry its own saturation and lightness. Routing them all through here means
+ * a theme moves the whole emissive field with three numbers instead of needing
+ * a token per call site, and Nocturne's identity curve leaves every one of
+ * them exactly as it was.
+ */
+export function tone(hue: number, sat: number, light: number, alpha = 1): string {
+  const t = getTheme().tone;
+  const h = (hue + t.hueShift) % 360;
+  const s = Math.min(100, Math.max(0, sat * t.satScale));
+  const l = Math.min(100, Math.max(0, light * t.lightScale));
+  return alpha >= 1 ? `hsl(${h} ${s}% ${l}%)` : `hsl(${h} ${s}% ${l}% / ${alpha})`;
 }
 
 /**

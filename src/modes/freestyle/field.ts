@@ -1,6 +1,7 @@
 import type { Stage } from '../../render/stage';
 import type { KeyGeom } from '../../game/keyLayout';
 import { tracePath, fillPoly } from '../../render/geom';
+import { tone } from '../../render/palette';
 import { pitchClass } from '../../midi/notes';
 import { clamp01, TAU, lerp } from '../../core/math';
 import { FIELD } from '../../render/field';
@@ -242,7 +243,7 @@ export class Field {
         const x = FIELD.width / 2 + Math.sin(phase + u * 3.1) * (150 + band * 90);
         pts.push({ x: this.sway(x, y), y });
       }
-      em.strokeStyle = `hsl(${hue} 70% 62%)`;
+      em.strokeStyle = tone(hue, 70, 62);
       em.globalAlpha = lively * (1 - band * 0.18);
       em.lineWidth = 64 - band * 9;
       em.lineCap = 'round';
@@ -279,7 +280,7 @@ export class Field {
         right.push({ x: x + w, y });
       }
       em.globalAlpha = fade * 0.5;
-      em.fillStyle = `hsl(${r.hue} 90% ${58 + r.repeat * 2}%)`;
+      em.fillStyle = tone(r.hue, 90, 58 + r.repeat * 2);
       fillPoly(em, cam, left.concat(right.reverse()), 5, em.fillStyle);
     }
     em.restore();
@@ -347,7 +348,7 @@ export class Field {
     em.lineWidth = 2.4;
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        em.strokeStyle = `hsl(${this.stage.hue(this.chordPcs[i])} 92% 66%)`;
+        em.strokeStyle = tone(this.stage.hue(this.chordPcs[i]), 92, 66);
         tracePath(em, cam, [verts[i], verts[j]], 26);
         em.stroke();
       }
@@ -355,7 +356,7 @@ export class Field {
 
     em.globalAlpha = this.chordFade * 0.8;
     em.lineWidth = 3.4;
-    em.strokeStyle = `hsl(${this.stage.hue(root)} 95% 72%)`;
+    em.strokeStyle = tone(this.stage.hue(root), 95, 72);
     tracePath(em, cam, verts, 26, true);
     em.stroke();
 
@@ -366,7 +367,7 @@ export class Field {
 
     if (this.chordName) {
       this.stage.label(this.stage.ctx, this.sway(cx, cy), cy, 26,
-        this.chordName, `hsl(${this.stage.hue(root)} 95% 82%)`, this.chordFade * 0.9);
+        this.chordName, tone(this.stage.hue(root), 95, 82), this.chordFade * 0.9);
     }
   }
 

@@ -1,5 +1,5 @@
 import { tracePath, fillPoly } from './geom';
-import { mix } from './palette';
+import { mix, tone } from './palette';
 import type { Stage } from './stage';
 import type { KeyDeck, KeyLit } from '../game/keys';
 import type { Vec2 } from '../physics/vec2';
@@ -31,6 +31,7 @@ export function drawKeys(
 ): void {
   const cam = stage.cam;
   const pal = stage.palette;
+  const km = stage.theme.keys;
   const labels = opts.labels ?? stage.quality.labels;
 
   for (const pass of [false, true]) {
@@ -56,10 +57,10 @@ export function drawKeys(
       const hue = stage.hue(g.note);
 
       // Side walls, then the face.
-      const lo = g.black ? '#05060f' : '#171d33';
+      const lo = g.black ? km.blackSide : km.whiteSide;
       const hi = g.black
-        ? mix('#1b2038', `hsl(${hue} 70% 30%)`, 0.35 + glow * 0.5)
-        : mix('#cfd8f0', `hsl(${hue} 85% 74%)`, glow * 0.75 + held * 0.12);
+        ? mix(km.blackTop, tone(hue, 70, 30), 0.35 + glow * 0.5)
+        : mix(km.whiteTop, tone(hue, 85, 74), glow * 0.75 + held * 0.12);
       for (let i = 0; i <= 6; i++) {
         const t = i / 6;
         fillPoly(ctx, cam, quad, zTop * t, mix(lo, hi, t * t * 0.7 + 0.15));
@@ -70,19 +71,19 @@ export function drawKeys(
       cam.project(quad[2].x, quad[2].y, zTop, p1);
       const face = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
       if (g.black) {
-        face.addColorStop(0, mix('#2a3150', `hsl(${hue} 80% 46%)`, glow * 0.85));
-        face.addColorStop(1, '#0b0e1c');
+        face.addColorStop(0, mix(km.blackFaceHi, tone(hue, 80, 46), glow * 0.85));
+        face.addColorStop(1, km.blackFaceLo);
       } else {
-        face.addColorStop(0, mix('#f2f5ff', `hsl(${hue} 95% 82%)`, glow * 0.9));
-        face.addColorStop(1, mix('#9aa6cb', `hsl(${hue} 60% 58%)`, glow * 0.5));
+        face.addColorStop(0, mix(km.whiteFaceHi, tone(hue, 95, 82), glow * 0.9));
+        face.addColorStop(1, mix(km.whiteFaceLo, tone(hue, 60, 58), glow * 0.5));
       }
       fillPoly(ctx, cam, quad, zTop, face);
 
       // Lit front lip: the edge the ball actually strikes.
       tracePath(ctx, cam, [quad[0], quad[1]], zTop);
       ctx.strokeStyle = g.black
-        ? `hsl(${hue} ${40 + glow * 55}% ${28 + glow * 52}%)`
-        : `hsl(${hue} ${34 + glow * 62}% ${64 + glow * 30}%)`;
+        ? tone(hue, 40 + glow * 55, 28 + glow * 52)
+        : tone(hue, 34 + glow * 62, 64 + glow * 30);
       ctx.lineWidth = Math.max(1, 3 * cam.scaleAt(g.cx, g.cy));
       ctx.lineCap = 'round';
       ctx.stroke();

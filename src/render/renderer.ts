@@ -1,24 +1,23 @@
 import type { TableCamera } from './project';
 import { tracePath, arcPoints, circlePoints, extrudeStroke, fillPoly } from './geom';
-import { mix, withAlpha, pitchColor } from './palette';
+import { mix, withAlpha, pitchColor, tone } from './palette';
 import type { Stage, RenderQuality } from './stage';
 import { drawKeys } from './keys';
 import type { Game } from '../game/game';
-import type { WallStyle, TablePalette } from '../game/table/schema';
+import type { WallStyle } from '../game/table/schema';
+import type { Theme } from './theme';
 import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
 
-/** Bottom and top colours of each extruded wall style. */
-function wallColors(style: WallStyle, pal: TablePalette): [string, string] {
-  switch (style) {
-    case 'metal': return ['#141a30', '#a9bbe8'];
-    case 'rubber': return ['#2b0f2c', '#ff7fae'];
-    case 'sling': return ['#2b0f2c', '#ff9ec0'];
-    case 'neon': return [withAlpha(pal.neon, 0.15), pal.neon];
-    case 'wood': return ['#20160f', '#8a6a4a'];
-    default: return [pal.rail, pal.railTop];
-  }
+/**
+ * Bottom and top colours of each extruded wall style.
+ *
+ * Was a switch of literals; the theme now carries the whole table, so a look
+ * can say what metal and rubber mean to it without touching the renderer.
+ */
+function wallColors(style: WallStyle, theme: Theme): [string, string] {
+  return theme.walls[style] ?? theme.walls.rail;
 }
 
 /**
@@ -50,13 +49,13 @@ export class PinballRenderer {
     if (!this.stage.needsBake(game.def.id)) return;
 
     const ctx = this.stage.baked.ctx;
-    const pal = game.def.palette;
+    const pal = this.stage.palette;
     const H = game.def.height;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.cssW, this.cssH);
 
     this.stage.measureBounds(game.def.outline);
-    this.bakeCabinet(ctx, game);
+    this.bakeCabinet(ctx);
 
     // --- Playfield surface ---
     const corners: Vec2[] = game.def.outline;
@@ -104,7 +103,7 @@ export class PinballRenderer {
       const pts = wall.kind === 'arc'
         ? arcPoints(wall.c!.x, wall.c!.y, wall.r!, wall.a0!, wall.a1!)
         : wall.points!;
-      const [lo, hi] = wallColors(wall.style, pal);
+      const [lo, hi] = wallColors(wall.style, this.stage.theme);
       const scale = this.cam.scaleAt(pts[0].x, pts[0].y);
       const width = wall.thickness * 2 * scale;
 
@@ -134,8 +133,8 @@ export class PinballRenderer {
    * empty; filling it with the machine itself is both truer to the subject and
    * a place to put the piano roll.
    */
-  private bakeCabinet(ctx: CanvasRenderingContext2D, game: Game): void {
-    const pal = game.def.palette;
+  private bakeCabinet(ctx: CanvasRenderingContext2D): void {
+    const pal = this.stage.palette;
     const { minX, maxX } = this.bounds;
     const w = this.cssW, h = this.cssH;
 
@@ -231,8 +230,6 @@ export class PinballRenderer {
 
   draw(game: Game, alpha: number, dt: number): void {
     const stage = this.stage;
-    // The table owns the colours while it is on screen.
-    stage.palette = game.def.palette;
 
     this.bake(game);
     stage.beginFrame(dt);
@@ -257,7 +254,8 @@ export class PinballRenderer {
   // ----------------------------------------------------------- elements ---
 
   private drawElement(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, el: Game['table']['elements'][number]): void {
-    const pal = game.def.palette;
+    const pal = this.stage.palette;
+    const mat = this.stage.theme.elements;
     const energised = el.energisedUntil > game.time;
     const hue = el.note !== null ? this.hue(el.note) : 205;
     const flash = el.flash;
@@ -265,9 +263,10 @@ export class PinballRenderer {
     switch (el.kind) {
       case 'post': {
         this.stage.groundShadow(ctx, el.x, el.y, el.r, el.z);
-        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * 0.7, '#1a1030', '#3b2a58');
-        this.stage.column(ctx, el.x, el.y, el.r * 1.12, el.z * 0.7, el.z, '#61245a', '#ff86b4');
-        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.62, el.z + 1, '#ffd0e4');
+        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * 0.7, mat.postLo, mat.postHi);
+        this.stage.column(ctx, el.x, el.y, el.r * 1.12, el.z * 0.7, el.z, mat.sleeveLo, mat.sleeveHi);
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.62, el.z + 1, mat.sleeveCap);
+        this.stage.outlineDisc(ctx, el.x, el.y, el.r * 1.12, el.z);
         if (flash > 0) this.stage.halo(em, el.x, el.y, el.z, 330, el.r * 3, flash * 0.7);
         break;
       }
@@ -279,7 +278,7 @@ export class PinballRenderer {
         // Painted skirt ring on the playfield.
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25));
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.22, 1, withAlpha(pal.void, 0.55));
-        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, '#171c38', mix('#39406e', pitchColor(el.note ?? 60, 70, 46), 0.55));
+        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, mat.bumperLo, mix(mat.bumperHi, pitchColor(el.note ?? 60, 70, 46), 0.55));
 
         const p = { x: 0, y: 0 };
         this.cam.project(el.x, el.y, el.z * squash, p);
@@ -287,11 +286,12 @@ export class PinballRenderer {
         const rr = el.r * scale;
         const cap = ctx.createRadialGradient(p.x - rr * 0.35, p.y - rr * 0.45, rr * 0.1, p.x, p.y, rr * 1.15);
         const capHue = hue;
-        cap.addColorStop(0, `hsl(${capHue} 100% ${88 - flash * 6}%)`);
-        cap.addColorStop(0.45, `hsl(${capHue} 88% ${62 + pulse * 14}%)`);
-        cap.addColorStop(1, `hsl(${capHue} 70% ${26}%)`);
+        cap.addColorStop(0, tone(capHue, 100, 88 - flash * 6));
+        cap.addColorStop(0.45, tone(capHue, 88, 62 + pulse * 14));
+        cap.addColorStop(1, tone(capHue, 70, 26));
         this.stage.fillDisc(ctx, el.x, el.y, el.r, el.z * squash, cap);
-        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, `hsl(${capHue} 100% 96% / ${0.5 + pulse * 0.5})`);
+        this.stage.outlineDisc(ctx, el.x, el.y, el.r, el.z * squash);
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, tone(capHue, 100, 96, 0.5 + pulse * 0.5));
 
         this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5);
         if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55);
@@ -308,7 +308,7 @@ export class PinballRenderer {
         ctx.stroke();
         ctx.globalAlpha = 1;
         extrudeStroke(ctx, this.cam, pts, 0, el.z, w,
-          (t) => mix('#2b0f2c', flash > 0 ? '#ffd9e8' : '#ff7fae', t * 0.9 + 0.1), false, 7);
+          (t) => mix(mat.slingLo, flash > 0 ? mat.slingFlash : mat.slingHi, t * 0.9 + 0.1), false, 7);
         this.stage.halo(em, el.x, el.y, el.z, 335, 70, flash * 1.1 + (energised ? 0.35 : 0));
         break;
       }
@@ -326,9 +326,9 @@ export class PinballRenderer {
         }
         this.stage.groundShadow(ctx, el.x, el.y, el.r * 0.6, el.z, 0.7);
         extrudeStroke(ctx, this.cam, pts, 0, el.z, 11 * scale,
-          (t) => mix('#101534', `hsl(${hue} 82% ${52 + flash * 30}%)`, t * 0.95 + 0.05), false, 7);
+          (t) => mix(mat.targetLo, tone(hue, 82, 52 + flash * 30), t * 0.95 + 0.05), false, 7);
         tracePath(ctx, this.cam, pts, el.z);
-        ctx.strokeStyle = `hsl(${hue} 100% ${78 + flash * 20}%)`;
+        ctx.strokeStyle = tone(hue, 100, 78 + flash * 20);
         ctx.lineWidth = 3.5 * scale;
         ctx.stroke();
         this.stage.halo(em, el.x, el.y, el.z, hue, 54, flash + (energised ? 0.4 : 0));
@@ -341,9 +341,10 @@ export class PinballRenderer {
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.18, 0.4, withAlpha(pal.railTop, 0.3));
         this.stage.fillDisc(ctx, el.x, el.y, el.r, 0.8, withAlpha(pal.void, 0.75));
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.84, 1.2,
-          lit ? `hsl(${hue} 96% 66%)` : `hsl(${hue} 55% 34%)`);
+          lit ? tone(hue, 96, 66) : tone(hue, 55, 34));
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.46, 1.6,
-          lit ? `hsl(${hue} 100% 88%)` : `hsl(${hue} 45% 44%)`);
+          lit ? tone(hue, 100, 88) : tone(hue, 45, 44));
+        this.stage.outlineDisc(ctx, el.x, el.y, el.r * 0.84, 1.2);
         this.stage.halo(em, el.x, el.y, 2, hue, el.r * 2.6, (lit ? 0.55 : 0.12) + flash);
         break;
       }
@@ -352,19 +353,19 @@ export class PinballRenderer {
         const scale = this.cam.scaleAt(el.x, el.y);
         const open = Math.abs(Math.cos(el.spin));
         // Posts either side of the blade.
-        for (const end of [el.a, el.b]) this.stage.column(ctx, end.x, end.y, 7, 0, el.z, '#161b33', '#93a6dc', 6);
+        for (const end of [el.a, el.b]) this.stage.column(ctx, end.x, end.y, 7, 0, el.z, mat.spinnerLo, mat.spinnerHi, 6);
         // The blade foreshortens as it spins, which is what reads as rotation.
         const z0 = el.z * (0.52 - open * 0.42), z1 = el.z * (0.52 + open * 0.46);
         for (let i = 0; i <= 6; i++) {
           const t = i / 6;
           tracePath(ctx, this.cam, [el.a, el.b], z0 + (z1 - z0) * t);
-          ctx.strokeStyle = mix('#1d2444', `hsl(${hue} 85% ${58 + flash * 32}%)`, t * 0.9 + 0.1);
+          ctx.strokeStyle = mix(mat.rolloverLo, tone(hue, 85, 58 + flash * 32), t * 0.9 + 0.1);
           ctx.lineWidth = Math.max(1, 7 * scale);
           ctx.lineCap = 'butt';
           ctx.stroke();
         }
         tracePath(ctx, this.cam, [el.a, el.b], z1);
-        ctx.strokeStyle = `hsl(${hue} 100% ${80}%)`;
+        ctx.strokeStyle = tone(hue, 100, 80);
         ctx.lineWidth = Math.max(1, 2.2 * scale);
         ctx.stroke();
         this.stage.halo(em, el.x, el.y, el.z * 0.5, hue, 60, flash * 0.8 + Math.min(0.5, Math.abs(el.spinRate) * 0.03));
@@ -412,7 +413,7 @@ export class PinballRenderer {
           em.beginPath();
           em.moveTo(p.x, p.y);
           em.lineTo(q.x, q.y);
-          em.strokeStyle = `rgba(148, 198, 255, ${strength * f * f * 0.55})`;
+          em.strokeStyle = withAlpha(this.stage.theme.ball.streak, strength * f * f * 0.55);
           em.lineWidth = Math.max(0.5, r * 0.95 * f);
           em.stroke();
         }
@@ -425,22 +426,22 @@ export class PinballRenderer {
       // Chrome: dark limb, bright lit side, a hard specular and a rim kick.
       const lx = p.x - r * 0.42, ly = p.y - r * 0.5;
       const body = ctx.createRadialGradient(lx, ly, r * 0.06, p.x, p.y, r * 1.08);
-      body.addColorStop(0, '#ffffff');
-      body.addColorStop(0.2, '#e8efff');
-      body.addColorStop(0.46, '#93a4c9');
-      body.addColorStop(0.72, '#2d3450');
-      body.addColorStop(0.93, '#0d1122');
-      body.addColorStop(1, '#05070f');
+      const chrome = this.stage.theme.ball;
+      const STOPS = [0, 0.2, 0.46, 0.72, 0.93, 1] as const;
+      chrome.body.forEach((c, i) => body.addColorStop(STOPS[i], c));
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, r, r, 0, 0, TAU);
       ctx.fillStyle = body;
       ctx.fill();
       // Contact occlusion: a dark ring that seats the ball on the playfield.
-      ctx.globalAlpha = 0.5;
+      // An outlined theme wants that ring opaque and even, as a drawn edge
+      // rather than as shading, so it takes the outline colour and weight.
+      const ring = this.stage.theme.outline;
+      ctx.globalAlpha = ring ? 1 : 0.5;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, r * 1.02, r * 1.02, 0, 0, TAU);
-      ctx.strokeStyle = '#04060e';
-      ctx.lineWidth = Math.max(1, r * 0.14);
+      ctx.strokeStyle = ring ? ring.color : chrome.edge;
+      ctx.lineWidth = Math.max(1, ring ? ring.width : r * 0.14);
       ctx.stroke();
       ctx.globalAlpha = 1;
 
@@ -450,7 +451,7 @@ export class PinballRenderer {
       ctx.ellipse(p.x, p.y, r, r, 0, 0, TAU);
       ctx.clip();
       ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = '#0b1020';
+      ctx.strokeStyle = chrome.seam;
       ctx.lineWidth = r * 0.3;
       ctx.beginPath();
       ctx.ellipse(p.x, p.y + r * 0.22, r * 1.15, r * 0.42, ball.angle * 0.25, 0, TAU);
@@ -465,7 +466,7 @@ export class PinballRenderer {
       ctx.globalAlpha = 0.5;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r * 0.96, 0.6, 2.4);
-      ctx.strokeStyle = '#9fd0ff';
+      ctx.strokeStyle = chrome.rim;
       ctx.lineWidth = Math.max(1, r * 0.1);
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -475,7 +476,7 @@ export class PinballRenderer {
         ctx.globalAlpha = 0.5 + Math.sin(this.t * 8) * 0.22;
         ctx.beginPath();
         ctx.ellipse(p.x, p.y, r * 1.55, r * 1.28, 0, 0, TAU);
-        ctx.strokeStyle = '#63ffc4';
+        ctx.strokeStyle = chrome.save;
         ctx.lineWidth = Math.max(1, r * 0.12);
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -497,7 +498,7 @@ export class PinballRenderer {
       ctx.globalAlpha = 1 - age * age;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = `hsl(${pop.tone * 360} 92% 78%)`;
+      ctx.fillStyle = tone(pop.tone * 360, 92, 78);
       ctx.font = `700 ${Math.max(11, (pop.label ? 20 : 17) * scale)}px ui-sans-serif, system-ui, sans-serif`;
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 8;

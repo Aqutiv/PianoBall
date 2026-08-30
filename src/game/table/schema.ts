@@ -99,7 +99,6 @@ export interface TableDef {
   width: number;
   height: number;
   music: MusicDef;
-  palette: TablePalette;
   /** Where a new ball is held before the player serves it. */
   serve: Vec2;
   /**

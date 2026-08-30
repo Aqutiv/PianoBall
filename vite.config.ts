@@ -56,8 +56,11 @@ export default defineConfig({
         name: 'PianoBall',
         short_name: 'PianoBall',
         description: 'Musical pinball played with a MIDI keyboard.',
-        theme_color: '#080a16',
-        background_color: '#080a16',
+        // Nocturne's void, matching the <meta name="theme-color"> in index.html.
+        // These two disagreed for a long time; `applyTheme` now also rewrites
+        // the meta tag at runtime, so a themed session tints the browser too.
+        theme_color: '#04050d',
+        background_color: '#04050d',
         display: 'fullscreen',
         display_override: ['fullscreen', 'standalone'],
         orientation: 'any',
