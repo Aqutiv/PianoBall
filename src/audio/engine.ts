@@ -29,6 +29,9 @@ export interface AudioSettings {
  */
 export type ModTarget = 'vibrato' | 'colour' | 'both';
 
+/** Whether the keys sound as an instrument or as the backing layer itself. */
+export type KeyVoicing = 'lead' | 'bed';
+
 export const DEFAULT_AUDIO: AudioSettings = {
   master: 0.85,
   music: 0.6,
@@ -65,6 +68,23 @@ const IMPACTS: Record<string, ImpactProfile> = {
 };
 
 const MAX_VOICES = 48;
+
+/**
+ * Shape of a key played as the bed, in seconds.
+ *
+ * The attack is the number that matters and it is a compromise: a pad that
+ * swells the way the backing does would land audibly after the beat, and the
+ * chord role is still judged on timing. Thirty-five milliseconds reads as a
+ * swell rather than a strike while staying well inside the perfect window,
+ * which is 55.
+ */
+const BED_KEY_ATTACK = 0.035;
+/** Long enough that letting a chord go sounds like a decision, not a cut. */
+const BED_KEY_RELEASE = 0.85;
+/** How long the filter takes to settle back while the key is still down. */
+const BED_KEY_SETTLE = 1.6;
+/** Pads sit further back in the room than struck notes do. */
+const BED_KEY_REVERB = 0.42;
 
 /** Wet gain at a full reverb setting. Half of it is the original fixed value. */
 const REVERB_MAX = 1.7;
@@ -167,6 +187,10 @@ export class AudioEngine {
   private bedId = DEFAULT_BED_VOICE;
   private leadSpec: VoiceSpec = findLeadVoice(DEFAULT_LEAD_VOICE).spec;
   private bedSpec: BedSpec = findBedVoice(DEFAULT_BED_VOICE).spec;
+  /** The bed instrument the keys take while `keyVoicing` is `bed`. */
+  private keyBedId = DEFAULT_BED_VOICE;
+  private keyBedSpec: BedSpec = findBedVoice(DEFAULT_BED_VOICE).spec;
+  private keyVoicingMode: KeyVoicing = 'lead';
 
   constructor() {
     const stored = load<Partial<AudioSettings>>(AUDIO_STORAGE_KEY, {});
@@ -370,8 +394,34 @@ export class AudioEngine {
     this.bedSpec = voice.spec;
   }
 
+  /**
+   * The instrument the keys take when they are voiced as a bed.
+   *
+   * Its own setting rather than `bedVoice`, because when the player is the one
+   * holding the chords both parts are bed voices at once: this is what is under
+   * their hands, `bedVoice` is what the game is playing against them, and the
+   * two have to be different sounds or neither can be picked out.
+   */
+  setKeyBedVoice(id: string): void {
+    const voice = findBedVoice(id);
+    this.keyBedId = voice.id;
+    this.keyBedSpec = voice.spec;
+  }
+
+  /**
+   * Whether a pressed key sounds like an instrument or like the bed.
+   *
+   * PlayTune's chord role is the reason this exists. The player there is not
+   * playing notes that happen to be a chord, they are playing the layer the
+   * game plays everywhere else — so it should be that layer, swelling and
+   * sustaining, rather than a lead struck three times at once.
+   */
+  setKeyVoicing(mode: KeyVoicing): void { this.keyVoicingMode = mode; }
+
   get leadVoice(): string { return this.leadId; }
   get bedVoice(): string { return this.bedId; }
+  get keyBedVoice(): string { return this.keyBedId; }
+  get keyVoicing(): KeyVoicing { return this.keyVoicingMode; }
 
   /**
    * Point the tempo-locked effects at a new tempo.
@@ -434,6 +484,7 @@ export class AudioEngine {
   /** A pressed key. Velocity drives loudness *and* brightness. */
   noteOn(note: number, velocity: number, pan = 0): void {
     if (!this.running || !this.ctx) return;
+    if (this.keyVoicingMode === 'bed') { this.bedKeyOn(note, velocity, pan); return; }
     const ctx = this.ctx;
     const t = ctx.currentTime;
     this.noteOff(note, true);
@@ -536,6 +587,89 @@ export class AudioEngine {
 
     const voice: KeyVoice = {
       note, startedAt: t, oscs, filter, amp, release: env.release, releasing: false,
+    };
+    this.voices.set(note, voice);
+    this.active.push(voice);
+    this.cull();
+  }
+
+  /**
+   * A pressed key, voiced as the bed rather than as an instrument.
+   *
+   * A `pad` is fire-and-forget: it is handed a length up front, which is right
+   * for a scheduler and useless for a key, because nobody knows how long the
+   * key will be down. So this builds the same oscillators out of the same
+   * `BedSpec` but as a tracked voice — it swells in, holds, and releases when
+   * the finger lifts, and it goes into `voices`/`active` alongside every other
+   * key so culling, the sustain pedal and `allNotesOff` reach it unchanged.
+   *
+   * On `musicBus` and not `padBus` on purpose. The pad bus is what the backing
+   * is muted and faded by, and the player's own hands are not the backing.
+   */
+  private bedKeyOn(note: number, velocity: number, pan: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    this.noteOff(note, true);
+
+    const v = clamp01(velocity);
+    const freq = noteToFreq(note);
+    const spec = this.keyBedSpec;
+    const cut = spec.filter;
+
+    const amp = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+
+    const oscs: OscillatorNode[] = [];
+    for (const layer of spec.layers) {
+      const osc = ctx.createOscillator();
+      osc.type = layer.type;
+      osc.frequency.setValueAtTime(freq * layer.ratio, t);
+      if (layer.detune) osc.detune.setValueAtTime(layer.detune, t);
+      const g = ctx.createGain();
+      g.gain.value = layer.level;
+      osc.connect(g).connect(filter);
+      osc.start(t);
+      oscs.push(osc);
+    }
+
+    for (const osc of oscs) {
+      this.bendSource.connect(osc.detune);
+      this.lfoVibrato.connect(osc.detune);
+    }
+    this.lfoColour.connect(filter.frequency);
+
+    const pannerNode = ctx.createStereoPanner();
+    pannerNode.pan.value = clamp(pan, -1, 1);
+    filter.connect(amp).connect(pannerNode);
+    pannerNode.connect(this.musicBus);
+    // A pad lives further back in the room than a struck note does.
+    const rev = ctx.createGain(); rev.gain.value = BED_KEY_REVERB * (1 + v * 0.5);
+    pannerNode.connect(rev).connect(this.reverbSend);
+
+    // Swelled, not struck — but only just. A real pad attack would put the
+    // sound behind the beat it was played on, and this is a rhythm game: the
+    // press still has to be audible where the finger put it. Harder presses
+    // arrive sooner, so playing into the key is how you sharpen it.
+    const attack = BED_KEY_ATTACK * (1 - v * 0.45);
+    const peak = (0.035 + v * 0.06) * spec.gain;
+    amp.gain.setValueAtTime(0.0001, t);
+    amp.gain.exponentialRampToValueAtTime(peak, t + attack);
+    // A plucked bed voice is a plucked thing whoever is holding the key: a harp
+    // that sustained until release would not be a harp.
+    if (spec.pluck) amp.gain.exponentialRampToValueAtTime(0.0001, t + spec.pluck);
+
+    filter.frequency.setValueAtTime(cut.start, t);
+    filter.frequency.linearRampToValueAtTime(cut.peak * (0.55 + v * 0.6), t + attack + 0.12);
+    // Settling part of the way back rather than all the way to `end`: the note
+    // is still being held, so it darkens without going out.
+    filter.frequency.linearRampToValueAtTime(
+      cut.end + (cut.peak - cut.end) * 0.35, t + BED_KEY_SETTLE);
+    filter.Q.value = cut.q;
+
+    const voice: KeyVoice = {
+      note, startedAt: t, oscs, filter, amp, release: BED_KEY_RELEASE, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);

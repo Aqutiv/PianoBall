@@ -445,6 +445,25 @@ kbd {
 
 /* ------------------------------------------------------------ song list --- */
 
+/* Which half of the arrangement you are playing. A pair of tabs rather than a
+   toggle: they are two curves side by side, not one setting turned on. */
+.role-switch { display: flex; gap: 6px; margin: 10px 0 2px; }
+.role-switch .role {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--stroke);
+  color: var(--dim);
+}
+.role-switch .role:hover { background: rgba(255, 255, 255, 0.09); }
+.role-switch .role.on {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .song-list { display: grid; gap: 7px; margin: 14px 0 4px; max-height: 46vh; overflow: auto; padding-right: 4px; }
 
 .song-card {

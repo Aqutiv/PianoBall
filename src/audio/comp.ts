@@ -18,6 +18,16 @@ export type CompPattern =
 export const COMP_PATTERNS: CompPattern[] =
   ['sustain', 'pulse', 'march', 'waltz', 'broken', 'arpeggio', 'compound'];
 
+/**
+ * Which part of the accompaniment an event is.
+ *
+ * The bed plays all three and does not care. PlayTune's chord role does: it
+ * asks the player for the `chord` events and keeps the rest, so the part being
+ * learned is the only part the game stops playing. Inferring it from the gain
+ * or the attack would work today and break the first time a pattern is tuned.
+ */
+export type CompPart = 'chord' | 'bass' | 'wash';
+
 export interface CompEvent {
   /** Beats after the chord's own start. */
   offset: number;
@@ -28,6 +38,7 @@ export interface CompEvent {
   gain: number;
   /** Attack in beats, so it scales with tempo like everything else. */
   attack: number;
+  part: CompPart;
 }
 
 /** Gains, kept together because they are only ever chosen against each other. */
@@ -47,8 +58,8 @@ const SWELL = 0.35;
 /** A chord tone plays slightly under a bar-line chord when it is off the beat. */
 const OFFBEAT = 0.78;
 
-function swell(notes: number[], len: number, gain: number): CompEvent {
-  return { offset: 0, len: len * 1.05, notes, gain, attack: len * SWELL };
+function swell(notes: number[], len: number, gain: number, part: CompPart): CompEvent {
+  return { offset: 0, len: len * 1.05, notes, gain, attack: len * SWELL, part };
 }
 
 /**
@@ -60,8 +71,8 @@ function swell(notes: number[], len: number, gain: number): CompEvent {
  */
 function wash(voiced: number[], root: number, len: number): CompEvent[] {
   return [
-    swell(voiced, len, WASH),
-    swell([root - 12], len, WASH * 0.8),
+    swell(voiced, len, WASH, 'wash'),
+    swell([root - 12], len, WASH * 0.8, 'wash'),
   ];
 }
 
@@ -106,8 +117,10 @@ export function compEvents(
   const bass = root - 12;
   const phase = mod(barPhase, beatsPerBar);
 
+  // The chord swell here is a `chord` and not a `wash`: it is the whole of what
+  // this pattern plays, and it is what the chord role means by a block chord.
   if (pattern === 'sustain') {
-    return [swell(notes, chordLen, PAD), swell([bass], chordLen, PAD_BASS)];
+    return [swell(notes, chordLen, PAD, 'chord'), swell([bass], chordLen, PAD_BASS, 'bass')];
   }
 
   const out: CompEvent[] = wash(notes, root, chordLen);
@@ -116,10 +129,10 @@ export function compEvents(
   const low = (offset: number, len: number) => {
     if (lows.has(offset)) return;
     lows.add(offset);
-    out.push({ offset, len: Math.min(len, chordLen - offset), notes: [bass], gain: BASS, attack: STAB });
+    out.push({ offset, len: Math.min(len, chordLen - offset), notes: [bass], gain: BASS, attack: STAB, part: 'bass' });
   };
   const stab = (offset: number, len: number, gain: number, ns = notes) =>
-    out.push({ offset, len: Math.min(len, chordLen - offset), notes: ns, gain, attack: STAB });
+    out.push({ offset, len: Math.min(len, chordLen - offset), notes: ns, gain, attack: STAB, part: 'chord' });
 
   // A rolled chord, one tone at a time. Quavers where there is room for them,
   // crotchets where the tempo already fills the bar — the same left hand, at

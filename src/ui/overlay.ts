@@ -9,9 +9,10 @@ import type { ModTarget } from '../audio/engine';
 import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
 import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
 import { loadProgress, resetProgress } from '../modes/playtune/progress';
-import { TUNE_ORDER } from '../modes/playtune/library';
+import { CHORDS_ROLE, MELODY_ROLE, type RoleId, type TuneRole } from '../modes/playtune/role';
+import type { PlayTuneMode } from '../modes/playtune/playtune';
 import type { Tune } from '../modes/playtune/chart';
-import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice } from '../audio/voices';
+import { findBedVoice, findLeadVoice } from '../audio/voices';
 
 export type Screen =
   | 'home'
@@ -229,24 +230,32 @@ export class Overlay {
    * solo piano work *is* a felt piano, and saying it twice reads as a fault
    * rather than as an arrangement.
    */
-  private voiceLine(tune: Tune): string {
-    const lead = findLeadVoice(tune.voiceId ?? DEFAULT_LEAD_VOICE).name;
-    const bed = findBedVoice(tune.bedVoiceId ?? DEFAULT_BED_VOICE).name;
-    return lead === bed ? lead : `${lead} over ${bed}`;
+  private voiceLine(tune: Tune, mode: PlayTuneMode): string {
+    // Through the role, because the chord role puts the player on the
+    // accompaniment's timbre and the game's tune on the other one — so the two
+    // halves of this line change places between the tabs.
+    const v = mode.role.voices(tune);
+    const keys = v.keyVoicing === 'bed' ? findBedVoice(v.keys).name : findLeadVoice(v.keys).name;
+    const backing = findBedVoice(v.backing).name;
+    return keys === backing ? keys : `${keys} over ${backing}`;
   }
 
   private renderSongs(): void {
     const mode = this.shell.playtune;
     if (!mode) { this.show('home'); return; }
     const progress = mode.progress;
+    const role = mode.role;
 
     const cards = mode.tunes.map((tune, i) => {
       const unlocked = progress.unlocked.includes(tune.id);
       const best = progress.best[tune.id];
       const fits = mode.fitFor(tune) !== null;
       const previous = i > 0 ? mode.tunes[i - 1].title : null;
+      // The card describes the part being played, not the piece: Canon in D is
+      // five pips of melody and three of chords, and says so.
+      const card = role.card(tune);
       const pips = Array.from({ length: 5 }, (_, d) =>
-        `<i class="${d < tune.difficulty ? 'on' : ''}"></i>`).join('');
+        `<i class="${d < card.difficulty ? 'on' : ''}"></i>`).join('');
 
       const state = !unlocked
         ? `<span class="song-locked">Pass ${previous} to unlock</span>`
@@ -261,17 +270,19 @@ export class Overlay {
           ${unlocked && fits ? '' : 'disabled'}>
           <span class="song-name">${tune.title}</span>
           <span class="pips">${pips}</span>
-          <span class="song-by">${tune.composer} <i>${this.voiceLine(tune)}</i></span>
-          <span class="song-teaches">${tune.teaches}</span>
+          <span class="song-by">${tune.composer} <i>${this.voiceLine(tune, mode)}</i></span>
+          <span class="song-teaches">${card.teaches}</span>
           ${state}
         </button>`;
     }).join('');
 
     const done = mode.tunes.filter((t) => progress.best[t.id]?.grade).length;
+    const tab = (id: RoleId, label: string) =>
+      `<button class="role${role.id === id ? ' on' : ''}" data-role="${id}">${label}</button>`;
     this.body.innerHTML = `
-      <h1>PlayTune</h1>
-      <p class="lede">The game plays the chords. You play the tune on top —
-      press each key as its aura reaches it.</p>
+      <h1>${role.title}</h1>
+      <div class="role-switch">${tab('melody', 'Melody')}${tab('chords', 'Chords')}</div>
+      <p class="lede">${role.lede}</p>
       <p class="diag">${progress.unlocked.length} of ${mode.tunes.length} unlocked &middot; ${done} passed</p>
       <div class="song-list">${cards}</div>
       <div class="actions">
@@ -280,6 +291,14 @@ export class Overlay {
       </div>
     `;
 
+    for (const el of Array.from(this.body.querySelectorAll<HTMLElement>('.role'))) {
+      el.addEventListener('click', () => {
+        // `setRole` abandons any run, saves the choice and reloads that role's
+        // unlocks; redrawing the screen is all that is left to do.
+        mode.setRole(el.dataset.role as RoleId);
+        this.show('songs');
+      });
+    }
     for (const el of Array.from(this.body.querySelectorAll<HTMLElement>('.song-card'))) {
       el.addEventListener('click', () => {
         const id = el.dataset.tune!;
@@ -449,6 +468,10 @@ export class Overlay {
         <button id="pt-assist">${tune.assist ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Unlocked tunes</label>
         <span><span class="diag" id="pt-unlocked"></span> <button id="pt-reset">Reset&hellip;</button></span></div>
+      <div class="row"><label>Unlocked chord parts</label>
+        <span><span class="diag" id="pc-unlocked"></span> <button id="pc-reset">Reset&hellip;</button></span></div>
+      <p class="diag">Two chains, because they are two different things to learn.
+        Resetting one leaves the other where it is.</p>
 
       <h2>Display</h2>
       <div class="row"><label>Bloom</label><button id="q-bloom">${stage.quality.bloom ? 'On' : 'Off'}</button></div>
@@ -537,28 +560,36 @@ export class Overlay {
       setPlayTuneSettings({ leadBeats: Number((e.target as HTMLSelectElement).value) }));
     toggle('#pt-assist', () => playTuneSettings().assist, (v) => setPlayTuneSettings({ assist: v }));
 
-    const unlockedEl = $('#pt-unlocked');
-    const paintUnlocked = () => {
-      const mode = this.shell.playtune;
-      const n = mode ? mode.progress.unlocked.length : loadProgress(TUNE_ORDER).unlocked.length;
-      unlockedEl.textContent = `${n} of ${TUNE_ORDER.length}`;
+    // One chain per role, wired the same way. The live mode only takes the
+    // fresh progress if it is the role that was just wiped — the other one is
+    // still holding its own, and handing it this would blank it on screen.
+    const bindReset = (countSel: string, btnSel: string, role: TuneRole) => {
+      const countEl = $(countSel);
+      const paint = () => {
+        const mode = this.shell.playtune;
+        const live = mode && mode.role.id === role.id ? mode.progress : null;
+        const n = (live ?? loadProgress(role.storageKey, role.order)).unlocked.length;
+        countEl.textContent = `${n} of ${role.order.length}`;
+      };
+      paint();
+      const btn = $(btnSel);
+      btn.addEventListener('click', () => {
+        // Two presses, because this is the one setting that destroys something.
+        if (btn.dataset.armed !== 'yes') {
+          btn.dataset.armed = 'yes';
+          btn.textContent = 'Really reset?';
+          return;
+        }
+        const fresh = resetProgress(role.storageKey, role.order);
+        const mode = this.shell.playtune;
+        if (mode && mode.role.id === role.id) mode.progress = fresh;
+        btn.dataset.armed = '';
+        btn.textContent = 'Reset…';
+        paint();
+      });
     };
-    paintUnlocked();
-    const resetBtn = $('#pt-reset');
-    resetBtn.addEventListener('click', () => {
-      // Two presses, because this is the one setting that destroys something.
-      if (resetBtn.dataset.armed !== 'yes') {
-        resetBtn.dataset.armed = 'yes';
-        resetBtn.textContent = 'Really reset?';
-        return;
-      }
-      const fresh = resetProgress(TUNE_ORDER);
-      const mode = this.shell.playtune;
-      if (mode) mode.progress = fresh;
-      resetBtn.dataset.armed = '';
-      resetBtn.textContent = 'Reset…';
-      paintUnlocked();
-    });
+    bindReset('#pt-unlocked', '#pt-reset', MELODY_ROLE);
+    bindReset('#pc-unlocked', '#pc-reset', CHORDS_ROLE);
 
     $('#clear-mon').addEventListener('click', () => input.clearMonitor());
     $('#reset-settings').addEventListener('click', () => {

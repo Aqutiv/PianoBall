@@ -81,9 +81,16 @@ export function lastBeat(tune: Tune): number {
   return end;
 }
 
-export function noteRange(tune: Tune): { low: number; high: number } {
+/**
+ * Lowest and highest note in a chart.
+ *
+ * Takes the notes rather than the tune, because what the player is asked to
+ * play depends on the role: the melody in one, the chords in the other, and
+ * the two have quite different spans.
+ */
+export function noteRange(notes: readonly ChartNote[]): { low: number; high: number } {
   let low = Infinity, high = -Infinity;
-  for (const n of tune.melody) {
+  for (const n of notes) {
     if (n.note < low) low = n.note;
     if (n.note > high) high = n.note;
   }
@@ -91,15 +98,15 @@ export function noteRange(tune: Tune): { low: number; high: number } {
 }
 
 /**
- * Octave shift that puts the whole melody inside the mapped keybed.
+ * Octave shift that puts a whole chart inside the mapped keybed.
  *
  * Tunes are authored around middle C; a 25-key controller starts two octaves
  * below that, and a chart the player cannot physically reach is worse than one
- * transposed. Returns null when the melody simply spans more keys than exist,
+ * transposed. Returns null when the chart simply spans more keys than exist,
  * which the song card says out loud rather than failing at play time.
  */
-export function fitToRange(tune: Tune, low: number, high: number): number | null {
-  const r = noteRange(tune);
+export function fitToRange(notes: readonly ChartNote[], low: number, high: number): number | null {
+  const r = noteRange(notes);
   if (!Number.isFinite(r.low)) return 0;
   if (r.high - r.low > high - low) return null;
 
@@ -116,9 +123,9 @@ export function fitToRange(tune: Tune, low: number, high: number): number | null
   return null;
 }
 
-/** The melody moved by `semitones`, sorted by beat then pitch. */
-export function fittedMelody(tune: Tune, semitones: number): ChartNote[] {
-  return tune.melody
+/** A chart moved by `semitones`, sorted by beat then pitch. */
+export function fitted(notes: readonly ChartNote[], semitones: number): ChartNote[] {
+  return notes
     .map((n) => ({ ...n, note: n.note + semitones }))
     .sort((a, b) => a.beat - b.beat || a.note - b.note);
 }

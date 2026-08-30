@@ -8,14 +8,16 @@ import { clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
 import type { ChartChord, Tune } from './chart';
-import { fitToRange, fittedMelody, lastBeat } from './chart';
+import { fitToRange, fitted, lastBeat } from './chart';
+import { mergedChords } from './chords';
 import { HOLD_FLOOR, Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
 import { Transport } from './transport';
 import { AuraStage } from './render';
 import { TuneHud } from './hud';
-import { LIBRARY, TUNE_ORDER, findTune } from './library';
+import { findTune } from './library';
 import { loadProgress, recordRun, type Progress } from './progress';
-import { playTuneSettings } from './settings';
+import { ROLES, type RoleId, type TuneRole } from './role';
+import { playTuneSettings, setPlayTuneSettings } from './settings';
 
 /** Points a verdict is worth before multipliers. */
 const WORTH: Record<Verdict, number> = {
@@ -24,19 +26,33 @@ const WORTH: Record<Verdict, number> = {
 
 type Phase = 'idle' | 'countin' | 'playing' | 'finished';
 
-/** What a run of notes in a row is worth, capped so a long tune cannot run away. */
-function comboMultiplier(combo: number): number {
-  return 1 + Math.min(6, Math.floor(combo / 8)) * 0.5;
+/**
+ * What a run of notes in a row is worth, capped so a long tune cannot run away.
+ *
+ * `perOnset` is how many notes the chart typically asks for at once, and it
+ * divides the ladder because the combo counts targets and a chord is several of
+ * them. Without it a triad climbs three rungs a strike and a chord run reaches
+ * the cap in a third of the notes a melody needs — which is not a chord player
+ * doing better, it is the same achievement counted three times.
+ */
+function comboMultiplier(combo: number, perOnset = 1): number {
+  return 1 + Math.min(6, Math.floor(combo / (8 * perOnset))) * 0.5;
 }
 
 /**
- * Learning a melody.
+ * Learning a piece from either side of it.
  *
- * The game plays the harmony; the player owes it the tune on top. Auras fall
- * down the lane belonging to the key they are due on, and the only thing being
- * asked is that the key goes down when the aura arrives. Nothing here can end a
- * run early — a tune always plays to its last bar, because the point is to have
- * played it.
+ * In the melody role the game plays the harmony and the player owes it the tune
+ * on top; in the chord role they swap, and the player becomes the accompanist.
+ * Auras fall down the lane belonging to the key they are due on, and the only
+ * thing being asked is that the key goes down when the aura arrives. Nothing
+ * here can end a run early — a tune always plays to its last bar, because the
+ * point is to have played it.
+ *
+ * One class and one mode id for both, because the transport, the judge, the
+ * auras, the HUD and the scoring cannot tell the difference: a chord is three
+ * or four targets that happen to share a beat, and `Judge` has always graded
+ * those independently. `TuneRole` is the whole of what differs.
  */
 export class PlayTuneMode extends ModeBase implements GameMode {
   readonly id: GameModeId = 'playtune';
@@ -44,6 +60,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   progress: Progress;
   tune: Tune | null = null;
   phase: Phase = 'idle';
+  private roleId: RoleId;
 
   private readonly deck = new KeyDeck();
   private readonly auras: AuraStage;
@@ -60,19 +77,70 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private shift = 0;
   /** Whether this run has ever seen a live audio clock. */
   private ranWithAudio = false;
+  /** Mean notes this chart asks for at once, for the combo ladder. */
+  private perOnset = 1;
+  /**
+   * Onset of the last target that shook the screen.
+   *
+   * A chord is several targets on one beat, and each of them used to spend the
+   * whole of an onset's worth of feedback: four kicks, four bursts and four
+   * PERFECT labels stacked on the same frame. The chord is one thing the player
+   * did, so it gets one thing back.
+   */
+  private lastStruck = -1;
 
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
     this.auras = new AuraStage(ctx.stage, this.deck);
     this.panel = new TuneHud(ctx.hud);
-    this.progress = loadProgress(TUNE_ORDER);
+    this.roleId = playTuneSettings().role;
+    this.progress = loadProgress(this.role.storageKey, this.role.order);
     this.remap();
+  }
+
+  get role(): TuneRole { return ROLES[this.roleId]; }
+
+  /**
+   * Take the other half of the arrangement.
+   *
+   * A run in progress is abandoned rather than translated: the chart, the
+   * backing and the instruments are all about to be different things, and there
+   * is no sense in which the player is still part-way through the same attempt.
+   * `tune` goes with it, or Backspace would begin a tune the new role's list
+   * does not contain.
+   */
+  setRole(id: RoleId): void {
+    if (id === this.roleId) return;
+    this.stopRun();
+    this.pending = null;
+    this.tune = null;
+    this.shift = 0;
+    this.roleId = id;
+    setPlayTuneSettings({ role: id });
+    this.progress = loadProgress(this.role.storageKey, this.role.order);
+    this.panel.setTune(null);
   }
 
   remap(): void {
     const m = this.ctx.input.mapping.settings;
     this.deck.build(m.baseNote, m.count);
+  }
+
+  /**
+   * Take the role the settings now say, in case they moved underneath.
+   *
+   * "Reset settings" puts the saved role back to melody without going through
+   * `setRole`, and a mode is built once and kept for the life of the session —
+   * so the cached id would otherwise go on saying chords against a preference
+   * that says otherwise, until the player happened to press a tab. Called on
+   * `enter` as well as from the shell's reset, because the reset only reaches
+   * the mode that is currently on screen and this one is usually not.
+   *
+   * A no-op when the role has not actually changed: `setRole` returns early.
+   */
+  applySettings(): void {
+    this.setRole(playTuneSettings().role);
   }
 
   // -------------------------------------------------------------- lifecycle ---
@@ -83,7 +151,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     stage.resize(stage.cssW, stage.cssH, stage.dpr);
 
     this.remap();
+    // Before the role is read and after the panel exists: `setRole` clears the
+    // title, and on the very first entry the HUD has not been built yet.
     this.panel.mount();
+    this.applySettings();
     this.panel.setTune(this.tune);
     this.track(input.on((e) => this.onInput(e)));
   }
@@ -138,17 +209,19 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   // ------------------------------------------------------------------- run ---
 
-  get tunes(): Tune[] { return LIBRARY; }
+  get tunes(): readonly Tune[] { return this.role.tunes; }
 
   /** Whether this chart can be reached on the keyboard that is plugged in. */
   fitFor(tune: Tune): number | null {
     const r = this.deck.range;
-    return fitToRange(tune, r.low, r.high);
+    return fitToRange(this.role.chart(tune), r.low, r.high);
   }
 
   start(id: string): boolean {
     const tune = findTune(id);
-    if (!tune) return false;
+    // The other role's curve is not this role's to start. Without this, the
+    // three chord studies would be reachable from the melody results screen.
+    if (!tune || !this.role.tunes.includes(tune)) return false;
     const shift = this.fitFor(tune);
     if (shift === null) return false;
 
@@ -174,11 +247,15 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
     // The release deadline is baked alongside the onset, for the same reason:
     // one conversion out of beats onto the audio clock, done once.
-    const specs: TargetSpec[] = fittedMelody(tune, shift).map((n) => ({
+    const specs: TargetSpec[] = fitted(this.role.chart(tune), shift).map((n) => ({
       note: n.note, beat: n.beat, len: n.len,
       time: t.timeOf(n.beat), end: t.timeOf(n.beat + n.len),
     }));
     this.judge = new Judge(specs);
+    this.perOnset = specs.length
+      ? specs.length / new Set(specs.map((s) => s.beat)).size
+      : 1;
+    this.lastStruck = -1;
     this.endsAt = t.timeOf(lastBeat(tune) + tune.beatsPerBar);
     this.phase = 'countin';
 
@@ -186,11 +263,15 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // the next note the engine builds, and the bed schedules ahead of itself.
     this.applyVoices(tune);
 
-    // The bed plays the tune's own harmony, in the tune's own key, without
-    // disturbing whatever scale the player picked in settings.
+    // The bed plays whatever half of the arrangement the player is not, in the
+    // tune's own key, without disturbing the scale picked in settings.
+    const backing = this.role.backing(tune);
     this.ctx.bed.setTrack(
-      tune.chords, t, tune.root + shift, SCALES[tune.scaleId],
-      tune.accompaniment, tune.pickup ?? 0,
+      backing.chords, t, tune.root + shift, SCALES[tune.scaleId],
+      backing.pattern, tune.pickup ?? 0, backing.parts,
+    );
+    this.ctx.bed.setNoteTrack(
+      backing.notes ? fitted(backing.notes, shift) : null, t,
     );
     this.ctx.bed.start();
 
@@ -204,6 +285,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
    *
    * A tune that names neither gets the sound the app makes everywhere else,
    * which is most of what keeps the library from turning into a costume box.
+   * The role picks the pair, because in the chord role the player is on the
+   * accompanist's timbre and the game's tune is on a lead-ish bed voice — not
+   * the tune's own two swapped over, which would not even resolve: `voiceId`
+   * and `bedVoiceId` name entries in different banks.
    *
    * `stopPads` rather than trusting the bed to have cleared: `ChordBed.stop`
    * fades the pad *bus*, and `start` turns it back up. A chord already handed
@@ -217,15 +302,21 @@ export class PlayTuneMode extends ModeBase implements GameMode {
    */
   private applyVoices(tune: Tune): void {
     const { audio } = this.ctx;
-    audio.setLeadVoice(tune.voiceId ?? DEFAULT_LEAD_VOICE);
-    audio.setBedVoice(tune.bedVoiceId ?? DEFAULT_BED_VOICE);
+    const v = this.role.voices(tune);
+    // Which bank the keys are read from depends on what the player is doing
+    // with them, so the voicing goes first: the two setters below write to
+    // different fields and only one of them is about to be heard.
+    audio.setKeyVoicing(v.keyVoicing);
+    if (v.keyVoicing === 'bed') audio.setKeyBedVoice(v.keys);
+    else audio.setLeadVoice(v.keys);
+    audio.setBedVoice(v.backing);
     audio.stopPads();
     audio.setTempo(tune.bpm);
   }
 
   private stopRun(): void {
     this.transport.stop();
-    this.ctx.bed.setTrack(null, null);
+    this.ctx.bed.clearTracks();
     // Stopped, not merely detached: leaving the scheduler running drops the bed
     // back onto the current scale's own loop, which then plays over whatever
     // screen comes next.
@@ -245,8 +336,12 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // escapes the mode by it — the only ways out of `finished` are `start`,
     // which sets them again, and `exit`, which calls this.
     const { audio, music } = this.ctx;
+    // The voicing goes back too, or every other mode's keys would still be
+    // swelling like a pad. Nothing else in the app sets it.
+    audio.setKeyVoicing('lead');
     audio.setLeadVoice(DEFAULT_LEAD_VOICE);
     audio.setBedVoice(DEFAULT_BED_VOICE);
+    audio.setKeyBedVoice(DEFAULT_BED_VOICE);
     audio.setTempo(music.bpm);
     this.judge = null;
     this.phase = 'idle';
@@ -258,7 +353,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const judge = this.judge;
     this.phase = 'finished';
     this.transport.stop();
-    this.ctx.bed.setTrack(null, null);
+    this.ctx.bed.clearTracks();
     this.ctx.bed.stop();
     if (!tune || !judge) return;
     // Anything still open when the tune ends was never played, and anything
@@ -269,8 +364,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const accuracy = judge.accuracy;
     const held = judge.holdAccuracy;
     const letter = grade(accuracy);
-    const outcome = recordRun(this.progress, tune.id, TUNE_ORDER, {
-      accuracy, score: this.scoring.score, grade: letter, passed: accuracy >= tune.pass,
+    const card = this.role.card(tune);
+    const outcome = recordRun(this.role.storageKey, this.progress, tune.id, this.role.order, {
+      accuracy, score: this.scoring.score, grade: letter, passed: accuracy >= card.pass,
     });
 
     const next = outcome.unlocked ? findTune(outcome.unlocked) : null;
@@ -285,7 +381,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
         ...(judge.tally.wrong ? [{ label: 'Wrong keys', value: String(judge.tally.wrong) }] : []),
         { label: 'Best run', value: `${Math.round(outcome.best.accuracy * 100)}%${outcome.improved ? ' — new best' : ''}` },
         ...(next ? [{ label: 'Unlocked', value: next.title }] : []),
-        ...(letter ? [] : [{ label: 'To pass', value: `${Math.round(tune.pass * 100)}% accuracy` }]),
+        ...(letter ? [] : [{ label: 'To pass', value: `${Math.round(card.pass * 100)}% accuracy` }]),
       ],
     });
     this.ctx.openScreen('result');
@@ -318,7 +414,12 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const judge = this.judge;
     if (!judge) return;
     const at = this.transport.judgeTime(now);
-    for (const missed of judge.expire(at)) this.onMiss(missed);
+    // One kick per chord that went by, not one per note of it.
+    let lastMiss = -1;
+    for (const missed of judge.expire(at)) {
+      this.onMiss(missed, missed.time !== lastMiss);
+      lastMiss = missed.time;
+    }
     for (const done of judge.settleHolds(at)) this.onHoldSettled(done);
 
     if (now >= this.endsAt) this.finish();
@@ -407,22 +508,26 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const name = (c: ChartChord | undefined): string | null =>
       c ? chordLabel(degreeToNote(c.degree, root, scale), c.quality, root) : null;
 
+    // Merged, so the readout does not blink the same chord twice where the
+    // library wrote a pickup beat and its bar as two entries. In the chord role
+    // this is also what the player is being asked for, so the two have to agree.
+    const chords = mergedChords(tune.chords);
     let at = -1;
-    for (let i = 0; i < tune.chords.length; i++) {
-      if (tune.chords[i].beat > beat) break;
+    for (let i = 0; i < chords.length; i++) {
+      if (chords[i].beat > beat) break;
       at = i;
     }
-    const current = at >= 0 ? tune.chords[at] : undefined;
+    const current = at >= 0 ? chords[at] : undefined;
     // During the count-in nothing is playing yet, so the panel shows what is
     // about to arrive instead of a blank.
-    if (!current) return { now: null, next: name(tune.chords[0]) };
+    if (!current) return { now: null, next: name(chords[0]) };
     const sounding = beat < current.beat + current.len;
-    return { now: sounding ? name(current) : null, next: name(tune.chords[at + 1]) };
+    return { now: sounding ? name(current) : null, next: name(chords[at + 1]) };
   }
 
   debugLines(): string {
     const j = this.judge;
-    return `${this.phase}  beat ${this.transport.beatAt(this.ctx.audio.now).toFixed(1)}\n`
+    return `${this.role.id} ${this.phase}  beat ${this.transport.beatAt(this.ctx.audio.now).toFixed(1)}\n`
       + (j ? `hit ${j.judged}/${j.total}  acc ${(j.accuracy * 100).toFixed(0)}%` : 'no tune');
   }
 
@@ -479,6 +584,13 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       return;
     }
 
+    // Whether this press is the first of its chord. The rest of the chord gets
+    // its own ring in its own lane — that is the picture of a chord landing —
+    // but only one of them shakes the screen or says so in words.
+    const onset = result.target?.time ?? at;
+    const lead = onset !== this.lastStruck;
+    this.lastStruck = onset;
+
     this.strikePulse = 1;
     p.ring(g.cx, g.cy + 16, 14, hue, 60 + force * 60, 0.45);
     p.burst(g.cx, g.cy + 10, 0, 1, 320 + force * 700, hue, 10 + Math.round(force * 10));
@@ -486,14 +598,16 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       // A second, tighter ring is the only thing that separates perfect from
       // good on screen, and it should be earned rather than shouted about.
       p.ring(g.cx, g.cy + 16, 20, hue, 30, 0.3);
-      this.ctx.stage.kick(1.2);
+      if (lead) this.ctx.stage.kick(1.2);
     }
 
     // A note with a tail is only part paid for on the way in; the rest arrives
     // when the hold settles, so dropping it at once genuinely costs points.
     const share = result.target?.holdJudged ? HOLD_FLOOR : 1;
-    this.scoring.add(WORTH[result.verdict] * comboMultiplier(result.combo) * share, g.cx, g.cy + 60, {
-      flat: true, quiet: result.verdict !== 'perfect', label: result.verdict === 'perfect' ? 'PERFECT' : '',
+    const worth = WORTH[result.verdict] * comboMultiplier(result.combo, this.perOnset) * share;
+    this.scoring.add(worth, g.cx, g.cy + 60, {
+      flat: true, quiet: result.verdict !== 'perfect',
+      label: lead && result.verdict === 'perfect' ? 'PERFECT' : '',
       tone: hue / 360,
     });
   }
@@ -509,7 +623,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // then the next note may have raised the combo or a wrong key sent it to
     // zero — neither of which is anything this note did.
     const worth = WORTH[target.verdict] * (1 - HOLD_FLOOR) * target.hold
-      * comboMultiplier(target.combo);
+      * comboMultiplier(target.combo, this.perOnset);
     if (worth > 0) this.scoring.add(worth, g.cx, g.cy + 60, { flat: true, quiet: true });
     if (target.hold < 0.6) {
       // The same colourless nudge a wrong note gets. The tune did not stop, but
@@ -519,14 +633,14 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     }
   }
 
-  private onMiss(target: Target): void {
+  private onMiss(target: Target, lead: boolean): void {
     const key = this.deck.byNote.get(target.note);
     if (!key) return;
     const g = key.geom;
     // The aura shatters where it would have landed, in grey rather than in its
     // own colour: a miss should read as the note going out, not going off.
     this.ctx.stage.particles.shatter(g.cx, g.cy + 30, 16, this.ctx.stage.hue(target.note), 11);
-    this.ctx.stage.kick(0.8);
+    if (lead) this.ctx.stage.kick(0.8);
   }
 
   private pan(x: number): number {
