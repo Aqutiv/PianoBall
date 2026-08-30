@@ -318,6 +318,10 @@ export const FUR_ELISE: Tune = {
   teaches: 'Alternating semitones at speed.',
   bpm: 168,
   beatsPerBar: 3,
+  // Two sixteenths before the first bar line. The piece opens on an upbeat, and
+  // without saying so the bed put its bass note under the first note of the run
+  // here and under the third one in the identical run at the end.
+  pickup: 2,
   root: A4,
   scaleId: 'aeolian',
   // The left hand of the piece is a broken chord and nothing else, which is
@@ -327,10 +331,14 @@ export const FUR_ELISE: Tune = {
   bedVoiceId: 'bed-felt-piano',
   borrows: LEADING,
   pass: 0.7,
+  // Barred as the piece is: the upbeat on its own, then the run, then the A it
+  // lands on. That A used to be struck twice — once to end the run and again to
+  // hold — which is one attack more than the piece has, and the extra beat was
+  // what pushed the opening run off the bar line the closing one sits on.
   melody: line([
+    [E5, 1], [Ds5, 1],
     [E5, 1], [Ds5, 1], [E5, 1],
-    [Ds5, 1], [E5, 1], [B4, 1],
-    [D5, 1], [C5, 1], [A4, 1],
+    [B4, 1], [D5, 1], [C5, 1],
     [A4, 3],
     [C4, 1], [E4, 1], [A4, 1],
     [B4, 3],
@@ -342,7 +350,7 @@ export const FUR_ELISE: Tune = {
     [A4, 3],
   ]),
   chords: progression([
-    [0, 'min', 3],
+    [0, 'min', 2],                            // the upbeat, which is short a beat
     [4, 'maj', 3],
     [0, 'min', 3],
     [0, 'min', 3],
