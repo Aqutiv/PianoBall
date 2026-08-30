@@ -194,7 +194,10 @@ export class PinballRenderer {
 
   private bakeDecals(ctx: CanvasRenderingContext2D, game: Game): void {
     const p = { x: 0, y: 0 };
+    const tints = this.stage.theme.decals;
     for (const d of game.table.decals) {
+      // The table names the role; the theme says what it is printed in.
+      const color = tints[d.tint];
       ctx.globalAlpha = d.alpha ?? 1;
       const scale = this.cam.scaleAt(d.x, d.y);
       switch (d.kind) {
@@ -202,15 +205,15 @@ export class PinballRenderer {
           this.cam.project(d.x, d.y, 0, p);
           const r = (d.r ?? 100) * scale;
           const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-          g.addColorStop(0, d.color);
-          g.addColorStop(1, withAlpha(d.color, 0));
+          g.addColorStop(0, color);
+          g.addColorStop(1, withAlpha(color, 0));
           ctx.fillStyle = g;
           ctx.fillRect(p.x - r, p.y - r * 0.8, r * 2, r * 1.6);
           break;
         }
         case 'arcband': {
           tracePath(ctx, this.cam, circlePoints(d.x, d.y, d.r ?? 100, 72), 0, true);
-          ctx.strokeStyle = d.color;
+          ctx.strokeStyle = color;
           ctx.lineWidth = Math.max(1, 3 * scale);
           ctx.stroke();
           break;
@@ -221,13 +224,13 @@ export class PinballRenderer {
             { x: d.x - hw, y: d.y - hh }, { x: d.x + hw, y: d.y - hh },
             { x: d.x + hw, y: d.y + hh }, { x: d.x - hw, y: d.y + hh },
           ];
-          fillPoly(ctx, this.cam, pts, 0, d.color);
+          fillPoly(ctx, this.cam, pts, 0, color);
           break;
         }
         case 'line': {
           const hw = (d.w ?? 40) / 2;
           tracePath(ctx, this.cam, [{ x: d.x - hw, y: d.y }, { x: d.x + hw, y: d.y }], 0);
-          ctx.strokeStyle = d.color;
+          ctx.strokeStyle = color;
           ctx.lineWidth = Math.max(1, (d.h ?? 2) * scale);
           ctx.stroke();
           break;

@@ -167,26 +167,26 @@ export const AURORA: TableDef = {
     b.drain('drain', v2(0, 26), v2(W, 26), 26);
 
     // ---- Painted playfield art ----
-    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 250, a0: 0, a1: PI * 2, color: '#57dcff', alpha: 0.06 });
-    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 170, a0: 0, a1: PI * 2, color: '#a678ff', alpha: 0.07 });
-    b.decal({ kind: 'glow', x: W / 2, y: 900, r: 460, color: '#3a5cff', alpha: 0.10 });
-    b.decal({ kind: 'glow', x: W / 2, y: 210, r: 400, color: '#a678ff', alpha: 0.08 });
+    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 250, a0: 0, a1: PI * 2, tint: 'primary', alpha: 0.06 });
+    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 170, a0: 0, a1: PI * 2, tint: 'secondary', alpha: 0.07 });
+    b.decal({ kind: 'glow', x: W / 2, y: 900, r: 460, tint: 'deep', alpha: 0.10 });
+    b.decal({ kind: 'glow', x: W / 2, y: 210, r: 400, tint: 'secondary', alpha: 0.08 });
     for (let i = 0; i < 5; i++) {
-      b.decal({ kind: 'inset', x: 342 + i * 85, y: 764, w: 62, h: 16, angle: 0, color: '#57dcff', alpha: 0.16 });
+      b.decal({ kind: 'inset', x: 342 + i * 85, y: 764, w: 62, h: 16, angle: 0, tint: 'primary', alpha: 0.16 });
     }
     // Seats for the arc rollovers, matching the bank's treatment above.
     for (let i = 0; i < 5; i++) {
-      b.decal({ kind: 'inset', x: 300 + i * 106, y: arcY[i], w: 50, h: 14, angle: 0, color: '#a678ff', alpha: 0.18 });
+      b.decal({ kind: 'inset', x: 300 + i * 106, y: arcY[i], w: 50, h: 14, angle: 0, tint: 'secondary', alpha: 0.18 });
     }
-    b.decal({ kind: 'line', x: W / 2, y: 620, w: 200, h: 3, angle: 0, color: '#8494cf', alpha: 0.16 });
+    b.decal({ kind: 'line', x: W / 2, y: 620, w: 200, h: 3, angle: 0, tint: 'guide', alpha: 0.16 });
     // Outlane mouths, marked so the danger reads at a glance.
     for (const x of [48, 976]) {
-      b.decal({ kind: 'glow', x, y: 120, r: 150, color: '#ff5470', alpha: 0.16 });
-      b.decal({ kind: 'inset', x, y: 168, w: 44, h: 7, angle: 0, color: '#ff5470', alpha: 0.4 });
-      b.decal({ kind: 'inset', x, y: 128, w: 34, h: 6, angle: 0, color: '#ff5470', alpha: 0.28 });
-      b.decal({ kind: 'inset', x, y: 96, w: 24, h: 5, angle: 0, color: '#ff5470', alpha: 0.18 });
+      b.decal({ kind: 'glow', x, y: 120, r: 150, tint: 'danger', alpha: 0.16 });
+      b.decal({ kind: 'inset', x, y: 168, w: 44, h: 7, angle: 0, tint: 'danger', alpha: 0.4 });
+      b.decal({ kind: 'inset', x, y: 128, w: 34, h: 6, angle: 0, tint: 'danger', alpha: 0.28 });
+      b.decal({ kind: 'inset', x, y: 96, w: 24, h: 5, angle: 0, tint: 'danger', alpha: 0.18 });
     }
-    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 320, a0: 0, a1: PI * 2, color: '#57dcff', alpha: 0.045 });
+    b.decal({ kind: 'arcband', x: W / 2, y: 1006, r: 320, a0: 0, a1: PI * 2, tint: 'primary', alpha: 0.045 });
 
 
   },

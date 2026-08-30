@@ -17,6 +17,8 @@ export type {
   KeyMaterial,
   WallColors,
   ToneCurve,
+  DecalTint,
+  DecalPalette,
 } from './themes';
 
 export {

@@ -4,7 +4,9 @@ import { RUSH } from './rush';
 import { VELVET } from './velvet';
 import { TOYBOX } from './toybox';
 
-export type { Theme, TablePalette, KeyMaterial, WallColors, ToneCurve } from './types';
+export type {
+  Theme, TablePalette, KeyMaterial, WallColors, ToneCurve, DecalTint, DecalPalette,
+} from './types';
 export { NOCTURNE } from './nocturne';
 export { RUSH } from './rush';
 export { VELVET } from './velvet';

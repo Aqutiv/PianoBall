@@ -64,6 +64,15 @@ export const NOCTURNE: Theme = {
     sling: ['#2b0f2c', '#ff9ec0'],
   },
 
+  // The five colours Aurora's silkscreen was drawn in when it was hardcoded.
+  decals: {
+    primary: '#57dcff',
+    secondary: '#a678ff',
+    deep: '#3a5cff',
+    guide: '#8494cf',
+    danger: '#ff5470',
+  },
+
   elements: {
     postLo: '#1a1030',
     postHi: '#3b2a58',

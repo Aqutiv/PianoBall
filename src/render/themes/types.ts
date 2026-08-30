@@ -66,6 +66,18 @@ export interface KeyMaterial {
 export type WallColors = [string, string];
 
 /**
+ * The silkscreen printed on the playfield, by role rather than by colour.
+ *
+ * A table names the part its markings play — the lane guides, the deep glow
+ * behind the keybed, the red around the outlanes — and the theme decides what
+ * those look like. Storing hex on the decal itself is what left the baked
+ * playfield wearing Nocturne's cyan under every other theme.
+ */
+export type DecalTint = 'primary' | 'secondary' | 'deep' | 'guide' | 'danger';
+
+export type DecalPalette = Record<DecalTint, string>;
+
+/**
  * How a theme tilts every `hsl()` in the app at once.
  *
  * Nearly all emissive colour is pitch-derived — ribbons, blooms, auras, key
@@ -137,6 +149,7 @@ export interface Theme {
   palette: TablePalette;
   keys: KeyMaterial;
   walls: Record<WallStyle, WallColors>;
+  decals: DecalPalette;
   elements: ElementMaterials;
   ball: BallMaterial;
   tone: ToneCurve;

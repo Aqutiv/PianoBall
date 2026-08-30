@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { THEMES, DEFAULT_THEME, NOCTURNE, findTheme, getTheme, applyTheme } from '../src/render/theme';
 import { tone, pitchColor, pitchHue } from '../src/render/palette';
+import { AURORA } from '../src/game/table/tables/aurora';
+import { TableBuilder } from '../src/game/table/schema';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -13,6 +15,7 @@ class MemoryStorage implements Storage {
 }
 
 const WALL_STYLES = ['rail', 'wood', 'metal', 'rubber', 'neon', 'sling'] as const;
+const DECAL_TINTS = ['primary', 'secondary', 'deep', 'guide', 'danger'] as const;
 
 describe('themes', () => {
   it('offers a default that is one of the themes on the list', () => {
@@ -46,6 +49,28 @@ describe('themes', () => {
         expect(t.walls[style], `${t.id} is missing wall style ${style}`).toBeDefined();
         expect(t.walls[style]).toHaveLength(2);
       }
+    }
+  });
+
+  it('gives every theme a colour for every decal role', () => {
+    // The playfield silkscreen is baked by role. A theme missing one prints
+    // that marking as `undefined` — or, before this was a role at all, kept
+    // Nocturne's cyan under every other look.
+    for (const t of THEMES) {
+      for (const tint of DECAL_TINTS) {
+        expect(t.decals[tint], `${t.id} is missing decal tint ${tint}`).toMatch(/^#|^rgb/);
+      }
+    }
+  });
+
+  it('draws Aurora entirely from decal roles', () => {
+    // A decal added later with a literal colour would silently opt itself out
+    // of theming, which is the exact bug the role indirection exists to stop.
+    const table = new TableBuilder(AURORA);
+    AURORA.build(table);
+    expect(table.decals.length).toBeGreaterThan(0);
+    for (const d of table.decals) {
+      expect(DECAL_TINTS, `decal at ${d.x},${d.y} names an unknown tint`).toContain(d.tint);
     }
   });
 

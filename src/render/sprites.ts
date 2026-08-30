@@ -12,12 +12,22 @@ const cache = new Map<string, HTMLCanvasElement>();
 const HUE_STEPS = 24;
 
 export function glowSprite(hue: number, size: number, softness = 1): HTMLCanvasElement {
-  const h = Math.round((((hue % 360) + 360) % 360) / (360 / HUE_STEPS)) * (360 / HUE_STEPS);
+  const theme = getTheme();
+  /*
+   * The same hue shift the solid colours get.
+   *
+   * Callers pass a raw pitch hue, and the objects those halos sit behind are
+   * painted through `tone()`, which rotates the wheel by the theme's shift.
+   * Leaving it off here put Velvet's glow 18 degrees away from the ribbon it
+   * was supposed to be the light of.
+   */
+  const shifted = hue + theme.tone.hueShift;
+  const h = Math.round((((shifted % 360) + 360) % 360) / (360 / HUE_STEPS)) * (360 / HUE_STEPS);
   const s = Math.max(8, Math.round(size));
-  // The theme is in the key: it sets the ramp below, so a sprite baked under
-  // one look must not be handed back under another.
-  const gl = getTheme().glow;
-  const key = `${h}|${s}|${softness.toFixed(2)}|${getTheme().id}`;
+  // The theme is in the key too: it sets the ramp below, so a sprite baked
+  // under one look must not be handed back under another.
+  const gl = theme.glow;
+  const key = `${h}|${s}|${softness.toFixed(2)}|${theme.id}`;
   const hit = cache.get(key);
   if (hit) return hit;
 

@@ -64,6 +64,14 @@ export const RUSH: Theme = {
     sling: ['#3a0a26', '#ff6ec4'],
   },
 
+  decals: {
+    primary: '#2ff6ff',
+    secondary: '#8b5cff',
+    deep: '#4a1fd0',
+    guide: '#c4ff3d',
+    danger: '#ff2fa0',
+  },
+
   elements: {
     postLo: '#1a1030',
     postHi: '#4a2a8a',

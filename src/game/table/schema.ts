@@ -1,5 +1,5 @@
 import type { Vec2 } from '../../physics/vec2';
-import type { TablePalette } from '../../render/theme';
+import type { TablePalette, DecalTint } from '../../render/theme';
 import type { Collider } from '../../physics/colliders';
 
 export type ElementKind =
@@ -71,7 +71,14 @@ export interface DecalSpec {
   w?: number;
   h?: number;
   angle?: number;
-  color: string;
+  /**
+   * Which of the theme's decal colours to print this in.
+   *
+   * A role, not a colour: the table says what a marking is *for* and the theme
+   * decides what that looks like, so the silkscreen follows the rest of the
+   * playfield instead of staying whatever the first theme happened to use.
+   */
+  tint: DecalTint;
   alpha?: number;
   text?: string;
   size?: number;

@@ -71,6 +71,16 @@ export const VELVET: Theme = {
     sling: ['#2a0d20', '#c96a52'],
   },
 
+  // Inlay rather than silkscreen: brass on ebony, with the peacock accent
+  // standing in for the cool marking and oxblood around the outlanes.
+  decals: {
+    primary: '#d9a441',
+    secondary: '#2f9e9e',
+    deep: '#6a2a52',
+    guide: '#c99a3e',
+    danger: '#a8443a',
+  },
+
   elements: {
     postLo: '#1a1220',
     postHi: '#5a4420',

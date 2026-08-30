@@ -63,6 +63,14 @@ export const TOYBOX: Theme = {
     sling: ['#1a1030', '#ff8ac2'],
   },
 
+  decals: {
+    primary: '#6fdcff',
+    secondary: '#a05cff',
+    deep: '#7a3ae0',
+    guide: '#7ee34a',
+    danger: '#ff5ea8',
+  },
+
   elements: {
     postLo: '#1a1030',
     postHi: '#7a4fd8',
