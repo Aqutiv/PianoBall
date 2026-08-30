@@ -144,6 +144,11 @@ export class Keybed extends KeyDeck<KeyState> {
   protected override onRemove(k: KeyState): void {
     const i = this.world.paddles.indexOf(k.paddle);
     if (i >= 0) this.world.paddles.splice(i, 1);
+    // A remap discards every key and builds new ones. A cradle left pointing at
+    // a discarded key would go on pinning a ball to geometry that is no longer
+    // on the table, and the physical key coming up could not free it, because
+    // the note now resolves to the rebuilt key.
+    this.drop(k);
   }
 
   protected override onPress(k: KeyState): void {

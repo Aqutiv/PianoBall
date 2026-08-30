@@ -157,6 +157,11 @@ export class PinballMode extends ModeBase implements GameMode {
 
   /** Start a fresh run. The shell calls this when the mode is chosen. */
   newGame(): void {
+    // A run can be restarted inside the pause between GAME OVER and the
+    // results screen. Left pending, that timer would drop the screen over the
+    // run that has just begun — and opening a screen does not stop the
+    // simulation, so the new ball would play on unattended behind it.
+    if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
     this.game.newGame();
   }
 
@@ -166,7 +171,7 @@ export class PinballMode extends ModeBase implements GameMode {
    */
   restart(): boolean {
     if (!this.game.active) return false;
-    this.game.newGame();
+    this.newGame();
     return true;
   }
 

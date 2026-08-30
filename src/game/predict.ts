@@ -67,13 +67,26 @@ export function predictLanding(ball: Ball, world: World, keybed: Keybed): Landin
 
   let px = ball.p.x, py = ball.p.y;
   let vx = ball.v.x, vy = ball.v.y;
+  // Spin curves the flight and decays as it goes, so both have to be carried
+  // here too. Predicting straight ballistics under a world that curves is how
+  // the hint ends up naming the key next to the right one.
+  let spin = ball.spin;
+  const magnus = world.cfg.magnus;
+  const spinDecay = Math.max(0, 1 - 1.4 * DT);
   const path: Vec2[] = [];
 
   for (let i = 0; i * DT < MAX_TIME; i++) {
     vx = (vx + gx * DT) * damp;
     vy = (vy + gy * DT) * damp;
+    if (magnus !== 0 && spin !== 0) {
+      const a = magnus * spin * DT;
+      const prevX = vx;
+      vx -= a * vy;
+      vy += a * prevX;
+    }
     px += vx * DT;
     py += vy * DT;
+    spin *= spinDecay;
 
     if (px < minX) { px = minX; vx = -vx; }
     else if (px > maxX) { px = maxX; vx = -vx; }

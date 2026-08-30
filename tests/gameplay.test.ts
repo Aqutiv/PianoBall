@@ -268,12 +268,43 @@ describe('catch', () => {
     expect(Math.hypot(second.v.x, second.v.y)).toBeGreaterThan(0);
   });
 
+  it('lets the ball go when the keybed is rebuilt under it', () => {
+    const { game, ball } = cradled();
+    // Auto-latching remaps the keyboard when a note arrives out of range, which
+    // discards every key. A cradle still pointing at a discarded key would pin
+    // the ball to geometry no longer on the table, and lifting the physical key
+    // could not free it, because the note now resolves to the rebuilt one.
+    const at = { x: ball.p.x, y: ball.p.y };
+    game.remapKeybed();
+    for (let i = 0; i < 240; i++) game.step(STEP);
+    // A pinned ball keeps a step of gravity in it, so speed alone proves
+    // nothing — what proves it is that the ball is no longer where it was held.
+    expect(Math.hypot(ball.p.x - at.x, ball.p.y - at.y)).toBeGreaterThan(40);
+    expect(game.keybed.keys.some((k) => k.caught !== null)).toBe(false);
+  });
+
   it('lets go on its own rather than holding the ball for ever', () => {
     const { game, ball } = cradled();
     for (let i = 0; i < 240 * 2; i++) game.step(STEP);
     expect(Math.hypot(ball.v.x, ball.v.y)).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Where a ball first comes down onto the keybed, which is what the predictor
+ * claims. Measured on the first descent into the band and not after: past that
+ * the ball bounces and rolls along the crown, which is a different question.
+ */
+function firstTouchdownX(game: Game, ball: { alive: boolean; p: { x: number; y: number }; v: { y: number }; r: number }): number | null {
+  const L = game.keybed.layout;
+  for (let i = 0; i < 900; i++) {
+    game.step(STEP);
+    if (!ball.alive) return null;
+    const face = L.baseY + crownAt(ball.p.x, L) + ball.r + 5;
+    if (ball.v.y < 0 && ball.p.y <= face + 20) return ball.p.x;
+  }
+  return null;
+}
 
 describe('landing predictor', () => {
   it('names the key a falling ball actually reaches', () => {
@@ -291,17 +322,9 @@ describe('landing predictor', () => {
       const guess = predictLanding(ball, game.world, game.keybed);
       if (!guess) { game.world.balls.length = 0; continue; }
 
-      // Run the real solver down to the same touchdown. The key's own capsule
-      // is 5 units thick, so a ball at rest never reaches the bare key face.
-      const face = () => game.keybed.layout.baseY
-        + crownAt(ball.p.x, game.keybed.layout) + ball.r + 5;
-      for (let i = 0; i < 900; i++) {
-        game.step(STEP);
-        if (!ball.alive) break;
-        if (ball.v.y < 0 && ball.p.y <= face() + 2) break;
-      }
-      if (ball.alive) {
-        const actual = game.keybed.keyAtX(ball.p.x)!;
+      const x = firstTouchdownX(game, ball);
+      if (x !== null) {
+        const actual = game.keybed.keyAtX(x)!;
         // One key either side: the affordance has to point somewhere the hand
         // can reach, not resolve the contact.
         expect(Math.abs(actual.geom.lane - guess.lane)).toBeLessThanOrEqual(1);
@@ -310,6 +333,30 @@ describe('landing predictor', () => {
       game.world.balls.length = 0;
     }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  it('follows the curve a spinning ball is actually on', () => {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    game.world.balls.length = 0;
+    expect(game.world.cfg.magnus).not.toBe(0);
+
+    // Launches put real spin on the ball, and the world curves it. A predictor
+    // that integrated straight ballistics under a world that curves would drift
+    // off the true path and name the key next to the right one.
+    const ball = game.spawnBall(512, 700, 0, -140)!;
+    ball.spin = -260;
+    const guess = predictLanding(ball, game.world, game.keybed)!;
+    expect(guess).not.toBeNull();
+    // That spin bends the landing about three key widths off the ballistic
+    // path, so ignoring it would point at the wrong key, not merely a rough one.
+    expect(Math.abs(guess.x - 512)).toBeGreaterThan(40);
+
+    const x = firstTouchdownX(game, ball);
+    expect(x).not.toBeNull();
+    expect(Math.abs(x! - guess.x)).toBeLessThan(game.keybed.keys[0].geom.halfW);
   });
 
   it('says nothing rather than guessing through an obstruction', () => {
