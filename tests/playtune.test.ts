@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIBRARY, TUNE_ORDER, findTune } from '../src/modes/playtune/library';
+import { FUR_ELISE } from '../src/modes/playtune/library/classics';
 import type { Tune } from '../src/modes/playtune/chart';
 import {
   fitToRange, fittedMelody, harmonyProblems, lastBeat, noteRange,
@@ -185,6 +186,30 @@ describe('the tune library', () => {
       expect(pickup, tune.id).toBeLessThan(tune.beatsPerBar);
       // A pickup only means anything if the tune really does start off the bar.
       if (pickup) expect(tune.melody[0].beat, tune.id).toBe(0);
+    }
+  });
+
+  it('bars the two runs in Für Elise the same way', () => {
+    // The tune plays one six-note figure twice, and used to bar it two
+    // different ways. The upbeat it opens on was never declared, and the A the
+    // opening run lands on was struck twice — once to end the run and again to
+    // hold it — which padded the missing beat back and left the opening run
+    // sitting a beat off the bar line the closing one sits on. The broken chord
+    // then put its bass under a different note of the figure each time, which
+    // is what a listener hears as the tune being out.
+    const run = [76, 75, 76, 71, 74, 72];       // E5 D sharp 5 E5 B4 D5 C5
+    const at = FUR_ELISE.melody
+      .map((_, i) => i)
+      .filter((i) => run.every((note, k) => FUR_ELISE.melody[i + k]?.note === note));
+    expect(at).toHaveLength(2);
+    for (const i of at) {
+      const start = FUR_ELISE.melody[i];
+      const bar = (start.beat - (FUR_ELISE.pickup ?? 0)) % FUR_ELISE.beatsPerBar;
+      expect(bar, `run at beat ${start.beat}`).toBe(0);
+      // And each run lands on one A, held, rather than on an A struck twice.
+      const landing = FUR_ELISE.melody[i + run.length];
+      expect(landing.note, `landing of the run at beat ${start.beat}`).toBe(69);
+      expect(landing.len, `landing of the run at beat ${start.beat}`).toBe(3);
     }
   });
 
