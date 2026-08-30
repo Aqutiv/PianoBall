@@ -530,8 +530,18 @@ kbd {
 }
 /* The shared range styling is sized for the settings panel; this one has to
    fit a HUD corner. Everything else about it — the --fill track, the thumb —
-   is inherited. */
-.hud-knob input[type="range"] { pointer-events: auto; flex: 1; width: auto; height: 14px; }
+   is inherited.
+
+   `min-width: 0` is doing real work: `flex: 1` alone still leaves the default
+   `min-width: auto`, which floors the slider near the 176px the settings panel
+   sizes it to. Inside a 132px card it simply hung out of the side. */
+.hud-knob input[type="range"] {
+  pointer-events: auto;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 14px;
+}
 
 .steps { display: flex; gap: 2px; margin-top: 2px; }
 .steps i {
@@ -1274,16 +1284,51 @@ kbd {
   [data-theme="rush"] .banner { font-size: clamp(22px, 5vh, 40px); }
   [data-theme="toybox"] .banner { -webkit-text-stroke-width: 4px; }
 
-  /* Toybox and Neon Rush widen the HUD cards for their heavier type; at this
-     size that costs more than it buys, so they go back to the shared width. */
+  /*
+   * Why the Freestyle HUD used to hang off the side of a phone.
+   *
+   * A flex or grid child's default `min-width: auto` floors it at its own
+   * min-content width, and the key and scale controls are `<select>`s whose
+   * min-content is the widest option they hold — "minorPentatonic" and the
+   * like. That floor propagates outward: `.hud-top` is a grid item, so it sat
+   * wider than its own column and overflowed *before* its two columns were
+   * ever asked to shrink, which is why releasing only the inner ones moved
+   * almost nothing. Both levels have to let go. The trimmed card widths below
+   * are what stop the columns, once released, fighting over the same space.
+   *
+   * Only Freestyle ever had the problem — it is the one mode with controls on
+   * both sides — but the rule is written against the shared HUD classes, so
+   * Pinball and PlayTune get the same protection for free.
+   */
+  .hud-top,
+  .hud-bottom,
+  .hud-left,
+  .hud-right,
+  .score-block,
+  .hud-controls { min-width: 0; }
+  .hud-controls select,
+  .hud-controls .hud-select {
+    min-width: 0;
+    flex: 1 1 0;
+    /* The name still has to be readable once it stops fitting. */
+    text-overflow: ellipsis;
+  }
+
+  .rhythm, .bed { width: 154px; }
+  .meters, .wheels { width: 116px; }
+  .tune-bar { width: min(190px, 44vw); }
+  .hud-knob b, .wheel b { width: 28px; }
+
+  /* Every theme shares those widths here; the ones that widen the cards for
+     heavier type give that back rather than each setting a narrow width of
+     its own and drifting apart. */
   [data-theme="toybox"] .rhythm,
-  [data-theme="toybox"] .bed { width: 184px; }
+  [data-theme="toybox"] .bed { width: 154px; }
   [data-theme="toybox"] .meters,
-  [data-theme="toybox"] .wheels { width: 132px; }
-  [data-theme="toybox"] .tune-bar { width: 190px; }
+  [data-theme="toybox"] .wheels { width: 116px; }
 
   /* Neon Rush tracks its micro-labels wide, which is fine beside a 132px
-     meter and not fine inside a 34px knob label on a phone. */
+     meter and not fine inside a 28px knob label on a phone. */
   [data-theme="rush"] .score-sub,
   [data-theme="rush"] .meter,
   [data-theme="rush"] .wheel,
