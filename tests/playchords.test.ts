@@ -8,7 +8,7 @@ import {
   MAX_CHORD_VOICES, chordChart, chordProblems, mergedChords, voicingFor,
   type ChordRole,
 } from '../src/modes/playtune/chords';
-import { CHORDS_ROLE, MELODY_ROLE } from '../src/modes/playtune/role';
+import { CHORDS_ROLE, MELODY_ROLE, ROLES } from '../src/modes/playtune/role';
 import { Judge, WINDOWS, type TargetSpec } from '../src/modes/playtune/judge';
 import { Transport } from '../src/modes/playtune/transport';
 import { DEFAULT_PLAYTUNE } from '../src/modes/playtune/settings';
@@ -313,6 +313,19 @@ describe('the two roles', () => {
       expect(BED_VOICES.find((b) => b.id === id)?.spec.pluck, `${tune.id} on ${id}`)
         .toBeUndefined();
     }
+  });
+
+  it('refuses a role that is not one of the two', async () => {
+    // `load` checks the shape of what came out of storage and nothing about
+    // what the values mean, so a stale or hand-edited settings blob can hold
+    // any string. Unnormalised it reaches `ROLES[...]` as undefined and throws
+    // while PlayTune is being built — which stops the app starting when
+    // PlayTune is the mode it is trying to resume.
+    localStorage.setItem('pianoball.playtuneSettings', JSON.stringify({ role: 'harmonica' }));
+    vi.resetModules();
+    const { playTuneSettings: fresh } = await import('../src/modes/playtune/settings');
+    expect(fresh().role).toBe('melody');
+    expect(ROLES[fresh().role]).toBeDefined();
   });
 
   it('keeps the two chains of unlocks apart', () => {

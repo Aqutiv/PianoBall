@@ -127,6 +127,22 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.deck.build(m.baseNote, m.count);
   }
 
+  /**
+   * Take the role the settings now say, in case they moved underneath.
+   *
+   * "Reset settings" puts the saved role back to melody without going through
+   * `setRole`, and a mode is built once and kept for the life of the session —
+   * so the cached id would otherwise go on saying chords against a preference
+   * that says otherwise, until the player happened to press a tab. Called on
+   * `enter` as well as from the shell's reset, because the reset only reaches
+   * the mode that is currently on screen and this one is usually not.
+   *
+   * A no-op when the role has not actually changed: `setRole` returns early.
+   */
+  applySettings(): void {
+    this.setRole(playTuneSettings().role);
+  }
+
   // -------------------------------------------------------------- lifecycle ---
 
   enter(): void {
@@ -135,7 +151,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     stage.resize(stage.cssW, stage.cssH, stage.dpr);
 
     this.remap();
+    // Before the role is read and after the panel exists: `setRole` clears the
+    // title, and on the very first entry the HUD has not been built yet.
     this.panel.mount();
+    this.applySettings();
     this.panel.setTune(this.tune);
     this.track(input.on((e) => this.onInput(e)));
   }

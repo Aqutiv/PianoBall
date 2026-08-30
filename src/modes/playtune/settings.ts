@@ -52,13 +52,34 @@ export const DEFAULT_PLAYTUNE: PlayTuneSettings = {
   assist: true,
 };
 
-let current: PlayTuneSettings = { ...DEFAULT_PLAYTUNE, ...load(KEY, {}) };
+/**
+ * Every role there is, as something that exists at run time.
+ *
+ * Keyed by the union so that adding a role fails to compile until it is named
+ * here. `load` checks that what came out of storage is an object and nothing
+ * at all about what its values mean, so a hand-edited or stale
+ * `pianoball.playtuneSettings` can hold any string — and an unrecognised one
+ * would reach `ROLES[...]` as undefined and throw while PlayTune was being
+ * built, which is enough to stop the app starting when it is the last mode
+ * played.
+ */
+const ROLE_IDS: Record<RoleId, true> = { melody: true, chords: true };
+
+function asRole(value: unknown): RoleId {
+  return typeof value === 'string' && value in ROLE_IDS
+    ? value as RoleId
+    : DEFAULT_PLAYTUNE.role;
+}
+
+const settle = (s: PlayTuneSettings): PlayTuneSettings => ({ ...s, role: asRole(s.role) });
+
+let current: PlayTuneSettings = settle({ ...DEFAULT_PLAYTUNE, ...load(KEY, {}) });
 
 /** The live settings object. Edited in place by the settings panel. */
 export function playTuneSettings(): PlayTuneSettings { return current; }
 
 export function setPlayTuneSettings(patch: Partial<PlayTuneSettings>): void {
-  current = { ...current, ...patch };
+  current = settle({ ...current, ...patch });
   save(KEY, current);
 }
 
