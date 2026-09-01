@@ -12,8 +12,8 @@ import { clamp, clamp01 } from '../core/math';
 import { pitchClass } from '../midi/notes';
 import { intensityOf, type Intensity } from './intensity';
 import {
-  identifyChord, findMode, retuneNote, MODES,
-  type ActiveMusic, type MusicMode,
+  identifyChord, findMode, retuneNote, classifyInterval, MODES,
+  type ActiveMusic, type MusicMode, type IntervalClass,
 } from '../audio/music';
 import type { InputHub } from '../midi/inputHub';
 import type { MusicState } from '../audio/musicState';
@@ -40,6 +40,8 @@ export interface GameEvents {
   intensity: { level: Intensity; from: Intensity };
   /** One tick of the bonus count: a note of the lost ball's rally, played back. */
   bonus: { note: number; index: number; count: number; amount: number; total: number; x: number; y: number };
+  /** A charged ball struck a tuned element: the interval between the two. */
+  interval: { ball: number; note: number; name: string; cls: IntervalClass; amount: number; x: number; y: number };
 }
 
 export interface GameConfig {
@@ -103,6 +105,20 @@ export const BONUS = {
   comboCap: 12,
 } as const;
 
+/**
+ * What the interval between the ball's note and an element's is worth.
+ *
+ * The consonances pay and are named on the table; seconds and sevenths count
+ * for a little and say nothing, so a bumper rally is a run of light rather
+ * than a wall of text. Multiplied like any other hit — it is the same shot.
+ */
+export const INTERVAL_SCORE: Record<IntervalClass, number> = {
+  perfect: 500,
+  consonant: 350,
+  mild: 120,
+  dissonant: 40,
+};
+
 export class Game {
   readonly bus = new EventBus<GameEvents>();
   readonly world: World;
@@ -131,6 +147,12 @@ export class Game {
   timeScale = 1;
   /** How much is happening, 0..3, for the music to follow. See `intensity.ts`. */
   intensity: Intensity = 0;
+  /**
+   * The note a key charges a ball with, given the key's own. Identity here;
+   * the mode installs the same snapping its audio applies to the key, so the
+   * interval the table scores is the one the player actually heard.
+   */
+  tuneNote: (note: number) => number = (note) => note;
 
   private input: InputHub;
   private rng: () => number;
@@ -367,6 +389,7 @@ export class Game {
     const ball = this.held;
     if (!ball) return;
     this.held = null;
+    ball.note = this.tuneNote(key.geom.note);
     const lean = (key.geom.cx - this.def.width / 2) / (this.def.width / 2);
     ball.v.x = lean * 420 * (0.5 + force);
     ball.v.y = -120 - force * 200;
@@ -496,8 +519,10 @@ export class Game {
     // Cradles are resolved before the solver, like the serve's own pin, so the
     // depenetration pass gets the last word on anything they overlap. A release
     // queues a launch here, which is why the queue is drained after the step
-    // rather than before it.
-    this.launches.length = 0;
+    // rather than before it — and never emptied here. A press that strikes a
+    // ball hovering off the face queues its launch at input time, between
+    // steps, and clearing the queue on the way in threw those away: the ball
+    // flew, but nothing that listens for a launch ever heard about it.
     this.keybed.updateCatch(dt, this.state === 'play' && !this.tilt.tilted, this.launches);
     this.world.step(dt);
 
@@ -506,7 +531,13 @@ export class Game {
     this.keybed.handleContacts(this.world.contacts, this.launches);
     // Returning the ball is not a failure. The combo lapses on its own if
     // nothing scores for a while, which is what makes a rally worth building.
-    for (const ev of this.launches) this.bus.emit('launch', ev);
+    // The throw charges the ball with the key's note, which is what every
+    // element it strikes from here is heard against.
+    for (const ev of this.launches) {
+      const ball = this.world.balls.find((b) => b.id === ev.ballId);
+      if (ball) ball.note = this.tuneNote(ev.key.geom.note);
+      this.bus.emit('launch', ev);
+    }
     this.launches.length = 0;
 
     this.processContacts(this.world.contacts);
@@ -627,12 +658,12 @@ export class Game {
       case 'bumper':
       case 'sling':
         this.scoring.chain();
-        this.award(el, el.score * (energised ? 2 : 1));
+        this.award(el, el.score * (energised ? 2 : 1), c);
         break;
       case 'target':
         if (el.down) break;
         this.scoring.chain();
-        this.award(el, el.score * (energised ? 2 : 1));
+        this.award(el, el.score * (energised ? 2 : 1), c);
         // Only the bank drops; standups stay up and just score.
         if (el.group === 'bank') {
           el.down = true;
@@ -643,11 +674,11 @@ export class Game {
       case 'rollover':
         if (!el.down) { el.down = true; this.checkGroup(el.group); }
         this.scoring.chain();
-        this.award(el, el.score * (energised ? 2 : 1));
+        this.award(el, el.score * (energised ? 2 : 1), c);
         break;
       case 'spinner':
         el.spinRate += Math.min(26, c.impact * 0.02);
-        this.award(el, el.score * (energised ? 2 : 1));
+        this.award(el, el.score * (energised ? 2 : 1), c);
         break;
       case 'post':
         break;
@@ -658,7 +689,7 @@ export class Game {
     this.bus.emit('element', { el, energised, impact: c.impact, x: c.x, y: c.y });
   }
 
-  private award(el: TableElement, base: number): void {
+  private award(el: TableElement, base: number, c: Contact): void {
     const amount = this.scoring.add(base, el.x, el.y, { tone: el.note ? (el.note % 12) / 12 : 0 });
     this.bus.emit('score', { amount, total: this.scoring.score, x: el.x, y: el.y, label: '' });
     // Every pitched hit joins the rally, to be played back when the ball is
@@ -667,6 +698,30 @@ export class Game {
       this.rally.push({ note: el.note, x: el.x, y: el.y });
       if (this.rally.length > 64) this.rally.shift();
     }
+    this.scoreInterval(el, c);
+  }
+
+  /**
+   * The ball carries the note of the key that threw it, so every tuned
+   * element it strikes sounds an interval, and the table pays for it by how
+   * consonant it is. Which key the ball was thrown from starts to matter
+   * musically and not only ballistically — and the same finger that aims a
+   * shot is choosing what it will sound like when it lands.
+   */
+  private scoreInterval(el: TableElement, c: Contact): void {
+    if (el.note === null) return;
+    // At most four balls; a scan is the cheapest lookup there is.
+    const ball = this.world.balls.find((b) => b.id === c.ballId);
+    if (!ball || ball.note === null) return;
+    const iv = classifyInterval(ball.note, el.note);
+    const quiet = iv.cls === 'mild' || iv.cls === 'dissonant';
+    // Above the element's own pop, so the name and the number do not collide.
+    const amount = this.scoring.add(INTERVAL_SCORE[iv.cls], el.x, el.y + 46, {
+      label: iv.name, tone: pitchClass(ball.note) / 12, quiet,
+    });
+    this.bus.emit('interval', {
+      ball: ball.note, note: el.note, name: iv.name, cls: iv.cls, amount, x: el.x, y: el.y,
+    });
   }
 
   // ----------------------------------------------------------- objectives ---

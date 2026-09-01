@@ -22,6 +22,11 @@ export interface Ball {
   lastColliderId: number;
   /** Grace period after spawn/launch during which the ball cannot drain. */
   safeFor: number;
+  /**
+   * The note of the key that last threw it, so the table can hear the
+   * interval it makes with whatever it strikes. Null until something has.
+   */
+  note: number | null;
 }
 
 let nextBallId = 1;
@@ -43,5 +48,6 @@ export function makeBall(x: number, y: number, r = 19, vx = 0, vy = 0): Ball {
     sensors: new Set<number>(),
     lastColliderId: -1,
     safeFor: 0,
+    note: null,
   };
 }

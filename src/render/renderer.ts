@@ -528,6 +528,10 @@ export class PinballRenderer {
       const scale = this.cam.scaleAt(x, y, ball.r);
       const r = ball.r * scale;
       const speed = Math.hypot(ball.v.x, ball.v.y);
+      // A thrown ball carries its key's note, and wears its colour: the streak
+      // and a soft halo take the pitch hue, so what a ball will sound against
+      // the next thing it hits can be read from across the table.
+      const charged = ball.note !== null ? this.hue(ball.note) : null;
 
       // Motion streak: tapered from a point behind the ball out to its full
       // width at the ball itself, so it reads as a smear rather than a stick.
@@ -543,13 +547,17 @@ export class PinballRenderer {
           em.beginPath();
           em.moveTo(p.x, p.y);
           em.lineTo(q.x, q.y);
-          em.strokeStyle = withAlpha(this.stage.theme.ball.streak, strength * f * f * 0.55);
+          const a = strength * f * f * 0.55;
+          em.strokeStyle = charged !== null ? tone(charged, 90, 72, a) : withAlpha(this.stage.theme.ball.streak, a);
           em.lineWidth = Math.max(0.5, r * 0.95 * f);
           em.stroke();
         }
         em.globalCompositeOperation = 'source-over';
       }
 
+      if (charged !== null) {
+        this.stage.halo(em, x, y, ball.r, charged, ball.r * 2.6, 0.18 + Math.min(0.22, speed / 4000));
+      }
       this.stage.groundShadow(ctx, x, y, ball.r, ball.r, 1);
       this.cam.project(x, y, ball.r, p);
 

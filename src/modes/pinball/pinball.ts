@@ -75,6 +75,9 @@ export class PinballMode extends ModeBase implements GameMode {
     this.panel.mount();
     this.audio.attach();
     this.audio.onGroove = (hit) => this.beatHit(hit);
+    // The ball is charged with the note the key actually sounded, snapping
+    // and all, so the interval the table scores is the one that was heard.
+    game.tuneNote = (note) => this.audio.tune(note);
     this.wire();
 
     // The scale is chosen outside the mode now, so the playfield has to be
@@ -93,6 +96,7 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.active = false;
     this.release();
     this.audio.detach();
+    this.game.tuneNote = (note) => note;
     this.game.keybed.allOff();
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
     this.ctx.hud.clearPanels();
@@ -278,6 +282,14 @@ export class PinballMode extends ModeBase implements GameMode {
       stage.particles.burst(e.x, e.y + 20, 0, 1, 320, e.saved ? 150 : 0, 22);
       stage.kick(e.saved ? 3 : 9);
       hud.banner(e.saved ? 'BALL SAVED' : 'DRAIN', 1.2, e.saved ? 'warn' : 'bad');
+    }));
+
+    // An interval, in the ball's own colour. A ring only for the consonances,
+    // which are the ones worth aiming for.
+    this.track(bus.on('interval', (e) => {
+      const hue = pitchHue(e.ball);
+      stage.particles.burst(e.x, e.y, 0, 1, 260, hue, 10);
+      if (e.cls === 'perfect' || e.cls === 'consonant') stage.particles.ring(e.x, e.y, 20, hue, 60, 0.45);
     }));
 
     // The bonus count walks the rally back across the elements it struck.

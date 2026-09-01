@@ -60,7 +60,7 @@ export class PinballAudio {
   }
 
   /** Off-scale notes are nudged into the table's key when assist is on. */
-  private tune(note: number): number {
+  tune(note: number): number {
     const m = this.game.music;
     return this.engine.settings.assist ? snapToScale(note, m.root, m.scale) : note;
   }
@@ -122,6 +122,15 @@ export class PinballAudio {
           engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), engine.now + i * s.roll.gap);
         }
       }
+    }));
+
+    // The ball carries the note of the key that threw it, and every element
+    // it strikes sounds the interval. The element's own body is already
+    // played above; this is the dyad's second voice, underneath it, a little
+    // louder when the interval is one worth hearing.
+    offs.push(bus.on('interval', ({ ball, x, cls }) => {
+      const gain = cls === 'perfect' || cls === 'consonant' ? 0.22 : 0.14;
+      engine.mallet(ball, gain, this.pan(x), 0.5);
     }));
 
     // A recognised chord gets a lift; a random cluster does not.

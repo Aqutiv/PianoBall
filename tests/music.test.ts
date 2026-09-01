@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   SCALES, MODES, findMode, chordNotes, snapToScale, inScale, scaleDegree, degreeToNote,
-  identifyChord, retuneNote, voiceLead, Groove, chordLabel,
+  identifyChord, retuneNote, voiceLead, Groove, chordLabel, classifyInterval,
 } from '../src/audio/music';
 import { pitchClass } from '../src/midi/notes';
 import { buildTable } from '../src/game/table/schema';
@@ -387,6 +387,40 @@ describe('the beat on screen', () => {
       const onGrid = Math.abs(g.offsetAt(t)) <= g.window;
       const nearGrid = phase < 0.2 || phase > 0.8 || Math.abs(phase - 0.5) < 0.2;
       if (onGrid) expect(nearGrid, `t=${t}`).toBe(true);
+    }
+  });
+});
+
+describe('intervals', () => {
+  const cases: [number, number, string, string][] = [
+    [60, 67, 'PERFECT FIFTH', 'perfect'],
+    [60, 65, 'PERFECT FOURTH', 'perfect'],
+    [60, 64, 'MAJOR THIRD', 'consonant'],
+    [60, 63, 'MINOR THIRD', 'consonant'],
+    [60, 69, 'MAJOR SIXTH', 'consonant'],
+    [60, 66, 'TRITONE', 'dissonant'],
+    [60, 71, 'MAJOR SEVENTH', 'dissonant'],
+    [60, 61, 'MINOR SECOND', 'dissonant'],
+    [60, 62, 'MAJOR SECOND', 'mild'],
+    [60, 70, 'MINOR SEVENTH', 'mild'],
+    [60, 72, 'OCTAVE', 'perfect'],
+    [60, 60, 'UNISON', 'perfect'],
+    // Downward, by pitch class: a fifth below reads as the fourth above.
+    [67, 60, 'PERFECT FOURTH', 'perfect'],
+  ];
+
+  it('names the interval a ball makes with what it hits', () => {
+    for (const [a, b, name, cls] of cases) {
+      const iv = classifyInterval(a, b);
+      expect(`${iv.name}/${iv.cls}`, `${a} -> ${b}`).toBe(`${name}/${cls}`);
+    }
+  });
+
+  it('gives an interval and its inversion the same class', () => {
+    for (let a = 0; a < 12; a++) {
+      for (let b = 0; b < 12; b++) {
+        expect(classifyInterval(60 + a, 60 + b).cls).toBe(classifyInterval(60 + b, 60 + a).cls);
+      }
     }
   });
 });

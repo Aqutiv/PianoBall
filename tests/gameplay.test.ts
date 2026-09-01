@@ -5,6 +5,7 @@ import { Game, BONUS, INTENSITY_HOLD } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
 import { MusicState } from '../src/audio/musicState';
+import { classifyInterval } from '../src/audio/music';
 import type { KeyState } from '../src/game/keybed';
 import type { TableElement } from '../src/game/table/schema';
 
@@ -340,6 +341,96 @@ describe('rally bonus', () => {
     game.newGame();
     for (let i = 0; i < 240 * 3; i++) game.step(STEP);
     expect(ticks).toHaveLength(1);
+  });
+});
+
+/**
+ * The ball carries the note of the key that threw it, and what it strikes is
+ * scored as the interval between the two. Pinned: the charge itself, on a
+ * throw and on the serve; that it is the *sounded* note; that an uncharged
+ * ball scores no interval; and that only the consonances are named.
+ */
+describe('charged ball', () => {
+  interface Iv { ball: number; note: number; name: string; cls: string }
+
+  function inPlay() {
+    const rigged = rig();
+    rigged.game.newGame();
+    rigged.game.state = 'play';
+    rigged.game.held = null;
+    rigged.game.world.balls.length = 0;
+    return rigged;
+  }
+
+  it('carries the note of the key that threw it, and scores what it hits against it', () => {
+    const { input, game } = inPlay();
+    const events: Iv[] = [];
+    game.bus.on('interval', (e: Iv) => events.push(e));
+    const k = keyNear(game, 512);
+    const g = k.geom;
+    const ball = game.spawnBall(g.cx + g.nx * 20, g.cy + g.ny * 20, 0, 0)!;
+    expect(ball.note).toBeNull();
+
+    press(input, g.note, 92);
+    for (let i = 0; i < 600 && ball.alive; i++) {
+      game.step(STEP);
+      if (i === 30) lift(input, g.note);
+    }
+    expect(ball.note).toBe(g.note);
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) {
+      expect(e.ball).toBe(g.note);
+      expect(e.name).toBe(classifyInterval(g.note, e.note).name);
+    }
+  });
+
+  it('is charged by the serve as well', () => {
+    const { input, game } = rig();
+    game.newGame();
+    const held = game.held!;
+    const k = keyNear(game, 512);
+    press(input, k.geom.note, 80);
+    expect(game.state).toBe('play');
+    expect(held.note).toBe(k.geom.note);
+  });
+
+  it('is charged with the note that was sounded, not the key that was pressed', () => {
+    const { input, game } = rig();
+    game.tuneNote = (note) => note + 1;
+    game.newGame();
+    const held = game.held!;
+    const k = keyNear(game, 512);
+    press(input, k.geom.note, 80);
+    expect(held.note).toBe(k.geom.note + 1);
+  });
+
+  it('scores nothing for a ball nobody threw', () => {
+    const { game } = inPlay();
+    const events: Iv[] = [];
+    game.bus.on('interval', (e: Iv) => events.push(e));
+    const el = game.table.elements.find((e) => e.id === 'arc-0')!;
+    game.spawnBall(el.x, el.y + 90, 0, -600);
+    for (let i = 0; i < 240 && !el.down; i++) game.step(STEP);
+    expect(el.down).toBe(true);
+    expect(events).toHaveLength(0);
+  });
+
+  it('names only the consonances on the table', () => {
+    const { game } = inPlay();
+    // A major second below the element: mild, so it scores without a word.
+    const el = game.table.elements.find((e) => e.id === 'arc-0')!;
+    const ball = game.spawnBall(el.x, el.y + 90, 0, -600)!;
+    ball.note = el.note! - 2;
+    for (let i = 0; i < 240 && !el.down; i++) game.step(STEP);
+    expect(game.scoring.pops.map((p) => p.label)).not.toContain('MAJOR SECOND');
+
+    // A fifth below: perfect, and said so.
+    game.world.balls.length = 0;
+    const el2 = game.table.elements.find((e) => e.id === 'arc-1')!;
+    const b2 = game.spawnBall(el2.x, el2.y + 90, 0, -600)!;
+    b2.note = el2.note! - 7;
+    for (let i = 0; i < 240 && !el2.down; i++) game.step(STEP);
+    expect(game.scoring.pops.map((p) => p.label)).toContain('PERFECT FIFTH');
   });
 });
 
