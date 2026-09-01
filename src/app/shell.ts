@@ -195,6 +195,21 @@ export class Shell {
 
   resumeMode(): void {
     this.overlay.hide();
+  }
+
+  /**
+   * Nothing is in front of the board any more, so whatever froze it is over.
+   *
+   * Driven by the overlay closing rather than by each button that closes it.
+   * "Restart" on the pause screen, "Play again" on the results and picking a
+   * tune from the song list all hid the panel and began a run *without* going
+   * through `resumeMode`, so the shell stayed suspended: `step` was never
+   * called again and the run played out on a board frozen at the instant it
+   * was paused. Every key pressed after that lit and stayed lit — the glow
+   * fades on the deck's own clock, and that clock had stopped — which is what
+   * left blooms sitting over the keybed across one run and into the next.
+   */
+  unsuspend(): void {
     if (!this.suspended) return;
     this.suspended = false;
     this.active?.resume?.();

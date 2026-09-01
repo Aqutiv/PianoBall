@@ -76,7 +76,14 @@ export class Overlay {
     this.live = null;
     this.offInput?.();
     this.offInput = null;
-    if (!screen) { this.root.classList.remove('show'); return; }
+    if (!screen) {
+      this.root.classList.remove('show');
+      // The single place the board comes back out from behind a panel, so
+      // every way of closing one resumes the mode rather than only the two
+      // that remembered to.
+      this.shell.unsuspend();
+      return;
+    }
     this.root.classList.add('show');
     this.body.scrollTop = 0;
     if (screen === 'home') this.renderHome();
