@@ -253,3 +253,72 @@ describe('RhythmBox', () => {
     expect(box.step).toBe(-1);
   });
 });
+
+/**
+ * The table fades its drums in and out with the rally rather than switching
+ * them. A fade lives on the sink's clock, so a hit already in the lookahead is
+ * as loud as the moment it lands.
+ */
+describe('fading the box', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const rock = findPattern('rock');
+  /** The hat that fell on a given step of the bar starting at `bar` seconds. */
+  const hatAt = (sink: FakeSink, at: number) =>
+    sink.hits.find((h) => h.voice === 'hat' && Math.abs(h.at - at) < 1e-6)!;
+
+  it('rides a ramp from where it is to where it was asked, hit by hit', () => {
+    const sink = new FakeSink();
+    const box = new RhythmBox(sink, () => 120, rock);
+    box.level = 0.2;
+    box.start();
+    run(sink, 1);
+    // A second in: one second up to full, so everything from the bar line at
+    // 2 s on is at the top, and a hit halfway through the fade is halfway up.
+    box.fadeTo(1, 1);
+    run(sink, 2.7);
+    box.stop();
+
+    // The same step of the bar before and after the fade, so the accent is the
+    // same and only the level differs: 0.2 against 1, then 0.6 against 1.
+    expect(hatAt(sink, 2.25).gain).toBeCloseTo(hatAt(sink, 0.25).gain * 5, 5);
+    expect(hatAt(sink, 1.5).gain).toBeCloseTo(hatAt(sink, 3.5).gain * 0.6, 5);
+    const ramp = sink.hits.filter((h) => h.voice === 'hat' && h.at >= 1 && h.at <= 2.2);
+    for (let i = 1; i < ramp.length; i++) expect(ramp[i].gain).toBeGreaterThanOrEqual(ramp[i - 1].gain);
+  });
+
+  it('stops itself once a fade-out has reached silence', () => {
+    const sink = new FakeSink();
+    const box = new RhythmBox(sink, () => 120, rock);
+    box.start();
+    run(sink, 1);
+    box.fadeOut(0.5);
+    expect(box.playing, 'still fading').toBe(true);
+    run(sink, 1);
+    expect(box.playing).toBe(false);
+    // Nothing audible was written past the end of the fade.
+    for (const h of sink.hits) if (h.at > 1.5 + 1e-6) expect(h.gain).toBe(0);
+  });
+
+  it('lets a plain assignment cancel a fade', () => {
+    const sink = new FakeSink();
+    const box = new RhythmBox(sink, () => 120, rock);
+    box.start();
+    box.fadeOut(4);
+    box.level = 0.9;
+    expect(box.level).toBe(0.9);
+    run(sink, 5);
+    expect(box.playing, 'the stop that came with the fade went with it').toBe(true);
+    box.stop();
+  });
+
+  it('has nothing to fade out when it is not playing', () => {
+    const sink = new FakeSink();
+    const box = new RhythmBox(sink, () => 120, rock);
+    box.fadeOut(0.3);
+    expect(box.playing).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(sink.hits).toHaveLength(0);
+  });
+});

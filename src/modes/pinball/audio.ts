@@ -3,8 +3,11 @@ import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
 import type { Intensity } from '../../game/intensity';
+import { RhythmBox } from '../../audio/rhythmBox';
+import { findPattern } from '../../audio/patterns';
 import { clamp } from '../../core/math';
 import { LADDER } from './ladder';
+import { pinballSettings } from './settings';
 
 /**
  * Turns what happens on the table into music.
@@ -12,17 +15,31 @@ import { LADDER } from './ladder';
  * Everything the game emits is already tuned — elements carry a note, the
  * keybed carries the player's own playing — so this layer mostly decides
  * loudness, panning and timbre. The chord bed underneath is shared with every
- * other mode and lives elsewhere.
+ * other mode and lives elsewhere; the rhythm box is this mode's own, and
+ * follows the rally rather than the mode, the way Freestyle's follows the run.
  */
 export class PinballAudio {
   private offs: (() => void)[] = [];
   private timers: number[] = [];
+  private readonly box: RhythmBox;
 
   constructor(
     private readonly engine: AudioEngine,
     private readonly bed: ChordBed,
     private readonly game: Game,
-  ) {}
+  ) {
+    const first = LADDER.find((r) => r.drums)?.drums ?? '';
+    this.box = new RhythmBox(engine, () => game.music.bpm, findPattern(first));
+  }
+
+  /** Whether the rhythm box is running. The teardown tests read this. */
+  get drumming(): boolean { return this.box.playing; }
+
+  /** Nothing should keep drumming behind a menu. */
+  pause(): void { this.box.stop(); }
+
+  /** Back to whatever rung the table is on, drums included. */
+  resume(): void { this.apply(this.game.intensity); }
 
   private pan(x: number): number {
     return clamp((x / this.game.def.width - 0.5) * 1.5, -1, 1);
@@ -103,6 +120,7 @@ export class PinballAudio {
   detach(): void {
     for (const off of this.offs) off();
     this.offs.length = 0;
+    this.box.stop();
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);
     // Leaving mid-flourish must not keep playing it into the next mode.
@@ -110,10 +128,23 @@ export class PinballAudio {
     this.timers.length = 0;
   }
 
-  /** Put the bed on the rung the table is on. Takes effect at the next bar. */
+  /**
+   * Put the bed and the drums on the rung the table is on.
+   *
+   * The bed takes it at the next bar. The drums fade rather than switch: a
+   * rally that lapses is heard to wind down, not to be cut off, and one that
+   * picks up again inside the fade simply climbs back.
+   */
   private apply(level: Intensity): void {
     const rung = LADDER[level];
     this.bed.setLoopPattern(rung.pattern, rung.parts);
+    if (rung.drums && pinballSettings().drums) {
+      this.box.setPattern(findPattern(rung.drums));
+      this.box.start();
+      this.box.fadeTo(rung.level, 0.6);
+    } else {
+      this.box.fadeOut(0.35);
+    }
   }
 
   /** Rising run through the table's scale. Used for objectives and multiball. */

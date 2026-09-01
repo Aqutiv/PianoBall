@@ -5,6 +5,7 @@ import type { CurveName } from '../midi/velocityCurve';
 import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
 import { loadScores } from '../modes/pinball/pinball';
+import { pinballSettings, setPinballSettings } from '../modes/pinball/settings';
 import type { ModTarget } from '../audio/engine';
 import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
 import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
@@ -452,6 +453,10 @@ export class Overlay {
         <button id="assist">${audio.settings.assist ? 'On' : 'Off'}</button></div>
       <p class="diag">Pinball only. Freestyle plays exactly what you press, and
         PlayTune takes the chart as the authority on what the note should be.</p>
+      <div class="row"><label>Drums under a rally</label>
+        <button id="pb-drums">${pinballSettings().drums ? 'On' : 'Off'}</button></div>
+      <p class="diag">The bed builds with a rally either way; this is whether the
+        rhythm box joins it.</p>
 
       <h2>Freestyle</h2>
       <div class="row"><label>Pitch bend range</label>
@@ -561,6 +566,10 @@ export class Overlay {
     };
     toggle('#assist', () => audio.settings.assist, (v) => audio.setSettings({ assist: v }));
     toggle('#bed', () => audio.settings.bed, (v) => audio.setSettings({ bed: v }));
+    toggle('#pb-drums', () => pinballSettings().drums, (v) => {
+      setPinballSettings({ drums: v });
+      this.shell.applyModeSettings();
+    });
     const quality = (sel: string, key: 'bloom' | 'labels' | 'reducedMotion' | 'colorBlind') => {
       // Through setQuality, so the choice is remembered as a *preference* and
       // the adaptive-quality pass knows what to restore to.

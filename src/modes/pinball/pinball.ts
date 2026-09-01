@@ -64,7 +64,7 @@ export class PinballMode extends ModeBase implements GameMode {
   get timeScale(): number { return this.game.timeScale; }
 
   enter(): void {
-    const { stage, music } = this.ctx;
+    const { stage, music, audio } = this.ctx;
     const game = this.game;
 
     stage.cam.configure({ width: game.def.width, height: game.def.height });
@@ -76,9 +76,13 @@ export class PinballMode extends ModeBase implements GameMode {
     this.wire();
 
     // The scale is chosen outside the mode now, so the playfield has to be
-    // carried across whenever it changes underneath us.
-    this.track(music.bus.on('change', () => game.retune()));
+    // carried across whenever it changes underneath us. The delay is locked to
+    // the tempo, so it follows the same changes — and is put right on the way
+    // in, rather than left at whatever the last mode was playing at.
+    this.track(music.bus.on('change', (m) => { game.retune(); audio.setTempo(m.bpm); }));
+    this.track(music.bus.on('tempo', (bpm) => audio.setTempo(bpm)));
     game.retune();
+    audio.setTempo(music.bpm);
 
     this.ctx.bed.start();
   }
@@ -107,10 +111,12 @@ export class PinballMode extends ModeBase implements GameMode {
   pause(): void {
     this.game.active = false;
     this.game.keybed.allOff();
+    this.audio.pause();
   }
 
   resume(): void {
     this.game.active = true;
+    this.audio.resume();
   }
 
   draw(alpha: number, frameDt: number): void {
@@ -161,6 +167,11 @@ export class PinballMode extends ModeBase implements GameMode {
     // run that has just begun — and opening a screen does not stop the
     // simulation, so the new ball would play on unattended behind it.
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
+    // Asked for from behind a menu as often as not — the pause panel's
+    // Restart, or the home screen with this table already the one behind it.
+    // Those paths suspended the mode without ever resuming it, and a new game
+    // with the keys still switched off is a ball that cannot be dropped.
+    this.game.active = true;
     this.game.newGame();
   }
 
@@ -184,6 +195,10 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.retune();
     this.panel.showMusic();
     this.ctx.stage.invalidate();
+    // The drums preference is read whenever a rung is applied, so applying the
+    // current one is what makes a change heard now rather than at the next
+    // rally. Not behind a menu, though: a paused table stays quiet.
+    if (this.game.active) this.audio.resume();
   }
 
   pointerDown(x: number, y: number): number | null {

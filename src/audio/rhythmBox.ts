@@ -36,7 +36,6 @@ export class RhythmBox {
   pattern: RhythmPattern;
   /** The player's swing trim, added to whatever the pattern is written with. */
   swing = 0;
-  level = 0.8;
 
   private readonly sink: DrumSink;
   private readonly bpm: () => number;
@@ -45,6 +44,17 @@ export class RhythmBox {
   private next = 0;
   /** The step length the current index was counted in. Zero means unanchored. */
   private anchored = 0;
+  /**
+   * The level as a ramp on the sink's clock, so that a hit already written
+   * into the lookahead is as loud as the moment it lands, not the moment it
+   * was scheduled. Equal ends and a zero-length ramp is a plain level.
+   */
+  private levelFrom = 0.8;
+  private levelTo = 0.8;
+  private fadeStart = 0;
+  private fadeEnd = 0;
+  /** Set by `fadeOut`: once the ramp has reached silence, stop for real. */
+  private stopWhenSilent = false;
 
   constructor(sink: DrumSink, bpm: () => number, pattern: RhythmPattern) {
     this.sink = sink;
@@ -53,6 +63,43 @@ export class RhythmBox {
   }
 
   get playing(): boolean { return this.timer !== null; }
+
+  /** The level now. Assigning it cancels any fade and holds there. */
+  get level(): number { return this.levelAt(this.sink.now); }
+  set level(v: number) {
+    this.levelFrom = v;
+    this.levelTo = v;
+    this.fadeEnd = 0;
+    this.stopWhenSilent = false;
+  }
+
+  /** The level at a moment on the sink's clock. */
+  levelAt(time: number): number {
+    if (time >= this.fadeEnd) return this.levelTo;
+    if (time <= this.fadeStart) return this.levelFrom;
+    const f = (time - this.fadeStart) / (this.fadeEnd - this.fadeStart);
+    return this.levelFrom + (this.levelTo - this.levelFrom) * f;
+  }
+
+  /** Ramp to a level over some seconds, from wherever the level is now. */
+  fadeTo(level: number, seconds: number): void {
+    const now = this.sink.now;
+    this.levelFrom = this.levelAt(now);
+    this.levelTo = level;
+    this.fadeStart = now;
+    this.fadeEnd = now + Math.max(0, seconds);
+    this.stopWhenSilent = false;
+  }
+
+  /**
+   * Ramp to silence and then stop. A stop that merely cut the timer would
+   * leave the hits already in the lookahead to land at full volume.
+   */
+  fadeOut(seconds: number): void {
+    if (!this.playing) return;
+    this.fadeTo(0, seconds);
+    this.stopWhenSilent = true;
+  }
 
   get stepsPerBar(): number { return this.pattern.steps; }
 
@@ -71,6 +118,8 @@ export class RhythmBox {
    * headless and one that can only be listened to.
    */
   start(): void {
+    // Asked to play again mid-fade-out: the fade may finish, the stop may not.
+    this.stopWhenSilent = false;
     if (this.timer !== null) return;
     this.anchored = 0;
     this.timer = setInterval(() => this.schedule(), TICK_MS);
@@ -80,6 +129,7 @@ export class RhythmBox {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     this.anchored = 0;
+    this.stopWhenSilent = false;
   }
 
   /**
@@ -98,6 +148,7 @@ export class RhythmBox {
   }
 
   private schedule(): void {
+    if (this.stopWhenSilent && this.sink.now >= this.fadeEnd) { this.stop(); return; }
     if (!this.sink.running) return;
     const now = this.sink.now;
     const step = this.stepSeconds();
@@ -125,13 +176,14 @@ export class RhythmBox {
     // triplet feel, which is as far as a shuffle control wants to go.
     const swing = p.swings ? clamp01(p.swing + this.swing) : 0;
     const at = index * step + (swing && i % 2 === 1 ? swing * step * 0.66 : 0);
+    const level = this.levelAt(at);
 
     for (const voice of Object.keys(p.lanes) as DrumVoice[]) {
       const lane = p.lanes[voice];
       if (!lane) continue;
-      const level = STEP_LEVELS[lane[i]] ?? 0;
-      if (level <= 0) continue;
-      this.sink.drum(voice, level * this.level, at);
+      const accent = STEP_LEVELS[lane[i]] ?? 0;
+      if (accent <= 0) continue;
+      this.sink.drum(voice, accent * level, at);
     }
   }
 }
