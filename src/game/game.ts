@@ -8,7 +8,7 @@ import { Tilt } from './tilt';
 import { Scoring } from './scoring';
 import { EventBus } from '../core/events';
 import { makeRng } from '../core/rng';
-import { clamp01 } from '../core/math';
+import { clamp, clamp01 } from '../core/math';
 import { pitchClass } from '../midi/notes';
 import { intensityOf, type Intensity } from './intensity';
 import {
@@ -38,6 +38,8 @@ export interface GameEvents {
   music: { id: string; label: string; root: number; scale: number[] };
   /** How much is happening, for the music to follow. An edge, not a repeat. */
   intensity: { level: Intensity; from: Intensity };
+  /** One tick of the bonus count: a note of the lost ball's rally, played back. */
+  bonus: { note: number; index: number; count: number; amount: number; total: number; x: number; y: number };
 }
 
 export interface GameConfig {
@@ -72,6 +74,34 @@ export const DEFAULT_GAME: GameConfig = {
  * back up over every gap would turn the accompaniment into a nervous tic.
  */
 export const INTENSITY_HOLD = 1.6;
+
+/** The pause between losing a ball and serving the next, with nothing to count. */
+const DRAIN_PAUSE = 1.1;
+
+/**
+ * The bonus count at the end of a ball is the ball's own rally, played back.
+ *
+ * A real machine counts its bonus up with a sound a tick; here each tick is
+ * one of the notes the ball actually struck, so the count is a phrase the
+ * player made rather than a number being read out. The phrase is fitted into
+ * about two seconds whatever its length, and the last few notes of a long
+ * rally stand for the whole of it.
+ */
+export const BONUS = {
+  /** Notes played back: the most recent ones, if the rally was longer. */
+  notes: 16,
+  /** Seconds the phrase is fitted into, between the fastest and slowest tick. */
+  span: 2.0,
+  gapMin: 0.09,
+  gapMax: 0.22,
+  /** Silence before the first tick, so the drain's own fall is heard first. */
+  lead: 0.5,
+  /** Silence after the last, before the next ball is served. */
+  tail: 0.6,
+  /** Points a tick is worth, times the ball's best combo up to `comboCap`. */
+  perNote: 150,
+  comboCap: 12,
+} as const;
 
 export class Game {
   readonly bus = new EventBus<GameEvents>();
@@ -120,6 +150,16 @@ export class Game {
   private tiltedNow = false;
   /** When the rally first read lower than the level it is on, or -1. */
   private intensityLowSince = -1;
+  /** The notes this ball has struck, oldest first, for the count at its end. */
+  private readonly rally: { note: number; x: number; y: number }[] = [];
+  /** The bonus count in progress, while the table is between balls. */
+  private bonus: {
+    notes: { note: number; x: number; y: number }[];
+    amount: number;
+    spacing: number;
+    index: number;
+    nextAt: number;
+  } | null = null;
   /** The notes the table was authored with, by element id. */
   private readonly baseNotes = new Map<string, number | null>();
   /** The mode those notes were written in, and the source of every retune. */
@@ -298,6 +338,9 @@ export class Game {
     this.tilt.reset();
     this.slowCharge = 1;
     this.setIntensity(0);
+    // Backspace inside a bonus count: what was being counted belonged to the
+    // run that has just been thrown away.
+    this.bonus = null;
     for (const el of this.table.elements) this.resetElement(el);
     this.world.balls.length = 0;
     this.held = null;
@@ -306,6 +349,9 @@ export class Game {
 
   serve(): void {
     if (this.ballsLeft <= 0) { this.setState('over'); return; }
+    // A saved ball is served again without coming through here, so its rally
+    // carries on; only a new ball starts a new one.
+    this.rally.length = 0;
     const s = this.def.serve;
     const ball = makeBall(s.x, s.y);
     ball.safeFor = this.cfg.saveTime;
@@ -363,7 +409,7 @@ export class Game {
     // with it, and the drain's own fall is what the player hears instead.
     this.setIntensity(0);
     this.ballsLeft--;
-    this.drainedFor = 1.1;
+    this.drainedFor = this.startBonus();
     this.setState('drained');
   }
 
@@ -379,6 +425,43 @@ export class Game {
     else this.serve();
   }
 
+  /**
+   * Queue the bonus count for the ball just lost, and say how long the pause
+   * before the next ball has to be to fit it. A ball that struck nothing has
+   * nothing to count, and gets the plain pause.
+   */
+  private startBonus(): number {
+    const notes = this.rally.slice(-BONUS.notes);
+    if (!notes.length) return DRAIN_PAUSE;
+    const spacing = clamp(BONUS.span / notes.length, BONUS.gapMin, BONUS.gapMax);
+    const amount = BONUS.perNote * clamp(this.scoring.ballComboBest, 1, BONUS.comboCap);
+    this.bonus = { notes, amount, spacing, index: 0, nextAt: this.time + BONUS.lead };
+    return BONUS.lead + notes.length * spacing + BONUS.tail;
+  }
+
+  /**
+   * Pay out whatever ticks of the count have come due. Simulation time, like
+   * the drain pause it runs inside, so it is deterministic and headless; the
+   * audio side sounds each tick as it is announced.
+   */
+  private tickBonus(): void {
+    const b = this.bonus;
+    if (!b) return;
+    while (b.index < b.notes.length && this.time >= b.nextAt) {
+      const n = b.notes[b.index];
+      this.scoring.add(b.amount, n.x, n.y, {
+        label: b.index === 0 ? 'BONUS' : '', tone: pitchClass(n.note) / 12, flat: true,
+      });
+      b.index++;
+      b.nextAt += b.spacing;
+      this.bus.emit('bonus', {
+        note: n.note, index: b.index - 1, count: b.notes.length,
+        amount: b.amount, total: b.amount * b.index, x: n.x, y: n.y,
+      });
+    }
+    if (b.index >= b.notes.length) this.bonus = null;
+  }
+
   // ------------------------------------------------------------- stepping ---
 
   /** One fixed simulation step. `dt` is already scaled for slow-motion. */
@@ -386,6 +469,7 @@ export class Game {
     this.time += dt;
     const realDt = dt / Math.max(0.01, this.timeScale);
 
+    this.tickBonus();
     if (this.drainedFor > 0) {
       this.drainedFor -= dt;
       if (this.drainedFor <= 0) this.nextBall();
@@ -577,6 +661,12 @@ export class Game {
   private award(el: TableElement, base: number): void {
     const amount = this.scoring.add(base, el.x, el.y, { tone: el.note ? (el.note % 12) / 12 : 0 });
     this.bus.emit('score', { amount, total: this.scoring.score, x: el.x, y: el.y, label: '' });
+    // Every pitched hit joins the rally, to be played back when the ball is
+    // lost. Bounded, because a long multiball is many hundreds of them.
+    if (el.note !== null) {
+      this.rally.push({ note: el.note, x: el.x, y: el.y });
+      if (this.rally.length > 64) this.rally.shift();
+    }
   }
 
   // ----------------------------------------------------------- objectives ---

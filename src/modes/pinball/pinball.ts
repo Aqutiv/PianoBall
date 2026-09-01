@@ -258,6 +258,13 @@ export class PinballMode extends ModeBase implements GameMode {
       hud.banner(e.saved ? 'BALL SAVED' : 'DRAIN', 1.2, e.saved ? 'warn' : 'bad');
     }));
 
+    // The bonus count walks the rally back across the elements it struck.
+    this.track(bus.on('bonus', (e) => {
+      const hue = pitchHue(e.note);
+      stage.particles.ring(e.x, e.y, 8, hue, 34, 0.4);
+      stage.particles.spawn('note', e.x, e.y, 12, { vz: 160, maxLife: 0.45, size: 18, hue });
+    }));
+
     this.track(bus.on('multiball', (e) => { hud.banner(`MULTIBALL ×${e.count}`, 2.2); stage.kick(14); }));
     this.track(bus.on('objective', (e) => hud.banner(e.label, 1.8)));
     this.track(bus.on('chord', (e) => hud.banner(e.name || 'CLUSTER', 1.1)));

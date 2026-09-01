@@ -732,11 +732,15 @@ export class AudioEngine {
    * A tuned strike: what a scoring element sounds like when the ball hits it.
    * Mallet body plus a short noise transient, which is what makes it read as
    * something being struck rather than a note being played.
+   *
+   * `at` is an audio-clock time, like `drum`'s and `pad`'s: the table plays a
+   * run of these — an objective's flourish, the bonus count at the end of a
+   * ball — and a run has to be placed ahead rather than fired from a timer.
    */
-  mallet(note: number, gain = 0.5, pan = 0, bright = 0.5): void {
+  mallet(note: number, gain = 0.5, pan = 0, bright = 0.5, at = 0): void {
     if (!this.running || !this.ctx) return;
     const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     const freq = noteToFreq(note);
     const decay = 0.42 + bright * 0.5;
 
@@ -819,11 +823,11 @@ export class AudioEngine {
   /**
    * A drum hit, from the voice bank in `drums.ts`.
    *
-   * `at` is an audio-clock time, like `pad`'s — the two schedulable voices in
-   * the engine. Everything else here plays the instant it is called, because
-   * everything else is a reaction to something the player just did; a drum
-   * machine is the opposite, and has to place a hit on a step that has not
-   * arrived yet.
+   * `at` is an audio-clock time, like `pad`'s and `mallet`'s — the three
+   * schedulable voices in the engine. Everything else here plays the instant
+   * it is called, because everything else is a reaction to something the
+   * player just did; a drum machine is the opposite, and has to place a hit
+   * on a step that has not arrived yet.
    */
   drum(voice: DrumVoice, gain = 1, at = 0): void {
     if (!this.running || !this.ctx) return;

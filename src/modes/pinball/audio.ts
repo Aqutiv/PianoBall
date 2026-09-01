@@ -21,7 +21,6 @@ import { strikeFor } from './strikes';
  */
 export class PinballAudio {
   private offs: (() => void)[] = [];
-  private timers: number[] = [];
   private readonly box: RhythmBox;
 
   constructor(
@@ -133,6 +132,13 @@ export class PinballAudio {
 
     offs.push(bus.on('serve', () => { this.bed.groove.reset(); }));
 
+    // The bonus count is the rally played back, a tick a note, rising and
+    // brightening towards the end the way a machine's count gathers pace.
+    offs.push(bus.on('bonus', ({ note, index, count, x }) => {
+      const f = index / Math.max(1, count - 1);
+      engine.mallet(note, 0.24 + 0.18 * f, this.pan(x), 0.55 + 0.4 * f);
+    }));
+
     // The accompaniment follows the rally. Applied on the way in as well, so a
     // mode re-entered mid-run is not left on whatever rung it was detached at.
     offs.push(bus.on('intensity', ({ level }) => this.apply(level)));
@@ -145,9 +151,6 @@ export class PinballAudio {
     this.box.stop();
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);
-    // Leaving mid-flourish must not keep playing it into the next mode.
-    for (const t of this.timers) clearTimeout(t);
-    this.timers.length = 0;
   }
 
   /**
@@ -169,13 +172,18 @@ export class PinballAudio {
     }
   }
 
-  /** Rising run through the table's scale. Used for objectives and multiball. */
+  /**
+   * Rising run through the table's scale. Used for objectives and multiball.
+   * Placed on the audio clock rather than on timers, so it lands where it
+   * was asked for and there is nothing to cancel on the way out.
+   */
   private arpeggio(count: number, spacing: number, gain: number): void {
     const m = this.game.music;
+    const now = this.engine.now;
     for (let i = 0; i < count; i++) {
-      this.timers.push(window.setTimeout(() => {
-        this.engine.mallet(degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8);
-      }, i * spacing * 1000));
+      this.engine.mallet(
+        degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8, now + i * spacing,
+      );
     }
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { predictLanding } from '../src/game/predict';
 import { crownAt } from '../src/game/keyLayout';
-import { Game, INTENSITY_HOLD } from '../src/game/game';
+import { Game, BONUS, INTENSITY_HOLD } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
 import { MusicState } from '../src/audio/musicState';
@@ -179,6 +179,17 @@ describe('scoring', () => {
     expect(s.resonance).toBeGreaterThan(2);
   });
 
+  it('remembers the best combo of the ball, and forgets it with the ball', () => {
+    const { game } = rig();
+    const s = game.scoring;
+    for (let i = 0; i < 4; i++) s.chain();
+    s.breakChain();
+    expect(s.ballComboBest).toBe(4);
+    s.startBall();
+    expect(s.ballComboBest).toBe(0);
+    expect(s.comboBest, 'the run remembers what the ball forgets').toBe(4);
+  });
+
   it('scores a four-note chord above a three-note one', () => {
     const three = rig();
     three.game.newGame();
@@ -242,6 +253,93 @@ describe('intensity', () => {
     expect(game.state).toBe('drained');
     expect(game.intensity).toBe(0);
     expect(levels.at(-1)).toBe(0);
+  });
+});
+
+/**
+ * The end of a ball plays its rally back as the bonus count. What is pinned
+ * here is the bookkeeping: one tick per note struck, up to a cap; the pause
+ * grows to fit; a ball that hit nothing gets the pause it always had.
+ */
+describe('rally bonus', () => {
+  interface Tick { index: number; count: number; amount: number }
+
+  /** A ball in play that has rolled the whole arc: five pitched, scoring hits. */
+  function rallied() {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    game.world.balls.length = 0;
+
+    let hits = 0;
+    game.bus.on('score', () => { hits++; });
+    const ticks: Tick[] = [];
+    game.bus.on('bonus', (e: Tick) => ticks.push(e));
+
+    for (const el of game.table.elements.filter((e) => e.group === 'arc')) {
+      game.spawnBall(el.x, el.y + 90, 0, -600);
+      const before = hits;
+      for (let i = 0; i < 240 && hits === before; i++) game.step(STEP);
+      game.world.balls.length = 0;
+    }
+    return { game, hits, ticks };
+  }
+
+  /** Lose the ball outright: straight into the drain with no save on it. */
+  function lose(game: Game): void {
+    game.world.balls.length = 0;
+    game.held = null;
+    game.state = 'play';
+    const ball = game.spawnBall(512, 60, 0, -400)!;
+    ball.safeFor = 0;
+    for (let i = 0; i < 240 && game.state === 'play'; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+  }
+
+  it('plays every note the ball struck back, one tick each, and pays for them', () => {
+    const { game, hits, ticks } = rallied();
+    expect(hits, 'the probe has to have hit something').toBeGreaterThan(0);
+    lose(game);
+    const before = game.scoring.score;
+    const combo = game.scoring.ballComboBest;
+
+    // The drain's own fall speaks first.
+    for (let i = 0; i < 240 * (BONUS.lead - 0.05); i++) game.step(STEP);
+    expect(ticks).toHaveLength(0);
+
+    for (let i = 0; i < 240 * 4 && game.state === 'drained'; i++) game.step(STEP);
+    const expected = Math.min(hits, BONUS.notes);
+    expect(ticks).toHaveLength(expected);
+    expect(ticks.map((t) => t.index)).toEqual([...Array(expected).keys()]);
+    expect(ticks[0].amount).toBe(BONUS.perNote * Math.max(1, Math.min(combo, BONUS.comboCap)));
+    expect(game.scoring.score - before).toBe(ticks[0].amount * expected);
+    expect(game.state, 'and then the next ball').toBe('serve');
+  });
+
+  it('keeps the plain pause for a ball that hit nothing', () => {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    const ticks: Tick[] = [];
+    game.bus.on('bonus', (e: Tick) => ticks.push(e));
+    lose(game);
+    for (let i = 0; i < 240 * 1.0; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+    for (let i = 0; i < 240 * 0.2; i++) game.step(STEP);
+    expect(game.state).toBe('serve');
+    expect(ticks).toHaveLength(0);
+  });
+
+  it('stops counting when the run is thrown away under it', () => {
+    const { game, ticks } = rallied();
+    lose(game);
+    for (let i = 0; i < 240 * (BONUS.lead + 0.05); i++) game.step(STEP);
+    expect(ticks).toHaveLength(1);
+    game.newGame();
+    for (let i = 0; i < 240 * 3; i++) game.step(STEP);
+    expect(ticks).toHaveLength(1);
   });
 });
 
