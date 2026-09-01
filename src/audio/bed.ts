@@ -2,7 +2,7 @@ import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
 import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
-import { compEvents, type CompEvent, type CompPart, type CompPattern } from './comp';
+import { compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern } from './comp';
 
 /** A chord placed at a beat, for a bed driven by a written piece. */
 export interface TrackChord {
@@ -18,9 +18,6 @@ export interface TrackNote {
   len: number;
   note: number;
 }
-
-/** Every part of an accompaniment, which is what a bed normally sounds. */
-const ALL_PARTS: readonly CompPart[] = ['chord', 'bass', 'wash'];
 
 /** Peak gain of a note the game plays. A chord stab is 0.055 across three tones. */
 const NOTE_GAIN = 0.05;
@@ -39,6 +36,11 @@ export interface BeatClock {
 /** How often the scheduler wakes, and how far ahead it writes. */
 const TICK_MS = 40;
 const LOOKAHEAD = 0.15;
+/**
+ * How far in the past an event can be and still be handed over. Past this it
+ * is dropped rather than piled onto the present — a slow load, a hidden tab.
+ */
+const LATE = 0.2;
 
 /**
  * The slow chord bed under everything.
@@ -85,6 +87,15 @@ export class ChordBed {
   private pattern: CompPattern = 'sustain';
   /** Which parts of the accompaniment this bed sounds. */
   private parts: readonly CompPart[] = ALL_PARTS;
+  /**
+   * How the scale's own loop is played, when no written piece is.
+   *
+   * Kept apart from `pattern` and `parts` above, which belong to a track and
+   * are reset with it: a tune starting and finishing must not clobber what the
+   * table asked for, and the table asking must not reach into a tune.
+   */
+  private loopPattern: CompPattern = 'sustain';
+  private loopParts: readonly CompPart[] = ['chord', 'bass'];
   /**
    * A tune the game plays itself, when the player is busy with the chords.
    *
@@ -227,7 +238,12 @@ export class ChordBed {
     // next sweep back over chords whose moment has passed, which drops every
     // one of them and leaves the bed silent for the rest of the piece — and a
     // scale change fires this while a tune is playing.
-    if (!this.track) this.trackCursor = 0;
+    if (!this.track) {
+      this.trackCursor = 0;
+      // The loop's own bar, half expanded, is in the old key. Left queued it
+      // would play out over the first bar of the new one.
+      this.pending.length = 0;
+    }
     this.align();
     this.groove.reset();
   }
@@ -237,6 +253,19 @@ export class ChordBed {
     const n = this.music.progression.length;
     this.chordIndex = (this.chordIndex + 1) % n;
     this.barsLeft = this.barsPerChord;
+  }
+
+  /**
+   * How the loop plays its chords, from the next bar on.
+   *
+   * Only the fields move. A bar already expanded into `pending` finishes as it
+   * was written, which is what makes a change land on a bar line rather than
+   * in the middle of one: the table can ask as often as it likes and the
+   * accompaniment still only ever changes on a downbeat.
+   */
+  setLoopPattern(pattern: CompPattern, parts: readonly CompPart[] = ALL_PARTS): void {
+    this.loopPattern = pattern;
+    this.loopParts = parts;
   }
 
   /**
@@ -264,9 +293,11 @@ export class ChordBed {
     }
     const now = this.engine.now;
     const bar = this.groove.beatSeconds * 4;
-    // A long stall (a hidden tab, a slow load) must not turn into a burst of
-    // catch-up bars all landing at once.
-    if (this.nextBar < now - bar) this.nextBar = now;
+    // A stall (a hidden tab, a slow load) must not turn into a burst of
+    // catch-up bars all landing at once. A bar `flush` would drop as late is
+    // re-aligned to now instead, so it plays late rather than not at all, and
+    // the one after it goes back onto the grid.
+    if (this.nextBar < now - LATE) this.nextBar = now;
     while (this.nextBar < now + LOOKAHEAD) {
       // The chord clock rides the bar loop rather than a timer of its own, so
       // a change always lands on a downbeat.
@@ -281,6 +312,10 @@ export class ChordBed {
       // the grid every later bar stays there exactly.
       this.nextBar = Math.round((this.nextBar + bar) / bar) * bar;
     }
+    // The bar is expanded all at once but handed over a lookahead at a time,
+    // the way a written track is: a comped bar is a dozen stabs, each of which
+    // has to land on its own beat rather than the instant the bar came due.
+    this.flush(now, bar / 4);
   }
 
   /**
@@ -299,7 +334,7 @@ export class ChordBed {
       this.trackCursor++;
       // A chord whose moment has already passed — a slow load, a tab that was
       // hidden — is dropped rather than piled onto the present.
-      if (at < now - 0.2) continue;
+      if (at < now - LATE) continue;
       const root = degreeToNote(c.degree, this.trackRoot, this.trackScale) - 12;
       const voiced = voiceLead(this.lastVoicing, chordNotes(root, c.quality));
       this.lastVoicing = voiced;
@@ -327,7 +362,7 @@ export class ChordBed {
       if (at > now + LOOKAHEAD) break;
       this.noteCursor++;
       // A note whose moment has passed is dropped, not piled onto the present.
-      if (at < now - 0.2) continue;
+      if (at < now - LATE) continue;
       this.pending.push({
         at,
         ev: {
@@ -343,18 +378,29 @@ export class ChordBed {
     let keep = 0;
     for (const p of this.pending) {
       if (p.at > now + LOOKAHEAD) { this.pending[keep++] = p; continue; }
-      if (p.at < now - 0.2) continue;
+      if (p.at < now - LATE) continue;
       this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
     }
     this.pending.length = keep;
   }
 
+  /**
+   * One bar of the loop, written out as the pattern plays it.
+   *
+   * `sustain` over `chord` and `bass` is the bed as it has always been: the
+   * chord for the bar, and its root an octave down so there is a floor. The
+   * other patterns are what a table asks for as a rally builds. Queued against
+   * the bar line rather than handed straight to the engine, so a stab three
+   * beats in lands three beats in.
+   */
   private play(bar: number): void {
     const { root, notes } = this.chordSpec;
     const voiced = voiceLead(this.lastVoicing, notes);
     this.lastVoicing = voiced;
-    this.engine.pad(voiced, bar * 1.05, 0.075);
-    // The root an octave down, so the bed has a floor.
-    this.engine.pad([root - 12], bar * 1.05, 0.05);
+    const beat = bar / 4;
+    for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0)) {
+      if (!this.loopParts.includes(ev.part)) continue;
+      this.pending.push({ at: this.nextBar + ev.offset * beat, ev });
+    }
   }
 }

@@ -1,9 +1,9 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
 import { Game } from '../../game/game';
 import { AURORA } from '../../game/table/tables/aurora';
-import { PinballRenderer, type DrawHints } from '../../render/renderer';
+import { PinballRenderer, nestOf, type DrawHints } from '../../render/renderer';
 import { predictLanding, type Landing } from '../../game/predict';
-import { PinballAudio } from './audio';
+import { PinballAudio, type GrooveHit } from './audio';
 import { PinballHud } from './hud';
 import { pitchHue } from '../../render/palette';
 import { clamp01 } from '../../core/math';
@@ -50,6 +50,7 @@ export class PinballMode extends ModeBase implements GameMode {
   private readonly hints: DrawHints = {
     highlight: (note) => this.lit.get(note) ?? 0,
     landings: this.landings,
+    beat: null,
   };
 
   constructor(ctx: ModeContext) {
@@ -64,7 +65,7 @@ export class PinballMode extends ModeBase implements GameMode {
   get timeScale(): number { return this.game.timeScale; }
 
   enter(): void {
-    const { stage, music } = this.ctx;
+    const { stage, music, audio } = this.ctx;
     const game = this.game;
 
     stage.cam.configure({ width: game.def.width, height: game.def.height });
@@ -73,12 +74,20 @@ export class PinballMode extends ModeBase implements GameMode {
     game.active = true;
     this.panel.mount();
     this.audio.attach();
+    this.audio.onGroove = (hit) => this.beatHit(hit);
+    // The ball is charged with the note the key actually sounded, snapping
+    // and all, so the interval the table scores is the one that was heard.
+    game.tuneNote = (note) => this.audio.tune(note);
     this.wire();
 
     // The scale is chosen outside the mode now, so the playfield has to be
-    // carried across whenever it changes underneath us.
-    this.track(music.bus.on('change', () => game.retune()));
+    // carried across whenever it changes underneath us. The delay is locked to
+    // the tempo, so it follows the same changes — and is put right on the way
+    // in, rather than left at whatever the last mode was playing at.
+    this.track(music.bus.on('change', (m) => { game.retune(); audio.setTempo(m.bpm); }));
+    this.track(music.bus.on('tempo', (bpm) => audio.setTempo(bpm)));
     game.retune();
+    audio.setTempo(music.bpm);
 
     this.ctx.bed.start();
   }
@@ -87,6 +96,7 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.active = false;
     this.release();
     this.audio.detach();
+    this.game.tuneNote = (note) => note;
     this.game.keybed.allOff();
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
     this.ctx.hud.clearPanels();
@@ -107,15 +117,37 @@ export class PinballMode extends ModeBase implements GameMode {
   pause(): void {
     this.game.active = false;
     this.game.keybed.allOff();
+    this.audio.pause();
   }
 
   resume(): void {
     this.game.active = true;
+    this.audio.resume();
   }
 
   draw(alpha: number, frameDt: number): void {
     this.predict();
+    // Where the beat is, for the pulse. Only meaningful once the audio clock
+    // is actually running; before that there is no beat to show.
+    const { audio, bed } = this.ctx;
+    this.hints.beat = audio.running ? bed.groove.phaseAt(audio.now) : null;
     this.renderer.draw(this.game, alpha, frameDt, this.hints);
+  }
+
+  /**
+   * A press that landed on the beat: a ring off the key that was struck, and
+   * an answer from the field that grows with the streak. Freestyle's beat
+   * flash, brought to the table — the one place groove is worth points and
+   * was, until now, invisible.
+   */
+  private beatHit(hit: GrooveHit): void {
+    const stage = this.ctx.stage;
+    if (stage.quality.reducedMotion) return;
+    const g = hit.key.geom;
+    const hue = pitchHue(g.note);
+    stage.particles.ring(g.cx, g.cy, g.z + 8, hue, g.drawHalfW * 5, 0.35);
+    const nest = nestOf(this.game);
+    stage.particles.ring(nest.x, nest.y, 10, hue, 120 + Math.min(6, hit.streak) * 30, 0.5);
   }
 
   /**
@@ -161,6 +193,11 @@ export class PinballMode extends ModeBase implements GameMode {
     // run that has just begun — and opening a screen does not stop the
     // simulation, so the new ball would play on unattended behind it.
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
+    // Asked for from behind a menu as often as not — the pause panel's
+    // Restart, or the home screen with this table already the one behind it.
+    // Those paths suspended the mode without ever resuming it, and a new game
+    // with the keys still switched off is a ball that cannot be dropped.
+    this.game.active = true;
     this.game.newGame();
   }
 
@@ -184,6 +221,10 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.retune();
     this.panel.showMusic();
     this.ctx.stage.invalidate();
+    // The drums preference is read whenever a rung is applied, so applying the
+    // current one is what makes a change heard now rather than at the next
+    // rally. Not behind a menu, though: a paused table stays quiet.
+    if (this.game.active) this.audio.resume();
   }
 
   pointerDown(x: number, y: number): number | null {
@@ -241,6 +282,21 @@ export class PinballMode extends ModeBase implements GameMode {
       stage.particles.burst(e.x, e.y + 20, 0, 1, 320, e.saved ? 150 : 0, 22);
       stage.kick(e.saved ? 3 : 9);
       hud.banner(e.saved ? 'BALL SAVED' : 'DRAIN', 1.2, e.saved ? 'warn' : 'bad');
+    }));
+
+    // An interval, in the ball's own colour. A ring only for the consonances,
+    // which are the ones worth aiming for.
+    this.track(bus.on('interval', (e) => {
+      const hue = pitchHue(e.ball);
+      stage.particles.burst(e.x, e.y, 0, 1, 260, hue, 10);
+      if (e.cls === 'perfect' || e.cls === 'consonant') stage.particles.ring(e.x, e.y, 20, hue, 60, 0.45);
+    }));
+
+    // The bonus count walks the rally back across the elements it struck.
+    this.track(bus.on('bonus', (e) => {
+      const hue = pitchHue(e.note);
+      stage.particles.ring(e.x, e.y, 8, hue, 34, 0.4);
+      stage.particles.spawn('note', e.x, e.y, 12, { vz: 160, maxLife: 0.45, size: 18, hue });
     }));
 
     this.track(bus.on('multiball', (e) => { hud.banner(`MULTIBALL ×${e.count}`, 2.2); stage.kick(14); }));

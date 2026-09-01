@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { predictLanding } from '../src/game/predict';
 import { crownAt } from '../src/game/keyLayout';
-import { Game } from '../src/game/game';
+import { Game, BONUS, INTENSITY_HOLD } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
 import { MusicState } from '../src/audio/musicState';
+import { classifyInterval } from '../src/audio/music';
 import type { KeyState } from '../src/game/keybed';
 import type { TableElement } from '../src/game/table/schema';
 
@@ -179,6 +180,17 @@ describe('scoring', () => {
     expect(s.resonance).toBeGreaterThan(2);
   });
 
+  it('remembers the best combo of the ball, and forgets it with the ball', () => {
+    const { game } = rig();
+    const s = game.scoring;
+    for (let i = 0; i < 4; i++) s.chain();
+    s.breakChain();
+    expect(s.ballComboBest).toBe(4);
+    s.startBall();
+    expect(s.ballComboBest).toBe(0);
+    expect(s.comboBest, 'the run remembers what the ball forgets').toBe(4);
+  });
+
   it('scores a four-note chord above a three-note one', () => {
     const three = rig();
     three.game.newGame();
@@ -189,6 +201,236 @@ describe('scoring', () => {
     for (const n of [62, 65, 69, 72]) press(four.input, n, 92);
 
     expect(four.game.scoring.score).toBeGreaterThan(three.game.scoring.score);
+  });
+});
+
+/**
+ * The music follows the rally through one number, and the claims that matter
+ * are about its edges: it rises the moment there is something to hear, waits
+ * through a lull, and stops dead with the ball.
+ */
+describe('intensity', () => {
+  function inPlay() {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    game.world.balls.length = 0;
+    const levels: number[] = [];
+    game.bus.on('intensity', (e: { level: number }) => levels.push(e.level));
+    return { game, levels };
+  }
+
+  it('rises the moment a rally starts, and says so once', () => {
+    const { game, levels } = inPlay();
+    for (let i = 0; i < 6; i++) game.scoring.chain();
+    game.step(STEP);
+    expect(game.intensity).toBe(2);
+    expect(levels).toEqual([2]);
+    game.step(STEP);
+    expect(levels, 'an edge, not a repeat').toEqual([2]);
+  });
+
+  it('holds through a lull before it falls', () => {
+    const { game } = inPlay();
+    for (let i = 0; i < 6; i++) game.scoring.chain();
+    game.step(STEP);
+    game.scoring.breakChain();
+    for (let i = 0; i < 240; i++) game.step(STEP);
+    expect(game.intensity, 'a second of quiet is still a rally').toBe(2);
+    for (let i = 0; i < 240 * (INTENSITY_HOLD + 0.1); i++) game.step(STEP);
+    expect(game.intensity).toBe(0);
+  });
+
+  it('drops at once when the ball is lost', () => {
+    const { game, levels } = inPlay();
+    for (let i = 0; i < 12; i++) game.scoring.chain();
+    game.step(STEP);
+    expect(game.intensity).toBe(3);
+    // Straight into the drain, with no save to catch it.
+    const ball = game.spawnBall(512, 60, 0, -400)!;
+    ball.safeFor = 0;
+    for (let i = 0; i < 240 && game.state === 'play'; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+    expect(game.intensity).toBe(0);
+    expect(levels.at(-1)).toBe(0);
+  });
+});
+
+/**
+ * The end of a ball plays its rally back as the bonus count. What is pinned
+ * here is the bookkeeping: one tick per note struck, up to a cap; the pause
+ * grows to fit; a ball that hit nothing gets the pause it always had.
+ */
+describe('rally bonus', () => {
+  interface Tick { index: number; count: number; amount: number }
+
+  /** A ball in play that has rolled the whole arc: five pitched, scoring hits. */
+  function rallied() {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    game.world.balls.length = 0;
+
+    let hits = 0;
+    game.bus.on('score', () => { hits++; });
+    const ticks: Tick[] = [];
+    game.bus.on('bonus', (e: Tick) => ticks.push(e));
+
+    for (const el of game.table.elements.filter((e) => e.group === 'arc')) {
+      game.spawnBall(el.x, el.y + 90, 0, -600);
+      const before = hits;
+      for (let i = 0; i < 240 && hits === before; i++) game.step(STEP);
+      game.world.balls.length = 0;
+    }
+    return { game, hits, ticks };
+  }
+
+  /** Lose the ball outright: straight into the drain with no save on it. */
+  function lose(game: Game): void {
+    game.world.balls.length = 0;
+    game.held = null;
+    game.state = 'play';
+    const ball = game.spawnBall(512, 60, 0, -400)!;
+    ball.safeFor = 0;
+    for (let i = 0; i < 240 && game.state === 'play'; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+  }
+
+  it('plays every note the ball struck back, one tick each, and pays for them', () => {
+    const { game, hits, ticks } = rallied();
+    expect(hits, 'the probe has to have hit something').toBeGreaterThan(0);
+    lose(game);
+    const before = game.scoring.score;
+    const combo = game.scoring.ballComboBest;
+
+    // The drain's own fall speaks first.
+    for (let i = 0; i < 240 * (BONUS.lead - 0.05); i++) game.step(STEP);
+    expect(ticks).toHaveLength(0);
+
+    for (let i = 0; i < 240 * 4 && game.state === 'drained'; i++) game.step(STEP);
+    const expected = Math.min(hits, BONUS.notes);
+    expect(ticks).toHaveLength(expected);
+    expect(ticks.map((t) => t.index)).toEqual([...Array(expected).keys()]);
+    expect(ticks[0].amount).toBe(BONUS.perNote * Math.max(1, Math.min(combo, BONUS.comboCap)));
+    expect(game.scoring.score - before).toBe(ticks[0].amount * expected);
+    expect(game.state, 'and then the next ball').toBe('serve');
+  });
+
+  it('keeps the plain pause for a ball that hit nothing', () => {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    const ticks: Tick[] = [];
+    game.bus.on('bonus', (e: Tick) => ticks.push(e));
+    lose(game);
+    for (let i = 0; i < 240 * 1.0; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+    for (let i = 0; i < 240 * 0.2; i++) game.step(STEP);
+    expect(game.state).toBe('serve');
+    expect(ticks).toHaveLength(0);
+  });
+
+  it('stops counting when the run is thrown away under it', () => {
+    const { game, ticks } = rallied();
+    lose(game);
+    for (let i = 0; i < 240 * (BONUS.lead + 0.05); i++) game.step(STEP);
+    expect(ticks).toHaveLength(1);
+    game.newGame();
+    for (let i = 0; i < 240 * 3; i++) game.step(STEP);
+    expect(ticks).toHaveLength(1);
+  });
+});
+
+/**
+ * The ball carries the note of the key that threw it, and what it strikes is
+ * scored as the interval between the two. Pinned: the charge itself, on a
+ * throw and on the serve; that it is the *sounded* note; that an uncharged
+ * ball scores no interval; and that only the consonances are named.
+ */
+describe('charged ball', () => {
+  interface Iv { ball: number; note: number; name: string; cls: string }
+
+  function inPlay() {
+    const rigged = rig();
+    rigged.game.newGame();
+    rigged.game.state = 'play';
+    rigged.game.held = null;
+    rigged.game.world.balls.length = 0;
+    return rigged;
+  }
+
+  it('carries the note of the key that threw it, and scores what it hits against it', () => {
+    const { input, game } = inPlay();
+    const events: Iv[] = [];
+    game.bus.on('interval', (e: Iv) => events.push(e));
+    const k = keyNear(game, 512);
+    const g = k.geom;
+    const ball = game.spawnBall(g.cx + g.nx * 20, g.cy + g.ny * 20, 0, 0)!;
+    expect(ball.note).toBeNull();
+
+    press(input, g.note, 92);
+    for (let i = 0; i < 600 && ball.alive; i++) {
+      game.step(STEP);
+      if (i === 30) lift(input, g.note);
+    }
+    expect(ball.note).toBe(g.note);
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) {
+      expect(e.ball).toBe(g.note);
+      expect(e.name).toBe(classifyInterval(g.note, e.note).name);
+    }
+  });
+
+  it('is charged by the serve as well', () => {
+    const { input, game } = rig();
+    game.newGame();
+    const held = game.held!;
+    const k = keyNear(game, 512);
+    press(input, k.geom.note, 80);
+    expect(game.state).toBe('play');
+    expect(held.note).toBe(k.geom.note);
+  });
+
+  it('is charged with the note that was sounded, not the key that was pressed', () => {
+    const { input, game } = rig();
+    game.tuneNote = (note) => note + 1;
+    game.newGame();
+    const held = game.held!;
+    const k = keyNear(game, 512);
+    press(input, k.geom.note, 80);
+    expect(held.note).toBe(k.geom.note + 1);
+  });
+
+  it('scores nothing for a ball nobody threw', () => {
+    const { game } = inPlay();
+    const events: Iv[] = [];
+    game.bus.on('interval', (e: Iv) => events.push(e));
+    const el = game.table.elements.find((e) => e.id === 'arc-0')!;
+    game.spawnBall(el.x, el.y + 90, 0, -600);
+    for (let i = 0; i < 240 && !el.down; i++) game.step(STEP);
+    expect(el.down).toBe(true);
+    expect(events).toHaveLength(0);
+  });
+
+  it('names only the consonances on the table', () => {
+    const { game } = inPlay();
+    // A major second below the element: mild, so it scores without a word.
+    const el = game.table.elements.find((e) => e.id === 'arc-0')!;
+    const ball = game.spawnBall(el.x, el.y + 90, 0, -600)!;
+    ball.note = el.note! - 2;
+    for (let i = 0; i < 240 && !el.down; i++) game.step(STEP);
+    expect(game.scoring.pops.map((p) => p.label)).not.toContain('MAJOR SECOND');
+
+    // A fifth below: perfect, and said so.
+    game.world.balls.length = 0;
+    const el2 = game.table.elements.find((e) => e.id === 'arc-1')!;
+    const b2 = game.spawnBall(el2.x, el2.y + 90, 0, -600)!;
+    b2.note = el2.note! - 7;
+    for (let i = 0; i < 240 && !el2.down; i++) game.step(STEP);
+    expect(game.scoring.pops.map((p) => p.label)).toContain('PERFECT FIFTH');
   });
 });
 

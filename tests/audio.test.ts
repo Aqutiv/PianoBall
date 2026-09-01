@@ -140,3 +140,83 @@ describe('switching the bed on', () => {
     expect(audible).toEqual([]);
   });
 });
+
+/**
+ * The table asks the bed to play its loop differently as a rally builds. What
+ * has to hold is that the bottom rung is the bed as it always was, that a
+ * comped bar lands on its beats, and that a change never lands mid-bar.
+ */
+describe("the loop's pattern", () => {
+  interface Pad { notes: number[]; seconds: number; gain: number; at: number }
+  const BAR = (60 / AURORA.music.bpm) * 4;
+  const BEAT = BAR / 4;
+
+  function harness() {
+    const pads: Pad[] = [];
+    const engine = {
+      running: true,
+      now: 0,
+      settings: { bed: true },
+      pad: (notes: number[], seconds: number, gain: number, at: number) => {
+        pads.push({ notes, seconds, gain, at });
+      },
+      setBedAudible: () => {},
+    };
+    const music = new MusicState({ ...AURORA.music });
+    const bed = new ChordBed(engine as never, music);
+    const tick = () => (bed as never as { schedule(): void }).schedule();
+    /** Wind the clock a bar forward, a scheduler tick at a time. */
+    const bar = () => { for (let t = 0; t < BAR; t += 0.04) { engine.now += 0.04; tick(); } };
+    return { pads, engine, bed, tick, bar };
+  }
+
+  it('sounds as it always has until it is asked otherwise', () => {
+    const { pads, tick } = harness();
+    tick();
+    // A chord and its root, both for the whole bar, both on the bar line.
+    expect(pads.map((p) => p.at)).toEqual([0, 0]);
+    expect(pads[0].seconds).toBeCloseTo(BAR * 1.05, 6);
+    expect(pads[0].notes.length).toBeGreaterThan(1);
+    expect(pads[1].notes).toHaveLength(1);
+  });
+
+  it('plays a comped bar on the beats, and only the parts it was given', () => {
+    const { pads, bed, tick, bar } = harness();
+    bed.setLoopPattern('pulse', ['chord', 'bass']);
+    tick();
+    bar();
+    const first = pads.filter((p) => p.at < BAR - 1e-6);
+    // Four chord stabs and one bass note; the wash was left out.
+    expect(first).toHaveLength(5);
+    const stabs = first.filter((p) => p.notes.length > 1).map((p) => p.at / BEAT);
+    expect(stabs.map((s) => Math.round(s * 1000) / 1000)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('changes on the next bar line, never in the middle of a bar', () => {
+    const { pads, engine, bed, tick } = harness();
+    tick();
+    const before = pads.length;
+    engine.now = BEAT;
+    bed.setLoopPattern('pulse');
+    tick();
+    expect(pads.length, 'nothing new inside the bar').toBe(before);
+    engine.now = BAR - 0.1;
+    tick();
+    const next = pads.filter((p) => p.at >= BAR - 1e-6);
+    expect(next.length).toBeGreaterThan(2);
+  });
+
+  it('forgets a bar it had expanded when the key changes under it', () => {
+    const { pads, bed, tick, engine } = harness();
+    bed.setLoopPattern('arpeggio');
+    tick();
+    const written = pads.length;
+    // The arpeggio's later steps are still queued for their moment; a scale
+    // change must not let them play out over the new key's first bar.
+    bed.reset();
+    engine.now = 0.5;
+    tick();
+    expect(pads.length).toBeGreaterThan(written);
+    for (const p of pads.slice(written)) expect(p.at).toBeCloseTo(0.5, 6);
+  });
+});
