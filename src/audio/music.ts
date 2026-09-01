@@ -518,6 +518,20 @@ export class Groove {
     return (phase - Math.round(phase)) * step;
   }
 
+  /**
+   * Which beat of the bar `time` is in, and how far through it, 0..1.
+   *
+   * The same origin as `offsetAt`: audio time zero, which is where the bed
+   * snaps its bar lines to and where the rhythm box counts its steps from. So
+   * the beat this names is the beat the drums are on, and the downbeat it
+   * names is the bed's.
+   */
+  phaseAt(time: number, beatsPerBar = 4): { beat: number; phase: number } {
+    const beats = time / this.beatSeconds;
+    const whole = Math.floor(beats);
+    return { beat: ((whole % beatsPerBar) + beatsPerBar) % beatsPerBar, phase: beats - whole };
+  }
+
   /** Judge a hit. Returns true when it landed on the grid. */
   judge(time: number): boolean {
     const on = Math.abs(this.offsetAt(time)) <= this.window;

@@ -3,6 +3,7 @@ import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
 import type { Intensity } from '../../game/intensity';
+import type { KeyState } from '../../game/keybed';
 import { RhythmBox } from '../../audio/rhythmBox';
 import { findPattern } from '../../audio/patterns';
 import { clamp, clamp01 } from '../../core/math';
@@ -19,9 +20,22 @@ import { strikeFor } from './strikes';
  * other mode and lives elsewhere; the rhythm box is this mode's own, and
  * follows the rally rather than the mode, the way Freestyle's follows the run.
  */
+/** A key press that landed on the beat. */
+export interface GrooveHit {
+  key: KeyState;
+  note: number;
+  streak: number;
+}
+
 export class PinballAudio {
   private offs: (() => void)[] = [];
   private readonly box: RhythmBox;
+  /**
+   * Told of every press that lands on the beat. The mode shows the beat and
+   * this layer judges it; a callback rather than a bus event because the bus
+   * is the game's to publish on, and this is not the game.
+   */
+  onGroove: ((hit: GrooveHit) => void) | null = null;
 
   constructor(
     private readonly engine: AudioEngine,
@@ -65,7 +79,9 @@ export class PinballAudio {
       // thing a player can actually do.
       if (!engine.running) return;
       const groove = this.bed.groove;
-      this.game.scoring.setGroove(groove.judge(engine.now) ? groove.multiplier : 1);
+      const on = groove.judge(engine.now);
+      this.game.scoring.setGroove(on ? groove.multiplier : 1);
+      if (on) this.onGroove?.({ key, note, streak: groove.streak });
     }));
 
     offs.push(bus.on('keyup', ({ note }) => {
@@ -148,6 +164,7 @@ export class PinballAudio {
   detach(): void {
     for (const off of this.offs) off();
     this.offs.length = 0;
+    this.onGroove = null;
     this.box.stop();
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);

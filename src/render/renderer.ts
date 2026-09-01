@@ -10,17 +10,36 @@ import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
 import type { Landing } from '../game/predict';
+import { crownAt } from '../game/keyLayout';
+
+/** Where the music is: which beat of the bar, and how far through it. */
+export interface BeatHint {
+  beat: number;
+  phase: number;
+}
 
 /**
  * What the mode knows about the immediate future and the renderer does not.
  *
  * The landing predictor is a display affordance, so it runs once per drawn
  * frame in the mode rather than in the simulation, and arrives here as advice.
+ * So does the beat: the renderer never sees the audio clock, only where the
+ * mode says the beat is — or null, when there is no beat to show.
  */
 export interface DrawHints {
   /** Extra light per note, for the key a ball is falling towards. */
   highlight(note: number): number;
   landings: Landing[];
+  beat: BeatHint | null;
+}
+
+/** The centre of the bumper nest, which is where the table's pulse is drawn from. */
+export function nestOf(game: Game): { x: number; y: number } {
+  let x = 0, y = 0, n = 0;
+  for (const el of game.table.elements) {
+    if (el.kind === 'bumper') { x += el.x; y += el.y; n++; }
+  }
+  return n ? { x: x / n, y: y / n } : { x: game.def.width / 2, y: game.def.height / 2 };
 }
 
 /**
@@ -253,8 +272,14 @@ export class PinballRenderer {
     const ctx = stage.ctx;
     const em = stage.emissive.ctx;
 
+    // The beat as an envelope: a sharp swell at the top of each beat that has
+    // died away by the next, the downbeat the strongest.
+    const beat = hints?.beat ?? null;
+    const env = beat ? Math.pow(1 - beat.phase, 4) * (beat.beat === 0 ? 1 : 0.55) : 0;
+
     const sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
-    for (const el of sorted) this.drawElement(ctx, em, game, el);
+    for (const el of sorted) this.drawElement(ctx, em, game, el, env);
+    this.drawPulse(em, game, env);
 
     drawKeys(ctx, em, stage, game.keybed, hints ? { highlight: hints.highlight } : {});
     if (hints) this.drawLandings(ctx, em, game, hints);
@@ -313,9 +338,50 @@ export class PinballRenderer {
     }
   }
 
+  // -------------------------------------------------------------- pulse ---
+
+  /**
+   * The beat, on the table.
+   *
+   * Groove is worth points on every key press, and the beat it is judged
+   * against was nowhere on screen. The pulse rings the bumper nest and runs
+   * along the lip of the keybed, swelling on each beat and harder on the
+   * downbeat. Under reduced motion nothing moves — the ring keeps its size and
+   * the strip its width — and only the brightness breathes, since a glow that
+   * changes is not motion.
+   */
+  private drawPulse(em: CanvasRenderingContext2D, game: Game, env: number): void {
+    if (env <= 0.001) return;
+    const still = this.quality.reducedMotion;
+    const breathe = still ? 0 : env;
+    const hue = this.hue(game.music.root);
+    const nest = nestOf(game);
+    const alpha = (0.04 + env * 0.16) * (still ? 0.5 : 1);
+
+    em.save();
+    em.globalCompositeOperation = 'lighter';
+    em.strokeStyle = tone(hue, 80, 62, alpha);
+    em.lineCap = 'round';
+    em.lineWidth = Math.max(1, (2 + breathe * 3) * this.cam.scaleAt(nest.x, nest.y));
+    tracePath(em, this.cam, circlePoints(nest.x, nest.y, 250 * (1 + breathe * 0.08)), 2, true);
+    em.stroke();
+
+    // Along the keybed, following its crown, just up the table from the lip.
+    const L = game.keybed.layout;
+    const pts: Vec2[] = [];
+    for (let i = 0; i <= 24; i++) {
+      const x = L.left + ((L.right - L.left) * i) / 24;
+      pts.push({ x, y: L.baseY + crownAt(x, L) + 14 });
+    }
+    em.lineWidth = Math.max(1, (6 + breathe * 8) * this.cam.scaleAt(game.def.width / 2, L.baseY));
+    tracePath(em, this.cam, pts, 0);
+    em.stroke();
+    em.restore();
+  }
+
   // ----------------------------------------------------------- elements ---
 
-  private drawElement(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, el: Game['table']['elements'][number]): void {
+  private drawElement(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, el: Game['table']['elements'][number], env = 0): void {
     const pal = this.stage.palette;
     const mat = this.stage.theme.elements;
     const energised = el.energisedUntil > game.time;
@@ -337,8 +403,10 @@ export class PinballRenderer {
         const pulse = energised ? 0.55 + Math.sin(this.t * 12) * 0.2 : 0;
         const squash = 1 - flash * 0.22;
         this.stage.groundShadow(ctx, el.x, el.y, el.r, el.z);
-        // Painted skirt ring on the playfield.
-        this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25));
+        // Painted skirt ring on the playfield. It rides the beat as well as the
+        // energising, but only in its light, so a bumper breathing with the
+        // music never reads as one the player is holding the note of.
+        this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25 + env * 0.12));
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.22, 1, withAlpha(pal.void, 0.55));
         this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, mat.bumperLo, mix(mat.bumperHi, pitchColor(el.note ?? 60, 70, 46), 0.55));
 
@@ -355,7 +423,7 @@ export class PinballRenderer {
         this.stage.outlineDisc(ctx, el.x, el.y, el.r, el.z * squash);
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, tone(capHue, 100, 96, 0.5 + pulse * 0.5));
 
-        this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5);
+        this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5 + env * 0.35);
         if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55);
         break;
       }

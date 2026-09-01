@@ -365,3 +365,28 @@ describe('voice leading', () => {
     }
   });
 });
+
+describe('the beat on screen', () => {
+  it('names the beat and how far through it the clock is', () => {
+    const g = new Groove(120);           // a beat is half a second
+    expect(g.phaseAt(0)).toEqual({ beat: 0, phase: 0 });
+    expect(g.phaseAt(1.0)).toEqual({ beat: 2, phase: 0 });
+    expect(g.phaseAt(2.0)).toEqual({ beat: 0, phase: 0 });
+    const q = g.phaseAt(1.25);
+    expect(q.beat).toBe(2);
+    expect(q.phase).toBeCloseTo(0.5, 9);
+  });
+
+  it('agrees with the judge about where the grid is', () => {
+    // The judge counts subdivisions from audio time zero and so does this, so
+    // a press the judge calls on-time is always near a beat or its half.
+    const g = new Groove(96);
+    for (let i = 0; i < 200; i++) {
+      const t = i * 0.0731;
+      const { phase } = g.phaseAt(t);
+      const onGrid = Math.abs(g.offsetAt(t)) <= g.window;
+      const nearGrid = phase < 0.2 || phase > 0.8 || Math.abs(phase - 0.5) < 0.2;
+      if (onGrid) expect(nearGrid, `t=${t}`).toBe(true);
+    }
+  });
+});

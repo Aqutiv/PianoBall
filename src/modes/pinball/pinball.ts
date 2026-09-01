@@ -1,9 +1,9 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
 import { Game } from '../../game/game';
 import { AURORA } from '../../game/table/tables/aurora';
-import { PinballRenderer, type DrawHints } from '../../render/renderer';
+import { PinballRenderer, nestOf, type DrawHints } from '../../render/renderer';
 import { predictLanding, type Landing } from '../../game/predict';
-import { PinballAudio } from './audio';
+import { PinballAudio, type GrooveHit } from './audio';
 import { PinballHud } from './hud';
 import { pitchHue } from '../../render/palette';
 import { clamp01 } from '../../core/math';
@@ -50,6 +50,7 @@ export class PinballMode extends ModeBase implements GameMode {
   private readonly hints: DrawHints = {
     highlight: (note) => this.lit.get(note) ?? 0,
     landings: this.landings,
+    beat: null,
   };
 
   constructor(ctx: ModeContext) {
@@ -73,6 +74,7 @@ export class PinballMode extends ModeBase implements GameMode {
     game.active = true;
     this.panel.mount();
     this.audio.attach();
+    this.audio.onGroove = (hit) => this.beatHit(hit);
     this.wire();
 
     // The scale is chosen outside the mode now, so the playfield has to be
@@ -121,7 +123,27 @@ export class PinballMode extends ModeBase implements GameMode {
 
   draw(alpha: number, frameDt: number): void {
     this.predict();
+    // Where the beat is, for the pulse. Only meaningful once the audio clock
+    // is actually running; before that there is no beat to show.
+    const { audio, bed } = this.ctx;
+    this.hints.beat = audio.running ? bed.groove.phaseAt(audio.now) : null;
     this.renderer.draw(this.game, alpha, frameDt, this.hints);
+  }
+
+  /**
+   * A press that landed on the beat: a ring off the key that was struck, and
+   * an answer from the field that grows with the streak. Freestyle's beat
+   * flash, brought to the table — the one place groove is worth points and
+   * was, until now, invisible.
+   */
+  private beatHit(hit: GrooveHit): void {
+    const stage = this.ctx.stage;
+    if (stage.quality.reducedMotion) return;
+    const g = hit.key.geom;
+    const hue = pitchHue(g.note);
+    stage.particles.ring(g.cx, g.cy, g.z + 8, hue, g.drawHalfW * 5, 0.35);
+    const nest = nestOf(this.game);
+    stage.particles.ring(nest.x, nest.y, 10, hue, 120 + Math.min(6, hit.streak) * 30, 0.5);
   }
 
   /**
