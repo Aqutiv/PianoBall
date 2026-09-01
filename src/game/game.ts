@@ -10,6 +10,7 @@ import { EventBus } from '../core/events';
 import { makeRng } from '../core/rng';
 import { clamp01 } from '../core/math';
 import { pitchClass } from '../midi/notes';
+import { intensityOf, type Intensity } from './intensity';
 import {
   identifyChord, findMode, retuneNote, MODES,
   type ActiveMusic, type MusicMode,
@@ -35,6 +36,8 @@ export interface GameEvents {
   tilt: { warning: boolean; tilted: boolean };
   chord: { notes: number[]; name: string };
   music: { id: string; label: string; root: number; scale: number[] };
+  /** How much is happening, for the music to follow. An edge, not a repeat. */
+  intensity: { level: Intensity; from: Intensity };
 }
 
 export interface GameConfig {
@@ -59,6 +62,16 @@ export const DEFAULT_GAME: GameConfig = {
   slowRecharge: 0.28,
   maxBalls: 4,
 };
+
+/**
+ * Seconds a lower reading has to persist before the intensity drops.
+ *
+ * Rising is instant, because a rally should be heard the moment it starts.
+ * Falling waits, because a bar-long lull between two shots is part of a rally
+ * rather than the end of one, and stripping the band down and building it
+ * back up over every gap would turn the accompaniment into a nervous tic.
+ */
+export const INTENSITY_HOLD = 1.6;
 
 export class Game {
   readonly bus = new EventBus<GameEvents>();
@@ -86,6 +99,8 @@ export class Game {
   slowActive = false;
   /** Multiplied into the loop's time scale. */
   timeScale = 1;
+  /** How much is happening, 0..3, for the music to follow. See `intensity.ts`. */
+  intensity: Intensity = 0;
 
   private input: InputHub;
   private rng: () => number;
@@ -103,6 +118,8 @@ export class Game {
   /** Last tilt state broadcast, so `tilt` is an edge rather than a per-step spam. */
   private tiltWarned = false;
   private tiltedNow = false;
+  /** When the rally first read lower than the level it is on, or -1. */
+  private intensityLowSince = -1;
   /** The notes the table was authored with, by element id. */
   private readonly baseNotes = new Map<string, number | null>();
   /** The mode those notes were written in, and the source of every retune. */
@@ -142,6 +159,34 @@ export class Game {
     const from = this.state;
     this.state = to;
     this.bus.emit('state', { from, to });
+  }
+
+  private setIntensity(level: Intensity): void {
+    if (level === this.intensity) return;
+    const from = this.intensity;
+    this.intensity = level;
+    this.intensityLowSince = -1;
+    this.bus.emit('intensity', { level, from });
+  }
+
+  /**
+   * Follow the rally up at once and down only after a pause.
+   *
+   * Read off the scoring rather than off events, because the combo lapses on
+   * a timer of its own and nothing announces that.
+   */
+  private updateIntensity(): void {
+    const s = this.scoring;
+    const raw = intensityOf({
+      playing: this.state === 'play', combo: s.combo, resonance: s.resonance, multiball: s.multiball,
+    });
+    if (raw >= this.intensity) {
+      this.intensityLowSince = -1;
+      this.setIntensity(raw);
+      return;
+    }
+    if (this.intensityLowSince < 0) this.intensityLowSince = this.time;
+    else if (this.time - this.intensityLowSince >= INTENSITY_HOLD) this.setIntensity(raw);
   }
 
   // ---------------------------------------------------------------- input ---
@@ -252,6 +297,7 @@ export class Game {
     this.tiltedNow = false;
     this.tilt.reset();
     this.slowCharge = 1;
+    this.setIntensity(0);
     for (const el of this.table.elements) this.resetElement(el);
     this.world.balls.length = 0;
     this.held = null;
@@ -313,6 +359,9 @@ export class Game {
 
     this.tilt.reset();
     this.scoring.breakChain();
+    // Losing the ball ends the rally now, not after the hold: the band stops
+    // with it, and the drain's own fall is what the player hears instead.
+    this.setIntensity(0);
     this.ballsLeft--;
     this.drainedFor = 1.1;
     this.setState('drained');
@@ -381,6 +430,7 @@ export class Game {
     this.updateElements(dt);
     this.scoring.update(dt);
     this.scoring.setResonance(Math.max(1, this.scoring.resonance - 0.55 * dt));
+    this.updateIntensity();
 
     // Only on a change. Emitting every step made every listener responsible for
     // de-duplicating an event that was never really repeating.

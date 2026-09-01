@@ -2,7 +2,9 @@ import type { AudioEngine } from '../../audio/engine';
 import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
+import type { Intensity } from '../../game/intensity';
 import { clamp } from '../../core/math';
+import { LADDER } from './ladder';
 
 /**
  * Turns what happens on the table into music.
@@ -91,14 +93,27 @@ export class PinballAudio {
     }));
 
     offs.push(bus.on('serve', () => { this.bed.groove.reset(); }));
+
+    // The accompaniment follows the rally. Applied on the way in as well, so a
+    // mode re-entered mid-run is not left on whatever rung it was detached at.
+    offs.push(bus.on('intensity', ({ level }) => this.apply(level)));
+    this.apply(this.game.intensity);
   }
 
   detach(): void {
     for (const off of this.offs) off();
     this.offs.length = 0;
+    // The bed is shared. The other modes expect to find it plain.
+    this.apply(0);
     // Leaving mid-flourish must not keep playing it into the next mode.
     for (const t of this.timers) clearTimeout(t);
     this.timers.length = 0;
+  }
+
+  /** Put the bed on the rung the table is on. Takes effect at the next bar. */
+  private apply(level: Intensity): void {
+    const rung = LADDER[level];
+    this.bed.setLoopPattern(rung.pattern, rung.parts);
   }
 
   /** Rising run through the table's scale. Used for objectives and multiball. */

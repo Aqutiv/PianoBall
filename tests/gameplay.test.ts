@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { predictLanding } from '../src/game/predict';
 import { crownAt } from '../src/game/keyLayout';
-import { Game } from '../src/game/game';
+import { Game, INTENSITY_HOLD } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
 import { MusicState } from '../src/audio/musicState';
@@ -189,6 +189,59 @@ describe('scoring', () => {
     for (const n of [62, 65, 69, 72]) press(four.input, n, 92);
 
     expect(four.game.scoring.score).toBeGreaterThan(three.game.scoring.score);
+  });
+});
+
+/**
+ * The music follows the rally through one number, and the claims that matter
+ * are about its edges: it rises the moment there is something to hear, waits
+ * through a lull, and stops dead with the ball.
+ */
+describe('intensity', () => {
+  function inPlay() {
+    const { game } = rig();
+    game.newGame();
+    game.state = 'play';
+    game.held = null;
+    game.world.balls.length = 0;
+    const levels: number[] = [];
+    game.bus.on('intensity', (e: { level: number }) => levels.push(e.level));
+    return { game, levels };
+  }
+
+  it('rises the moment a rally starts, and says so once', () => {
+    const { game, levels } = inPlay();
+    for (let i = 0; i < 6; i++) game.scoring.chain();
+    game.step(STEP);
+    expect(game.intensity).toBe(2);
+    expect(levels).toEqual([2]);
+    game.step(STEP);
+    expect(levels, 'an edge, not a repeat').toEqual([2]);
+  });
+
+  it('holds through a lull before it falls', () => {
+    const { game } = inPlay();
+    for (let i = 0; i < 6; i++) game.scoring.chain();
+    game.step(STEP);
+    game.scoring.breakChain();
+    for (let i = 0; i < 240; i++) game.step(STEP);
+    expect(game.intensity, 'a second of quiet is still a rally').toBe(2);
+    for (let i = 0; i < 240 * (INTENSITY_HOLD + 0.1); i++) game.step(STEP);
+    expect(game.intensity).toBe(0);
+  });
+
+  it('drops at once when the ball is lost', () => {
+    const { game, levels } = inPlay();
+    for (let i = 0; i < 12; i++) game.scoring.chain();
+    game.step(STEP);
+    expect(game.intensity).toBe(3);
+    // Straight into the drain, with no save to catch it.
+    const ball = game.spawnBall(512, 60, 0, -400)!;
+    ball.safeFor = 0;
+    for (let i = 0; i < 240 && game.state === 'play'; i++) game.step(STEP);
+    expect(game.state).toBe('drained');
+    expect(game.intensity).toBe(0);
+    expect(levels.at(-1)).toBe(0);
   });
 });
 
