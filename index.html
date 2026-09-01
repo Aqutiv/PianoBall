@@ -10,6 +10,23 @@
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- What a pasted link looks like in Discord, Slack, iMessage and the rest.
+         These two URLs are absolute on purpose: a scraper fetches them with no
+         page context, so the relative `base` Vite uses everywhere else would
+         have nothing to resolve against. They are the one place in the app
+         that hardcodes where it is deployed. Card art: npm run og. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PianoBall" />
+    <meta property="og:title" content="PianoBall" />
+    <meta property="og:description" content="Musical pinball played with a MIDI keyboard." />
+    <meta property="og:url" content="https://aqutiv.github.io/PianoBall/" />
+    <meta property="og:image" content="https://aqutiv.github.io/PianoBall/og.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A chrome ball streaking over a neon pinball table with piano keys along its near edge." />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="app">
