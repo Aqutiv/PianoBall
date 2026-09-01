@@ -5,9 +5,10 @@ import type { Game } from '../../game/game';
 import type { Intensity } from '../../game/intensity';
 import { RhythmBox } from '../../audio/rhythmBox';
 import { findPattern } from '../../audio/patterns';
-import { clamp } from '../../core/math';
+import { clamp, clamp01 } from '../../core/math';
 import { LADDER } from './ladder';
 import { pinballSettings } from './settings';
+import { strikeFor } from './strikes';
 
 /**
  * Turns what happens on the table into music.
@@ -81,10 +82,31 @@ export class PinballAudio {
       engine.impact(sound, energy, this.pan(x), note);
     }));
 
+    // Each family of element is its own instrument; see `strikes.ts`. What
+    // the impact and the energising buy is the same for all of them: louder,
+    // and for a pitched body brighter, so a held note still lights up the
+    // sound of the thing it is aimed at.
     offs.push(bus.on('element', ({ el, energised, impact, x }) => {
-      if (el.note === null) return;
-      const gain = clamp(0.18 + impact / 2600, 0.12, 0.62) * (energised ? 1.5 : 1);
-      engine.mallet(el.note, gain, this.pan(x), energised ? 0.85 : 0.45);
+      const s = strikeFor(el);
+      if (!s) return;
+      const base = clamp(0.18 + impact / 2600, 0.12, 0.62) * (energised ? 1.5 : 1);
+      const pan = this.pan(x);
+      if (s.mallet && el.note !== null) {
+        engine.mallet(el.note, base * s.mallet.gain, pan, clamp01(s.mallet.bright + (energised ? 0.4 : 0)));
+      }
+      if (s.drum) {
+        const voice = s.drum.voices[pan < 0 || s.drum.voices.length < 2 ? 0 : 1];
+        engine.drum(voice, Math.min(1, base * 1.6 * s.drum.gain));
+      }
+      if (s.roll) {
+        // A roll's length follows the spin the hit has just put on the
+        // element, dying away hit by hit; placed ahead on the audio clock.
+        const n = Math.min(s.roll.max, Math.round(el.spinRate * s.roll.perSpin));
+        const gain = Math.min(1, base * 1.2 * s.roll.gain);
+        for (let i = 1; i <= n; i++) {
+          engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), engine.now + i * s.roll.gap);
+        }
+      }
     }));
 
     // A recognised chord gets a lift; a random cluster does not.
