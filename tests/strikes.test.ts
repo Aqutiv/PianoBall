@@ -43,14 +43,20 @@ describe('striking the table', () => {
   function rig() {
     const mallets: Mallet[] = [];
     const drums: Drum[] = [];
+    /** How many one-shots were taken back, by voice. */
+    const cancelled = { mallet: 0, drum: 0 };
     const engine = {
       running: true,
       now: 10,
       settings: { bed: true, assist: false },
       mallet: (note: number, gain: number, _pan: number, bright: number) => {
         mallets.push({ note, gain, bright });
+        return { cancel: () => { cancelled.mallet++; } };
       },
-      drum: (voice: DrumVoice, gain: number, at = 0) => { drums.push({ voice, gain, at }); },
+      drum: (voice: DrumVoice, gain: number, at = 0) => {
+        drums.push({ voice, gain, at });
+        return { cancel: () => { cancelled.drum++; } };
+      },
       pad: () => {}, setBedAudible: () => {},
       noteOn: () => {}, noteOff: () => {}, ping: () => {}, impact: () => {}, swell: () => {},
     };
@@ -64,7 +70,7 @@ describe('striking the table', () => {
       el.spinRate = spinRate;
       game.bus.emit('element', { el, energised, impact, x: el.x, y: el.y });
     };
-    return { mallets, drums, hit, game };
+    return { mallets, drums, hit, game, audio, engine, cancelled };
   }
 
   it('keeps the bumpers as they were', () => {
@@ -121,5 +127,37 @@ describe('striking the table', () => {
     hit('post-ul');
     expect(mallets).toHaveLength(0);
     expect(drums).toHaveLength(0);
+  });
+
+  /**
+   * A sound placed ahead on the clock belongs to the graph, not to the mode
+   * that asked for it. Leaving used to clear timers; now it has to take the
+   * scheduled hits back itself, or a flourish lands over the next mode.
+   */
+  it('takes back a roll still in the future when the mode is left', () => {
+    const { drums, hit, audio, cancelled } = rig();
+    hit('spinner', false, 800, 20);
+    const roll = drums.filter((d) => d.voice === 'hat').length;
+    expect(roll).toBeGreaterThan(0);
+    audio.detach();
+    expect(cancelled.drum).toBe(roll);
+  });
+
+  it('takes back an objective flourish the same way', () => {
+    const { mallets, game, audio, cancelled } = rig();
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    expect(mallets.length).toBeGreaterThan(1);
+    audio.detach();
+    expect(cancelled.mallet).toBe(mallets.length);
+  });
+
+  it('forgets a flourish that has already played out', () => {
+    const { game, audio, engine, cancelled } = rig();
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    // Well past the last note: nothing left worth taking back.
+    engine.now += 30;
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    audio.detach();
+    expect(cancelled.mallet).toBe(5);
   });
 });

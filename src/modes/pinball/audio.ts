@@ -1,4 +1,4 @@
-import type { AudioEngine } from '../../audio/engine';
+import type { AudioEngine, Scheduled } from '../../audio/engine';
 import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
@@ -30,6 +30,13 @@ export interface GrooveHit {
 export class PinballAudio {
   private offs: (() => void)[] = [];
   private readonly box: RhythmBox;
+  /**
+   * One-shots placed ahead on the clock — a flourish, a roll — with when each
+   * will have finished. Leaving the mode takes back whatever is still to come,
+   * the way clearing the timers used to; a sound already handed to the graph
+   * is otherwise nobody's to stop.
+   */
+  private readonly ahead: { until: number; cancel(): void }[] = [];
   /**
    * Told of every press that lands on the beat. The mode shows the beat and
    * this layer judges it; a callback rather than a bus event because the bus
@@ -119,7 +126,8 @@ export class PinballAudio {
         const n = Math.min(s.roll.max, Math.round(el.spinRate * s.roll.perSpin));
         const gain = Math.min(1, base * 1.2 * s.roll.gain);
         for (let i = 1; i <= n; i++) {
-          engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), engine.now + i * s.roll.gap);
+          const at = engine.now + i * s.roll.gap;
+          this.hold(engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), at), at + 0.5);
         }
       }
     }));
@@ -175,8 +183,20 @@ export class PinballAudio {
     this.offs.length = 0;
     this.onGroove = null;
     this.box.stop();
+    // Leaving mid-flourish must not keep playing it into the next mode.
+    for (const h of this.ahead) h.cancel();
+    this.ahead.length = 0;
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);
+  }
+
+  /** Remember a one-shot placed ahead, dropping the ones already over. */
+  private hold(handle: Scheduled, until: number): void {
+    const now = this.engine.now;
+    let keep = 0;
+    for (const h of this.ahead) if (h.until > now) this.ahead[keep++] = h;
+    this.ahead.length = keep;
+    this.ahead.push({ until, cancel: () => handle.cancel() });
   }
 
   /**
@@ -201,15 +221,16 @@ export class PinballAudio {
   /**
    * Rising run through the table's scale. Used for objectives and multiball.
    * Placed on the audio clock rather than on timers, so it lands where it
-   * was asked for and there is nothing to cancel on the way out.
+   * was asked for; held on to, so leaving can still take it back.
    */
   private arpeggio(count: number, spacing: number, gain: number): void {
     const m = this.game.music;
     const now = this.engine.now;
     for (let i = 0; i < count; i++) {
-      this.engine.mallet(
-        degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8, now + i * spacing,
-      );
+      const at = now + i * spacing;
+      this.hold(this.engine.mallet(
+        degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8, at,
+      ), at + 1);
     }
   }
 }
