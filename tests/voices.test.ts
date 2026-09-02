@@ -98,6 +98,8 @@ describe('the instrument bank', () => {
       within(v.id, 'attackVel', s.attackVel, 0, 0.9);
       within(v.id, 'stretch', s.stretch, 0, 4);
       within(v.id, 'humanize', s.humanize, 0, 1);
+      within(v.id, 'body', s.body, 0, 1);
+      within(v.id, 'damper decay', s.damper?.decay, 0.005, 0.3);
       within(v.id, 'unison cents', s.unison?.cents, 0.5, 20);
       for (const [name, n] of Object.entries(s.keyTrack ?? {})) within(v.id, `keyTrack ${name}`, n, -1.5, 1.5);
       for (const l of s.layers) {
@@ -192,18 +194,46 @@ describe('the instrument bank', () => {
   });
 });
 
-describe('the sound the app has always made', () => {
-  // These are not style: they are the numbers `noteOn` and `pad` were written
-  // with before either had a bank to pick from. The same synth in all three
-  // modes is the app's identity, and a picker is no reason to lose it.
+describe('the default sound', () => {
+  // The same sound in all three modes is the app's identity, and a picker is
+  // no reason to lose it. The default is the piano, and it is pinned by its
+  // character rather than its numbers, because the numbers are tuned by ear.
 
-  it('is the first thing in each bank, and the default', () => {
+  it('is the first thing in each bank', () => {
     expect(LEAD_VOICES[0].id).toBe(DEFAULT_LEAD_VOICE);
+    expect(DEFAULT_LEAD_VOICE).toBe('grand');
     expect(BED_VOICES[0].id).toBe(DEFAULT_BED_VOICE);
+    expect(DEFAULT_BED_VOICE).toBe('warm');
+  });
+
+  it('is a piano: strings in unison, a hammer, a damper and a board', () => {
+    const s = findLeadVoice('grand').spec;
+    expect(s.layers[0].type).toBe('spectrum');
+    expect(s.layers[0].spectrum?.gen).toBe('piano');
+    expect(s.unison?.voices).toBe(3);
+    expect(s.keyTrack?.decay ?? 0).toBeLessThan(0);
+    expect(s.velDb ?? 0).toBeGreaterThanOrEqual(24);
+    expect(s.stretch ?? 0).toBeGreaterThan(0);
+    expect(s.body ?? 0).toBeGreaterThan(0);
+    expect(noises(s.noise).some((n) => (n.pitchTrack ?? 0) > 0)).toBe(true);
+    expect(s.damper).toBeDefined();
+  });
+});
+
+describe('the classic sound', () => {
+  // These are not style: they are the numbers `noteOn` and `pad` were written
+  // with before either had a bank to pick from. The synth the app grew up with
+  // is kept exactly, under its own name, whatever the default has become.
+
+  it('is still in the bank, right behind the default', () => {
+    const v = findLeadVoice('signature');
+    expect(v.id).toBe('signature');
+    expect(v.name).toBe('PianoBall Classic');
+    expect(LEAD_VOICES[1].id).toBe('signature');
   });
 
   it('still plays a saw, a square seven and a half cents up, and a sub', () => {
-    const spec = findLeadVoice(DEFAULT_LEAD_VOICE).spec;
+    const spec = findLeadVoice('signature').spec;
 
     expect(spec.layers).toEqual([
       { type: 'sawtooth', ratio: 1, level: 0.5 },

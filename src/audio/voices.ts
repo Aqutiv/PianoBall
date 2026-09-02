@@ -10,10 +10,11 @@
  * There is not an audio file in this project and there is not one here either.
  * Every voice below is oscillators, the shared noise buffer, and an envelope.
  *
- * The first entry of each bank is the sound the app has always made, held to
- * the exact numbers the engine used before there was a bank to pick from. It
- * stays the default in all three modes and the tests pin it: the same synth
- * everywhere is the app's identity, and a picker is no reason to lose it.
+ * The first entry of each bank is the default in all three modes: the same
+ * sound everywhere is the app's identity, and a picker is no reason to lose
+ * it. The lead bank opens on the piano. The synth the app grew up with is
+ * kept right behind it as the Classic, held to the exact numbers the engine
+ * used before there was a bank to pick from, and a test says so.
  */
 
 import type { KeyTrack } from './shaping';
@@ -127,6 +128,14 @@ export interface VoiceSpec {
   humanize?: number;
   /** Stretch tuning, in cents at one octave from the middle, growing with the square of the distance. */
   stretch?: number;
+  /**
+   * The sound of the note being stopped — a damper landing on a string, a
+   * key contact opening. Played out through the note's own panner when a
+   * finger lifts, as loud as what was left of the note.
+   */
+  damper?: VoiceNoise;
+  /** How much of the note is sent through the soundboard, 0..1. */
+  body?: number;
 }
 
 const KEY_BASE: VoiceSpec = {
@@ -153,9 +162,38 @@ export interface VoiceDef {
 export const LEAD_VOICES: readonly VoiceDef[] = [
   // ---------------------------------------------------------------- keys ---
   {
-    id: 'signature', name: 'PianoBall', family: 'Keys',
-    // The sound the app has always made. Every number here was read out of
-    // `noteOn`, and a test says so.
+    id: 'grand', name: 'Grand Piano', family: 'Keys',
+    // The default. Three strings a few cents apart on a piano spectrum that
+    // thins out going up the keyboard; a bright layer on top that only a hard
+    // strike brings out and that is gone in a third of a second; a hammer's
+    // knock that follows the pitch; a damper that thuds when the key is let
+    // go; and a share of the soundboard under all of it. Felt-leaning on
+    // purpose: a bright concert grand is the one instrument no synthesis gets
+    // away with, and a warm one is easier to live with under a pinball table.
+    spec: key({
+      layers: [
+        { type: 'spectrum', spectrum: { gen: 'piano' }, ratio: 1, level: 0.5 },
+        {
+          type: 'spectrum', spectrum: { gen: 'saw', params: [0.8] }, ratio: 1,
+          level: 0.05, velLevel: 0.3, velCurve: 2, decay: 0.35,
+        },
+      ],
+      noise: { freq: 1500, pitchTrack: 6, q: 1.2, decay: 0.025, gain: 0.07, velCurve: 1.5 },
+      damper: { freq: 380, q: 0.8, decay: 0.06, gain: 0.05 },
+      filter: { base: 2.2, track: 7, q: 0.8, qVel: 0.6, settle: 1.4, settleVel: 1.6, settleTime: 0.6 },
+      env: { attack: 0.002, decay: 1.8, sustain: 0.1, release: 0.3 },
+      velDb: 32, attackVel: 0.4,
+      keyTrack: { decay: -0.55, release: -0.3, bright: 0.25, level: -0.1 },
+      unison: { voices: 3, cents: 5 },
+      stretch: 1.4,
+      body: 0.35,
+      reverb: 0.24, delay: 0.05,
+    }),
+  },
+  {
+    id: 'signature', name: 'PianoBall Classic', family: 'Keys',
+    // The sound the app grew up with. Every number here was read out of
+    // `noteOn` before there was a bank, and a test still says so.
     spec: key({
       layers: [
         { type: 'sawtooth', ratio: 1, level: 0.5 },
@@ -205,15 +243,24 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'felt-piano', name: 'Felt Piano', family: 'Keys',
+    // The grand with a strip of felt between hammer and string: darker, the
+    // knock a soft thump, two strings rather than three, and more of the
+    // board because there is less string to hear over it.
     spec: key({
       layers: [
-        { type: 'triangle', ratio: 1, level: 0.5 },
-        { type: 'sine', ratio: 2, level: 0.1, decay: 0.5 },
-        { type: 'sine', ratio: 0.5, level: 0.16 },
+        { type: 'spectrum', spectrum: { gen: 'piano' }, ratio: 1, level: 0.56 },
+        { type: 'sine', ratio: 0.5, level: 0.14 },
+        { type: 'sine', ratio: 2, level: 0.08, decay: 0.5 },
       ],
-      noise: { freq: 900, q: 1, decay: 0.03, gain: 0.06 },
-      filter: { base: 1.6, track: 4, q: 1.2, qVel: 1, settle: 1.1, settleVel: 1, settleTime: 0.5 },
-      env: { attack: 0.006, decay: 0.7, sustain: 0.16, release: 0.4 },
+      noise: { freq: 700, pitchTrack: 2.5, q: 0.8, decay: 0.04, gain: 0.1, velCurve: 1 },
+      damper: { freq: 300, q: 0.7, decay: 0.07, gain: 0.06 },
+      filter: { base: 1.3, track: 3, q: 1, qVel: 0.5, settle: 1, settleVel: 0.8, settleTime: 0.6 },
+      env: { attack: 0.005, decay: 1.4, sustain: 0.12, release: 0.4 },
+      velDb: 26, attackVel: 0.3,
+      keyTrack: { decay: -0.5, bright: 0.2, level: -0.1 },
+      unison: { voices: 2, cents: 4 },
+      stretch: 1,
+      body: 0.4,
       reverb: 0.3, delay: 0.08,
     }),
   },

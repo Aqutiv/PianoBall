@@ -2,7 +2,7 @@ import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
 import { DRUM_SPECS, type DrumVoice } from './drums';
-import { CAB, HALL, HALL_LITE, roomImpulse, type RoomSpec } from './rooms';
+import { CAB, HALL, HALL_LITE, boardImpulse, roomImpulse, type RoomSpec, type Samples } from './rooms';
 import {
   NO_TRACK, humanize, keyFactors, makeRng, stretchCents, unisonDetunes, velocityPeak,
   type Humanized, type KeyFactors,
@@ -130,6 +130,10 @@ const DUCK_RETURN = 0.22;
 /** The rooms are rendered from noise; one fixed seed makes them the same rooms on every load. */
 const ROOM_SEED = 0x50a7;
 
+/** How much of the soundboard is heard under a note, and how much once the pedal is down. */
+const BODY_IDLE = 0.35;
+const BODY_PEDAL = 1;
+
 /** Longest delay the node can hold, which caps how slow a tempo it can follow. */
 const DELAY_MAX = 2;
 
@@ -150,12 +154,19 @@ interface KeyVoice {
   sources: Pitched[];
   filter: BiquadFilterNode;
   amp: GainNode;
+  /** Where the voice reaches the buses. The damper's thud goes out through it too. */
+  panner: StereoPannerNode;
+  freq: number;
+  /** What the amplifier was asked to reach, so the release can tell how much of the note is left. */
+  peak: number;
+  k: KeyFactors;
   /**
    * Taken from the spec at the moment the key went down, not read back off the
    * engine at release. That is what lets the player change instrument with
    * notes still held: a note finishes as the voice it was struck as.
    */
   release: number;
+  damper?: VoiceNoise;
   releasing: boolean;
 }
 
@@ -171,6 +182,7 @@ interface Sends {
   hall: number;
   cab: number;
   delay: number;
+  body?: number;
 }
 
 /**
@@ -234,6 +246,9 @@ export class AudioEngine {
   private hallConv!: ConvolverNode;
   private cabSend!: GainNode;
   private cabWet!: GainNode;
+  /** The soundboard: a plate every note can be sent through and answered by. */
+  private bodySend!: GainNode;
+  private bodyWet!: GainNode;
   private delaySend!: GainNode;
   /**
    * Whether the machine has been found wanting. The shell sets this when it
@@ -383,6 +398,19 @@ export class AudioEngine {
     this.cabSend = ctx.createGain();
     this.cabSend.gain.value = 1;
     this.cabSend.connect(cab);
+
+    // The soundboard, a plate with a dozen modes (see `rooms.ts`). A note sent
+    // through it comes back with the board's own ring under it, and with the
+    // pedal down the send opens up, which is what a piano does when its
+    // dampers lift: every other string answers the one that was struck.
+    const board = ctx.createConvolver();
+    board.buffer = this.plate();
+    this.bodyWet = ctx.createGain();
+    this.bodyWet.gain.value = BODY_IDLE;
+    board.connect(this.bodyWet).connect(this.musicBus);
+    this.bodySend = ctx.createGain();
+    this.bodySend.gain.value = 1;
+    this.bodySend.connect(board);
 
     // Dotted-eighth delay, darkened on each pass so repeats sit behind the mix.
     const delay = ctx.createDelay(DELAY_MAX);
@@ -644,6 +672,18 @@ export class AudioEngine {
   private room(spec: RoomSpec): AudioBuffer {
     const ctx = this.ctx!;
     const [l, r] = roomImpulse(spec, ctx.sampleRate, makeRng(ROOM_SEED));
+    return this.stereo(l, r);
+  }
+
+  /** The soundboard, rendered the same way. */
+  private plate(): AudioBuffer {
+    const ctx = this.ctx!;
+    const [l, r] = boardImpulse(ctx.sampleRate, makeRng(ROOM_SEED + 1));
+    return this.stereo(l, r);
+  }
+
+  private stereo(l: Samples, r: Samples): AudioBuffer {
+    const ctx = this.ctx!;
     const buf = ctx.createBuffer(2, l.length, ctx.sampleRate);
     buf.copyToChannel(l, 0);
     buf.copyToChannel(r, 1);
@@ -681,7 +721,7 @@ export class AudioEngine {
 
     // Harder notes go wetter, whatever the instrument's own send level is.
     const chain = this.makeChain(pan, LEAD_WIDTH, {
-      hall: spec.reverb * (1 + v * 0.7), cab: 0, delay: spec.delay * (1 + v * 1.4),
+      hall: spec.reverb * (1 + v * 0.7), cab: 0, delay: spec.delay * (1 + v * 1.4), body: spec.body,
     }, this.musicBus);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
@@ -696,8 +736,8 @@ export class AudioEngine {
     this.duck(t);
 
     const voice: KeyVoice = {
-      note, startedAt: t, sources, filter: chain.filter, amp: chain.amp,
-      release: spec.env.release * k.release, releasing: false,
+      note, startedAt: t, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
+      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -762,7 +802,8 @@ export class AudioEngine {
     this.duck(t);
 
     const voice: KeyVoice = {
-      note, startedAt: t, sources, filter, amp, release: BED_KEY_RELEASE, releasing: false,
+      note, startedAt: t, sources, filter, amp, panner: chain.panner,
+      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -794,6 +835,7 @@ export class AudioEngine {
     send(sends.hall, this.hallSend);
     send(sends.cab, this.cabSend);
     send(sends.delay, this.delaySend);
+    send(sends.body ?? 0, this.bodySend);
     return { filter, amp, panner };
   }
 
@@ -952,14 +994,26 @@ export class AudioEngine {
     if (this.sustainOn && !immediate) { this.sustained.add(note); return; }
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
-    this.release(voice, immediate ? 0.02 : voice.release);
+    this.release(voice, immediate ? 0.02 : voice.release, !immediate);
     this.voices.delete(note);
   }
 
-  private release(voice: KeyVoice, seconds: number): void {
+  /**
+   * Let a voice go. `damp` says whether a finger lifted: a damper falling
+   * onto a string makes a sound of its own, but a note cut to make room for
+   * another, or silenced with everything else on the way out of a mode, is
+   * not a finger lifting, and forty-eight thuds at once would be absurd.
+   */
+  private release(voice: KeyVoice, seconds: number, damp = true): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     voice.releasing = true;
+    if (damp && voice.damper && !this.lite) {
+      // As loud as what is left of the note: a string that has already died
+      // away has little for the damper to stop.
+      const left = clamp01(voice.amp.gain.value / Math.max(0.0001, voice.peak));
+      this.addNoise(voice.panner, voice.damper, voice.freq, left, t, voice.k);
+    }
     voice.amp.gain.cancelScheduledValues(t);
     voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
@@ -978,6 +1032,10 @@ export class AudioEngine {
 
   setSustain(on: boolean): void {
     this.sustainOn = on;
+    // The pedal lifts every damper, and the board answers with all its strings.
+    if (this.ready && this.ctx) {
+      this.bodyWet.gain.setTargetAtTime(on ? BODY_PEDAL : BODY_IDLE, this.ctx.currentTime, 0.05);
+    }
     if (on) return;
     for (const note of this.sustained) this.noteOff(note);
     this.sustained.clear();
@@ -988,7 +1046,7 @@ export class AudioEngine {
     while (this.active.length > MAX_VOICES) {
       const oldest = this.active[0];
       this.voices.delete(oldest.note);
-      this.release(oldest, 0.05);
+      this.release(oldest, 0.05, false);
     }
   }
 
