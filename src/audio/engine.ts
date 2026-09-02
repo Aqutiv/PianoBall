@@ -22,6 +22,24 @@ import {
 export interface AudioSettings {
   master: number;
   music: number;
+  /**
+   * What the player's own hands are playing, on a fader of its own.
+   *
+   * The other half of the pair with `bedLevel`: the front and the backing,
+   * both under `music`, so how far the chords sit behind the instrument is
+   * something you set rather than something the mix decided. Half travel is
+   * where the keys have always been.
+   */
+  leadLevel: number;
+  /**
+   * The backing bed, as a fader under `music` rather than beside it.
+   *
+   * `music` moves the whole arrangement; this moves only what plays underneath
+   * the player's own hands, which is what lets the chords sit back behind them
+   * — or come forward — without touching the front. Half travel is the level
+   * the bed has always sat at, so there is room in both directions.
+   */
+  bedLevel: number;
   effects: number;
   /** Off-scale notes are snapped into the table's key. */
   assist: boolean;
@@ -47,6 +65,8 @@ export type KeyVoicing = 'lead' | 'bed';
 export const DEFAULT_AUDIO: AudioSettings = {
   master: 0.85,
   music: 0.6,
+  leadLevel: 0.5,
+  bedLevel: 0.5,
   effects: 0.9,
   assist: true,
   bed: true,
@@ -96,6 +116,12 @@ const BED_KEY_REVERB = 0.42;
 const REVERB_MAX = 1.7;
 /** Cabinet wet gain at a full reverb setting: the table's box, under the same knob. */
 const CAB_MAX = 0.9;
+
+/** Pad-bus gain at a full bed setting. Half of it is the level it always had. */
+const BED_MAX = 2;
+
+/** Key-voice gain at a full instrument setting. Half of it is unity, as above. */
+const LEAD_MAX = 2;
 
 /**
  * How far a played note is allowed towards either speaker.
@@ -334,6 +360,25 @@ export class AudioEngine {
    * sounding, in one operation, without touching what comes next.
    */
   private padGen!: GainNode;
+  /**
+   * Where a key voice reaches the rest of the graph, on the instrument's fader.
+   *
+   * Not one node, because a voice does not leave by one route: the dry path
+   * goes to the music bus and the sends go to the rooms and the delay, at
+   * levels the instrument and the velocity chose. So the fader is one gain per
+   * destination, all carrying the same value. Turning the instrument down then
+   * takes its reverb and its repeats down with it, rather than leaving a wet
+   * ghost of a note nobody is playing any more.
+   */
+  private leadOut!: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', GainNode>;
+  /**
+   * Whether the running mode wants the bed heard at all.
+   *
+   * Held apart from the player's level so the two can share the one gain:
+   * muting must not forget where the fader was, and moving the fader while a
+   * mode has the bed switched off must not bring it back.
+   */
+  private bedAudible = true;
   private fxBus!: GainNode;
   /** The bed's own path in front of `padBus`: carved, widened, then dipped under the player. */
   private padCarve!: BiquadFilterNode;
@@ -540,6 +585,22 @@ export class AudioEngine {
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
 
+    // The instrument's fader, one gain per way out. Built after the sends
+    // because it feeds every one of them.
+    const leadTo = (to: AudioNode): GainNode => {
+      const g = ctx.createGain();
+      g.gain.value = this.leadGain;
+      g.connect(to);
+      return g;
+    };
+    this.leadOut = {
+      dry: leadTo(this.musicBus),
+      hall: leadTo(this.hallSend),
+      cab: leadTo(this.cabSend),
+      delay: leadTo(this.delaySend),
+      body: leadTo(this.bodySend),
+    };
+
     // The bed's path. Carved first — nothing under 100 Hz, and a shelf off
     // the top — so it never sits on the same ground as the player's notes;
     // dipped under each struck note after that; and only then the fader the
@@ -555,7 +616,7 @@ export class AudioEngine {
     this.padDuck = ctx.createGain();
     this.padDuck.gain.value = 1;
     this.padBus = ctx.createGain();
-    this.padBus.gain.value = 1;
+    this.padBus.gain.value = this.bedGain;
     this.padCarve.connect(padShelf);
     this.padDuck.connect(this.padBus).connect(this.musicBus);
 
@@ -659,6 +720,8 @@ export class AudioEngine {
     this.fxBus.gain.value = this.settings.effects;
     this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
     this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
+    this.applyLeadGain();
+    this.applyBedGain();
     if (patch.bendRange !== undefined) this.setBend(this.bendValue);
     if (patch.modTarget !== undefined) this.applyMod();
   }
@@ -775,10 +838,6 @@ export class AudioEngine {
   }
 
   /**
-   * Fade the chord bed in or out. A fade rather than a cut, because a pad
-   * stopping dead sounds like a fault rather than like a decision.
-   */
-  /**
    * End every pad already sounding, without silencing the ones to come.
    *
    * A mode that hands the bed back on its way out has only changed which voice
@@ -800,9 +859,45 @@ export class AudioEngine {
     this.padGen.connect(this.padCarve);
   }
 
+  /**
+   * Fade the chord bed in or out. A fade rather than a cut, because a pad
+   * stopping dead sounds like a fault rather than like a decision.
+   *
+   * Recorded even before the graph exists: a mode enters and asks for its bed
+   * long before the browser has granted an audio gesture, and the bus is then
+   * built where that answer says rather than always open.
+   */
   setBedAudible(on: boolean): void {
+    this.bedAudible = on;
+    this.applyBedGain();
+  }
+
+  /** What the player's instrument is set to. */
+  get leadGain(): number { return LEAD_MAX * this.settings.leadLevel; }
+
+  /**
+   * Move the instrument's fader. Every way out carries the same value, and a
+   * ramp rather than a set, so a drag reaches a held chord without zippering.
+   */
+  private applyLeadGain(): void {
     if (!this.ready || !this.ctx) return;
-    this.padBus.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.08);
+    const t = this.ctx.currentTime;
+    for (const g of Object.values(this.leadOut)) g.gain.setTargetAtTime(this.leadGain, t, 0.03);
+  }
+
+  /** Where the pad bus belongs: the player's level, or nothing at all. */
+  get bedGain(): number {
+    return this.bedAudible ? BED_MAX * this.settings.bedLevel : 0;
+  }
+
+  /**
+   * Put the pad bus where the mute and the fader between them say it goes.
+   * Ramped rather than set: the one gain is both, so a fader drag has to
+   * arrive as smoothly as a mode handing the bed over.
+   */
+  private applyBedGain(): void {
+    if (!this.ready || !this.ctx) return;
+    this.padBus.gain.setTargetAtTime(this.bedGain, this.ctx.currentTime, 0.08);
   }
 
   /**
@@ -903,7 +998,7 @@ export class AudioEngine {
     const moves = spec.lfo?.target === 'tremolo' || spec.lfo?.target === 'rotary';
     const chain = this.makeChain(pan, LEAD_WIDTH, {
       hall: spec.reverb * (1 + v * 0.7), cab: 0, delay: spec.delay * (1 + v * 1.4), body: spec.body,
-    }, this.musicBus, moves);
+    }, moves);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
       sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch, str, glide));
@@ -940,8 +1035,9 @@ export class AudioEngine {
    * the finger lifts, and it goes into `voices`/`active` alongside every other
    * key so culling, the sustain pedal and `allNotesOff` reach it unchanged.
    *
-   * On `musicBus` and not `padBus` on purpose. The pad bus is what the backing
-   * is muted and faded by, and the player's own hands are not the backing.
+   * On the instrument's fader and not the bed's, on purpose. The pad bus is
+   * what the backing is muted and faded by, and the player's own hands are not
+   * the backing — even when they are playing the backing's sound.
    */
   private bedKeyOn(note: number, velocity: number, pan: number): void {
     if (!this.ctx) return;
@@ -959,7 +1055,7 @@ export class AudioEngine {
     // A pad lives further back in the room than a struck note does.
     const chain = this.makeChain(pan, LEAD_WIDTH, {
       hall: BED_KEY_REVERB * (1 + v * 0.5), cab: 0, delay: 0,
-    }, this.musicBus);
+    });
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
       sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0, str));
@@ -1003,8 +1099,12 @@ export class AudioEngine {
    * The nodes every pitched voice shares: one lowpass, one amplifier, one
    * panner, and whichever sends it was given. Layers are added in front of
    * the filter; the envelope is written onto the amplifier afterwards.
+   *
+   * Everything built here is a key the player pressed, so it leaves through
+   * the instrument's fader rather than straight onto the buses — the dry path
+   * and each send alike.
    */
-  private makeChain(pan: number, width: number, sends: Sends, into: AudioNode, moves = false): Chain {
+  private makeChain(pan: number, width: number, sends: Sends, moves = false): Chain {
     const ctx = this.ctx!;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -1022,17 +1122,17 @@ export class AudioEngine {
     } else {
       filter.connect(amp).connect(panner);
     }
-    panner.connect(into);
+    panner.connect(this.leadOut.dry);
     const send = (level: number, to: AudioNode) => {
       if (level <= 0) return;
       const g = ctx.createGain();
       g.gain.value = level;
       panner.connect(g).connect(to);
     };
-    send(sends.hall, this.hallSend);
-    send(sends.cab, this.cabSend);
-    send(sends.delay, this.delaySend);
-    send(sends.body ?? 0, this.bodySend);
+    send(sends.hall, this.leadOut.hall);
+    send(sends.cab, this.leadOut.cab);
+    send(sends.delay, this.leadOut.delay);
+    send(sends.body ?? 0, this.leadOut.body);
     return { filter, amp, panner, trem };
   }
 
@@ -1437,6 +1537,21 @@ export class AudioEngine {
     for (const note of [...this.voices.keys()]) this.noteOff(note, true);
     this.sustained.clear();
     this.fading.length = 0;
+  }
+
+  /**
+   * Put down everything the engine is making.
+   *
+   * Not a mute: notes release as they would if the player had lifted their
+   * hands, pads fade rather than stop dead, and one-shots already ringing —
+   * or placed a beat into the future, which a table's flourish is — are taken
+   * back. Nothing about what comes next is touched, so the engine is as ready
+   * a moment later as it was before.
+   */
+  hush(): void {
+    this.allNotesOff();
+    this.stopPads();
+    this.shots.cutAll();
   }
 
   // ------------------------------------------------------- one-shot hits ---

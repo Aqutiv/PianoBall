@@ -200,6 +200,19 @@ describe('striking the table', () => {
     expect(cancelled.mallet).toBe(mallets.length);
   });
 
+  it('takes it back for a pause too, not only for the way out', () => {
+    const { mallets, game, audio, cancelled } = rig();
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    expect(mallets.length).toBeGreaterThan(1);
+
+    // The app's hush reaches what is in the engine's shot budget, and a
+    // flourish is deliberately not in it — so without this the rest of the
+    // run played out behind the pause panel.
+    audio.pause();
+
+    expect(cancelled.mallet).toBe(mallets.length);
+  });
+
   it('forgets a flourish that has already played out', () => {
     const { game, audio, engine, cancelled } = rig();
     game.bus.emit('objective', { id: 'arc', label: 'ARC' });
@@ -385,15 +398,34 @@ describe('the ball rolling', () => {
     expect(rolls[0].updates).toHaveLength(1);
   });
 
-  it('stops every roll on pause and on the way out', () => {
+  it('stops every roll on pause, and opens none behind the panel', () => {
     const { rolls, game, audio } = rig();
     game.spawnBall(400, 700, 500, 0);
     audio.frame();
     audio.pause();
     expect(rolls[0].stopped).toBe(true);
+
+    // The frames keep coming while the panel is up — the board stays on
+    // screen behind it — and a frozen ball's speed never changes, so a roll
+    // opened here would hold one unwavering pitch until the panel came down.
+    audio.frame();
+    audio.frame();
+    expect(rolls).toHaveLength(1);
+
+    // And the table rolls again on the way back.
+    audio.resume();
     audio.frame();
     expect(rolls).toHaveLength(2);
+    expect(rolls[1].stopped).toBe(false);
+  });
+
+  it('stops every roll on the way out', () => {
+    const { rolls, game, audio } = rig();
+    game.spawnBall(400, 700, 500, 0);
+    audio.frame();
+
     audio.detach();
-    expect(rolls[1].stopped).toBe(true);
+
+    expect(rolls[0].stopped).toBe(true);
   });
 });

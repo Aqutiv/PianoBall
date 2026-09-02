@@ -70,10 +70,28 @@ export class PinballAudio {
   /** Whether the rhythm box is running. The teardown tests read this. */
   get drumming(): boolean { return this.box.playing; }
 
+  /**
+   * Whether a panel is up over the table.
+   *
+   * `frame` is driven from the mode's `draw`, which keeps running behind a
+   * panel so the board stays on screen — so stopping the rolls was undone by
+   * the very next frame, and a ball frozen mid-flight has a speed that never
+   * changes: it rolled on, at one unwavering pitch, for as long as the panel
+   * was up. The director's own flag rather than the game's `active`, so that
+   * silencing the table is one call and not two that have to agree.
+   */
+  private paused = false;
+
   /** Nothing should keep drumming, or rolling, behind a menu. */
   pause(): void {
+    this.paused = true;
     this.box.stop();
     this.stopRolls();
+    // A flourish is placed a second or two ahead and is deliberately not in
+    // the engine's shot budget — a bonus run is music, and music does not get
+    // voice-stolen by the table falling over itself — so the app's hush cannot
+    // reach it. These handles are the only way back, the same as on the way out.
+    this.dropAhead();
   }
 
   /**
@@ -87,6 +105,7 @@ export class PinballAudio {
    * slowly, a resting ball is silent, and a ball that is gone is stopped.
    */
   frame(): void {
+    if (this.paused) return;
     const game = this.game;
     const seen = new Set<number>();
     for (const ball of game.balls) {
@@ -119,7 +138,10 @@ export class PinballAudio {
   }
 
   /** Back to whatever rung the table is on, drums included. */
-  resume(): void { this.apply(this.game.intensity); }
+  resume(): void {
+    this.paused = false;
+    this.apply(this.game.intensity);
+  }
 
   private pan(x: number): number {
     return clamp((x / this.game.def.width - 0.5) * 1.5, -1, 1);
@@ -138,6 +160,8 @@ export class PinballAudio {
   }
 
   attach(): void {
+    // A table left behind a panel is entered again ready to play.
+    this.paused = false;
     const bus = this.game.bus;
     const engine = this.engine;
     const offs = this.offs;
@@ -284,10 +308,15 @@ export class PinballAudio {
     this.box.stop();
     this.stopRolls();
     // Leaving mid-flourish must not keep playing it into the next mode.
-    for (const h of this.ahead) h.cancel();
-    this.ahead.length = 0;
+    this.dropAhead();
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);
+  }
+
+  /** Take back everything placed ahead that has not sounded yet. */
+  private dropAhead(): void {
+    for (const h of this.ahead) h.cancel();
+    this.ahead.length = 0;
   }
 
   /** Remember a one-shot placed ahead, dropping the ones already over. */

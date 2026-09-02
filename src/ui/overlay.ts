@@ -201,7 +201,9 @@ export class Overlay {
       this.body.querySelector(sel)!.addEventListener('click', fn);
     on('#btn-resume', () => this.shell.resumeMode());
     on('#btn-restart', () => { this.hide(); this.shell.restartMode(); });
-    on('#btn-home', () => this.show('home'));
+    // Through the shell rather than straight to the screen: this leaves the
+    // pause panel, and the bed the panel silenced has to come back with it.
+    on('#btn-home', () => this.shell.goHome());
     on('#btn-settings', () => this.show('settings'));
   }
 
@@ -450,6 +452,10 @@ export class Overlay {
       <h2>Audio</h2>
       <div class="row"><label>Master</label><input type="range" id="vol-master" min="0" max="1" step="0.01" value="${audio.settings.master}"></div>
       <div class="row"><label>Music</label><input type="range" id="vol-music" min="0" max="1" step="0.01" value="${audio.settings.music}"></div>
+      <div class="row"><label>Instrument</label><input type="range" id="vol-lead" min="0" max="1" step="0.01" value="${audio.settings.leadLevel}"></div>
+      <div class="row"><label>Backing bed</label>
+        <span class="pair"><button id="bed">${audio.settings.bed ? 'On' : 'Off'}</button>
+        <input type="range" id="vol-bed" min="0" max="1" step="0.01" value="${audio.settings.bedLevel}"></span></div>
       <div class="row"><label>Impacts</label><input type="range" id="vol-fx" min="0" max="1" step="0.01" value="${audio.settings.effects}"></div>
       <div class="row"><label>Room</label><input type="range" id="vol-reverb" min="0" max="1" step="0.01" value="${audio.settings.reverb}"></div>
       <div class="row"><label>Key</label>
@@ -457,8 +463,6 @@ export class Overlay {
       <div class="row"><label>Scale</label>
         <select id="scale">${scales}</select></div>
       <p class="diag" id="scale-now"></p>
-      <div class="row"><label>Backing bed</label>
-        <button id="bed">${audio.settings.bed ? 'On' : 'Off'}</button></div>
 
       <h2>Pinball</h2>
       <div class="row"><label>Snap off-scale notes into the key</label>
@@ -556,7 +560,8 @@ export class Overlay {
     $<HTMLSelectElement>('#key').addEventListener('change', (e) =>
       music.setRoot(Number((e.target as HTMLSelectElement).value)));
 
-    const bindSlider = (sel: string, key: 'master' | 'music' | 'effects' | 'reverb') => {
+    type Level = 'master' | 'music' | 'leadLevel' | 'bedLevel' | 'effects' | 'reverb';
+    const bindSlider = (sel: string, key: Level) => {
       const el = $<HTMLInputElement>(sel);
       // The track's fill is painted from this, so it needs setting on the way in
       // as well as on every move.
@@ -566,11 +571,26 @@ export class Overlay {
         paint();
       });
       paint();
+      // Something else can move this while the panel is open — a controller's
+      // volume knob on master, most of all. Pushing the value in without
+      // repainting was exactly that bug: the thumb moved and the fill stayed
+      // where it was. Compared against the *stepped* value, because that is
+      // what the input snaps whatever it is handed to.
+      return () => {
+        const stepped = Math.round(audio.settings[key] * 100) / 100;
+        if (Number(el.value) === stepped) return;
+        el.value = String(stepped);
+        paint();
+      };
     };
-    bindSlider('#vol-master', 'master');
-    bindSlider('#vol-music', 'music');
-    bindSlider('#vol-fx', 'effects');
-    bindSlider('#vol-reverb', 'reverb');
+    const levels = [
+      bindSlider('#vol-master', 'master'),
+      bindSlider('#vol-music', 'music'),
+      bindSlider('#vol-lead', 'leadLevel'),
+      bindSlider('#vol-bed', 'bedLevel'),
+      bindSlider('#vol-fx', 'effects'),
+      bindSlider('#vol-reverb', 'reverb'),
+    ];
 
     const toggle = (sel: string, get: () => boolean, set: (v: boolean) => void) => {
       const btn = $(sel);
@@ -655,9 +675,8 @@ export class Overlay {
     const diag = $('#diag');
     const rangeEl = $('#range');
     const scaleNow = $('#scale-now');
-    const masterEl = $<HTMLInputElement>('#vol-master');
     this.live = () => {
-      masterEl.value = String(audio.settings.master);
+      for (const follow of levels) follow();
       // Under Random the picked scale is only knowable at run time, so say it.
       scaleNow.textContent = `Playing ${noteName(music.root)} ${music.label}`
         + (music.choice === RANDOM ? ' — a new one is drawn each game' : '');

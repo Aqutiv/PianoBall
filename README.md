@@ -52,9 +52,20 @@ waves it as it opens the filter. Range and destination are in Settings.
 key belongs to the pinball table; Freestyle plays exactly what you press, so a
 note from outside the scale is a note from outside the scale.
 
-Key, scale, instrument, the backing bed and the size of the room are all on
-screen, because having to leave what you are playing in order to change what you
-are playing it on is the opposite of freestyle. **Random** is one of the scales,
+**What you play is on the left; what plays with you is on the right.**
+Instrument and its level sit under the chord your hands are making; Scale,
+Rhythm and Backing bed are a column of panels on the other side. All four say
+what they are, and the two whose titles are pills — Rhythm, Backing bed — say
+it that way because they are also switches. All of it is on screen, because
+having to leave what you are playing in order to change what you are playing it
+on is the opposite of freestyle. The two levels are the ones Settings shows, so
+they read the same wherever you last moved them.
+
+**The scale is not the bed's.** It gets a panel of its own rather than living
+inside the backing, because it does two jobs: it writes the bed's progression,
+and it lights the tones of the scale faintly on the keybed so the key is
+findable under your hands. The second is still true with the bed switched off —
+which is how Freestyle starts. **Random** is one of the scales,
 and the die beside it draws again; whatever it lands on is named underneath.
 **The bed starts off** — you came here to make your own sound, so the backing is
 offered rather than assumed.
@@ -356,6 +367,36 @@ driven by requestAnimationFrame and multiplied by slow motion; the audio clock i
 a hardware sample counter. Every PlayTune judgement is made against the audio
 clock, and losing focus pauses the run rather than letting it carry on without
 you.
+
+**A pause is silent.** Each mode stops what it knows it started, but what is
+sounding when the panel goes up mostly belongs to the app rather than to any of
+them: a chord still held, the bed comping on a timer of its own, a flourish
+already written onto the audio clock a second ahead. The shell puts all three
+down in one place, and starts the bed again on the way out unless the mode has
+already put its own back. The table's flourish stays the table's, though: a
+bonus run is music, and music is deliberately kept out of the voice-stealing
+budget the hush cuts through, so the handles the table already keeps for
+leaving mid-flourish are what take it back for a pause as well. Going home is
+not a pause: the menu keeps the bed under it, the way it has one at boot.
+
+**The rolling ball is the one that gets away.** `step` stops behind a panel but
+`draw` does not — the board has to stay on screen — and the table's roll is
+driven from `draw`, because a roll follows the ball at the rate the eye gets it
+rather than at the rate the physics runs. So stopping the rolls on pause was
+undone by the very next frame, and a ball frozen mid-flight has a speed that
+never changes: it rolled on, at one unwavering pitch, for as long as the panel
+was up. The director now knows it is paused rather than being told once and
+overruled sixty times a second.
+
+**The front and the backing each have a fader.** Both sit under the music
+group, so how far the chords sit behind your hands is something you set rather
+than something the mix decided; half travel is where each has always played.
+The bed's is one gain it shares with the mute a mode applies when it wants no
+backing, without either forgetting the other. The instrument's is not one gain
+but five, because a key voice leaves by five routes — dry to the music bus, and
+its own sends to the two rooms, the delay and the soundboard. Faders on all of
+them is what makes turning the instrument down take its reverb and its repeats
+with it, instead of leaving a wet ghost of a note nobody is playing.
 
 **Impacts are never quantised.** Only the *bonus* is judged against the beat
 grid, so the sound stays locked to what is on screen while still rewarding

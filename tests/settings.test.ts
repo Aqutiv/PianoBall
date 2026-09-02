@@ -38,7 +38,10 @@ describe('settings persistence', () => {
 
   it('reloads audio, controller, MIDI-device, velocity, and display choices', () => {
     const audio = new AudioEngine();
-    audio.setSettings({ master: 0.2, music: 0.3, effects: 0.4, assist: false, bed: false });
+    audio.setSettings({
+      master: 0.2, music: 0.3, leadLevel: 0.4, bedLevel: 0.7, effects: 0.4,
+      assist: false, bed: false,
+    });
 
     const mapping = new NoteMapping();
     mapping.settings = { baseNote: 36, count: 49, autoLatch: false };
@@ -52,7 +55,8 @@ describe('settings persistence', () => {
     stage.setQuality({ bloom: false, labels: false, reducedMotion: true, colorBlind: true });
 
     expect(new AudioEngine().settings).toMatchObject({
-      master: 0.2, music: 0.3, effects: 0.4, assist: false, bed: false,
+      master: 0.2, music: 0.3, leadLevel: 0.4, bedLevel: 0.7, effects: 0.4,
+      assist: false, bed: false,
     });
     expect(new NoteMapping().settings).toEqual({ baseNote: 36, count: 49, autoLatch: false });
     expect(new InputHub().velocity).toMatchObject({ curve: 'fixed', fixed: 0.5 });

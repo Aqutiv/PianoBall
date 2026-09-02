@@ -1,6 +1,6 @@
 import { chordNotes, degreeToNote } from '../src/audio/music';
 import { describe, expect, it } from 'vitest';
-import { AudioEngine } from '../src/audio/engine';
+import { AudioEngine, DEFAULT_AUDIO } from '../src/audio/engine';
 import { wireGlobalControls } from '../src/audio/controls';
 import { InputHub } from '../src/midi/inputHub';
 import { ChordBed } from '../src/audio/bed';
@@ -25,11 +25,88 @@ describe('cutting the pads short', () => {
     expect(() => engine.stopPads()).not.toThrow();
   });
 
+  it('hushes safely before the graph exists', () => {
+    // Losing focus over the menu puts the pause panel up, and the panel
+    // silences the sound — on a page that has not been clicked in yet.
+    const engine = new AudioEngine();
+
+    expect(() => engine.hush()).not.toThrow();
+  });
+
   it('takes the pedal in any position before the graph exists', () => {
     const engine = new AudioEngine();
     expect(() => engine.setSustain(true)).not.toThrow();
     expect(() => engine.setSustain(0.5)).not.toThrow();
     expect(() => engine.setSustain(0)).not.toThrow();
+  });
+});
+
+/**
+ * The front and the backing, each on a fader of its own. The pair is the point:
+ * how far the chords sit behind the hands is set rather than fixed, and neither
+ * fader may move the other or the group above them.
+ */
+describe('the instrument fader', () => {
+  it('starts where the keys have always played', () => {
+    expect(new AudioEngine().leadGain).toBe(1);
+  });
+
+  it('moves the front without moving the backing, or the group over both', () => {
+    const engine = new AudioEngine();
+
+    engine.setSettings({ leadLevel: 0.25 });
+
+    expect(engine.leadGain).toBe(0.5);
+    expect(engine.bedGain).toBe(1);
+    expect(engine.settings.music).toBe(DEFAULT_AUDIO.music);
+  });
+
+  it('is left alone by a mode muting the bed', () => {
+    const engine = new AudioEngine();
+    engine.setSettings({ leadLevel: 0.9 });
+
+    engine.setBedAudible(false);
+
+    // The hands play on: the mute is the backing's, and the fader is not.
+    expect(engine.leadGain).toBe(1.8);
+    expect(engine.bedGain).toBe(0);
+  });
+});
+
+/**
+ * The bed's fader and the bed's mute share one gain, which is the whole point:
+ * a mode switching the backing off and a player setting how loud it is are
+ * different questions, and neither may answer the other's.
+ */
+describe('the bed fader', () => {
+  it('defaults to the level the bed has always sat at', () => {
+    expect(new AudioEngine().bedGain).toBe(1);
+  });
+
+  it('moves the bed without touching anything the player is holding', () => {
+    const engine = new AudioEngine();
+
+    engine.setSettings({ bedLevel: 0.75 });
+
+    // Above half travel, because the bed can come forward as well as back.
+    expect(engine.bedGain).toBe(1.5);
+    expect(engine.settings.music).toBe(DEFAULT_AUDIO.music);
+  });
+
+  it('is neither forgotten by a mute nor undone by one', () => {
+    const engine = new AudioEngine();
+    engine.setSettings({ bedLevel: 0.75 });
+
+    engine.setBedAudible(false);
+    expect(engine.bedGain).toBe(0);
+
+    // Moved while a mode has the backing switched off: it must stay off, and
+    // the new level must be what comes back when it is switched on again.
+    engine.setSettings({ bedLevel: 0.25 });
+    expect(engine.bedGain).toBe(0);
+
+    engine.setBedAudible(true);
+    expect(engine.bedGain).toBe(0.5);
   });
 });
 
