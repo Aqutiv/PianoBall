@@ -170,6 +170,26 @@ describe("the loop's pattern", () => {
     return { pads, engine, bed, tick, bar };
   }
 
+  it('voices and colours the loop as the table asks, from the next bar', () => {
+    const { pads, bed, tick, bar } = harness();
+    tick();
+    const plain = pads[0].notes.length;
+    expect(bed.chordTones).toHaveLength(plain);
+    bed.setLoopStyle({ voicing: 'spread', colour: 1 });
+    bar();
+    const chords = pads.filter((p) => p.notes.length > 1);
+    // The bar already written keeps its voicing; the next one takes the new.
+    expect(chords[0].notes).toHaveLength(plain);
+    const coloured = chords[chords.length - 1].notes;
+    expect(coloured.length).toBeGreaterThan(plain);
+    expect(coloured.length).toBeLessThanOrEqual(5);
+    expect(bed.chordTones).toEqual(coloured);
+    // And back to plain, from the bar after.
+    bed.setLoopStyle({});
+    bar();
+    expect(pads.filter((p) => p.notes.length > 1).pop()!.notes).toHaveLength(plain);
+  });
+
   it('sounds as it always has until it is asked otherwise', () => {
     const { pads, tick } = harness();
     tick();

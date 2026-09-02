@@ -1,3 +1,4 @@
+import { colourTones, voiceChord, type Key } from '../src/audio/music';
 import { describe, it, expect } from 'vitest';
 import {
   SCALES, MODES, findMode, chordNotes, snapToScale, inScale, scaleDegree, degreeToNote,
@@ -363,6 +364,101 @@ describe('voice leading', () => {
         }
       }
     }
+  });
+});
+
+describe('voicings', () => {
+  const D_PENT: Key = { root: D, scale: [...SCALES.minorPentatonic] };
+  const C_MAJOR: Key = { root: 60, scale: [...SCALES.ionian] };
+  const pcs = (ns: readonly number[]) => new Set(ns.map(pitchClass));
+  const span = (ns: readonly number[]) => Math.max(...ns) - Math.min(...ns);
+  const cost = (a: readonly number[], b: readonly number[]) => {
+    const x = [...a].sort((p, q) => p - q);
+    const y = [...b].sort((p, q) => p - q);
+    let c = 0;
+    for (let i = 0; i < Math.min(x.length, y.length); i++) c += Math.abs(x[i] - y[i]);
+    return c;
+  };
+
+  it('is voice leading exactly when close', () => {
+    const prev = [62, 65, 69];
+    for (const m of MODES) {
+      for (const step of m.progression) {
+        const chord = chordNotes(degreeToNote(step.degree, D, m.scale) - 12, step.quality);
+        expect(voiceChord(prev, chord, 'close')).toEqual(voiceLead(prev, chord));
+      }
+    }
+  });
+
+  it('keeps the chord the same chord, laid out within a twelfth, in every style', () => {
+    const prev = [62, 65, 69];
+    for (const style of ['led', 'open', 'spread'] as const) {
+      for (const m of MODES) {
+        const key = { root: D, scale: m.scale };
+        for (const step of m.progression) {
+          const root = degreeToNote(step.degree, D, m.scale) - 12;
+          const chord = chordNotes(root, step.quality);
+          for (const colour of [0, 0.5, 1]) {
+            const v = voiceChord(prev, chord, style, colour, key);
+            const label = `${style} ${m.id} ${step.degree} ${colour}`;
+            expect(pcs(v), label).toEqual(pcs([...chord, ...colourTones(root, chord, colour, key)]));
+            expect(span(v), label).toBeLessThanOrEqual(19);
+            expect(v, label).toEqual([...v].sort((a, b) => a - b));
+          }
+        }
+      }
+    }
+  });
+
+  it('colours a chord only with tones of its key, above its root, five at most', () => {
+    for (const m of MODES) {
+      const key = { root: D, scale: m.scale };
+      for (const step of m.progression) {
+        const root = degreeToNote(step.degree, D, m.scale) - 12;
+        const chord = chordNotes(root, step.quality);
+        const colour = colourTones(root, chord, 1, key);
+        for (const n of colour) {
+          expect(inScale(n, D, m.scale), `${m.id} ${step.degree} -> ${n}`).toBe(true);
+          expect(n).toBeGreaterThan(root);
+        }
+        expect(chord.length + colour.length).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('finds the seventh and the ninth the key has, and skips what the chord already holds', () => {
+    // D minor in C major takes C and E. In D minor pentatonic the ninth would
+    // be F, which the chord already has, so only the seventh comes.
+    expect(colourTones(62, chordNotes(62, 'min'), 1, C_MAJOR)).toEqual([72, 76]);
+    expect(colourTones(62, chordNotes(62, 'min'), 0.5, C_MAJOR)).toEqual([72]);
+    expect(colourTones(62, chordNotes(62, 'min'), 1, D_PENT)).toEqual([72]);
+    expect(colourTones(62, chordNotes(62, 'min'), 0.4, C_MAJOR)).toEqual([]);
+    // A major seventh chord already has its seventh: only the ninth comes.
+    expect(colourTones(60, chordNotes(60, 'maj7'), 1, C_MAJOR)).toEqual([74]);
+    // A diminished chord takes no colour at all.
+    expect(colourTones(71, chordNotes(71, 'dim'), 1, C_MAJOR)).toEqual([]);
+  });
+
+  it('moves the voices no further than voice leading does, when led', () => {
+    const prev = [60, 64, 67];
+    for (const m of MODES) {
+      for (const step of m.progression) {
+        const chord = chordNotes(degreeToNote(step.degree, D, m.scale) - 12, step.quality);
+        expect(cost(prev, voiceChord(prev, chord, 'led'))).toBeLessThanOrEqual(cost(prev, voiceLead(prev, chord)));
+      }
+    }
+  });
+
+  it('opens a chord by dropping its second voice, and spreads it from the root', () => {
+    const open = voiceChord([60, 64, 67], [60, 64, 67], 'open');
+    expect(open).toHaveLength(3);
+    expect(pcs(open)).toEqual(pcs([60, 64, 67]));
+    expect(span(open)).toBeGreaterThan(7);
+    const spread = voiceChord([], chordNotes(48, 'dom7'), 'spread', 1, C_MAJOR);
+    expect(spread[0]).toBe(48);
+    expect(spread).toHaveLength(5);
+    expect(spread[1] - 48).toBe(10);
+    expect(spread[spread.length - 1] - 48).toBe(19);
   });
 });
 

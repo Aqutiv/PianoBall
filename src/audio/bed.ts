@@ -1,7 +1,7 @@
 import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
-import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
+import { Groove, chordNotes, degreeToNote, voiceChord, voiceLead, type VoicingStyle } from './music';
 import {
   compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
 } from './comp';
@@ -51,6 +51,20 @@ export interface BeatClock {
   /** Needed by the accompaniment: a bass note belongs on the bar line. */
   beatsPerBar: number;
   timeOf(beat: number): number;
+}
+
+/** How the bass under the loop moves: on the root, or walking towards the next chord. */
+export type BassStyle = 'root' | 'walk';
+
+/**
+ * How the scale's own loop is voiced, beyond which pattern plays it. All
+ * optional; what is left out is the bed as it always was.
+ */
+export interface LoopStyle {
+  voicing?: VoicingStyle;
+  /** Colour from the key on top of the triad: half is the seventh, one adds the ninth. */
+  colour?: number;
+  bass?: BassStyle;
 }
 
 /** How often the scheduler wakes, and how far ahead it writes. */
@@ -118,6 +132,9 @@ export class ChordBed {
    */
   private loopPattern: CompPattern = 'sustain';
   private loopParts: readonly CompPart[] = ['chord', 'bass'];
+  private loopVoicing: VoicingStyle = 'close';
+  private loopColour = 0;
+  private loopBass: BassStyle = 'root';
   /**
    * A tune the game plays itself, when the player is busy with the chords.
    *
@@ -291,6 +308,28 @@ export class ChordBed {
   }
 
   /**
+   * How the loop's chords are voiced, from the next bar on. Only the fields
+   * move, like `setLoopPattern`; a bar already written keeps its voicing.
+   */
+  setLoopStyle(style: LoopStyle): void {
+    this.loopVoicing = style.voicing ?? 'close';
+    this.loopColour = style.colour ?? 0;
+    this.loopBass = style.bass ?? 'root';
+  }
+
+  /** How the bass under the loop moves. */
+  get bassStyle(): BassStyle { return this.loopBass; }
+
+  /**
+   * The tones the bed is sounding, as voiced. What a flourish arpeggiates,
+   * so a run over the table is a run through the chord under it rather than
+   * through the scale. The chord to come, before the first bar has played.
+   */
+  get chordTones(): number[] {
+    return this.lastVoicing.length ? this.lastVoicing : this.chordSpec.notes;
+  }
+
+  /**
    * Current chord of the progression. The root is kept alongside the notes
    * because voice leading can leave it anywhere in the voicing, and the bass
    * still has to play the actual root.
@@ -418,7 +457,8 @@ export class ChordBed {
    */
   private play(bar: number): void {
     const { root, notes } = this.chordSpec;
-    const voiced = voiceLead(this.lastVoicing, notes);
+    const m = this.music;
+    const voiced = voiceChord(this.lastVoicing, notes, this.loopVoicing, this.loopColour, { root: m.root, scale: m.scale });
     this.lastVoicing = voiced;
     const beat = bar / 4;
     const opts = { human: this.human(beat) };

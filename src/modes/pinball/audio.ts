@@ -299,6 +299,7 @@ export class PinballAudio {
   private apply(level: Intensity): void {
     const rung = LADDER[level];
     this.bed.setLoopPattern(rung.pattern, rung.parts);
+    this.bed.setLoopStyle({ voicing: rung.voicing, colour: rung.colour, bass: rung.bass });
     if (rung.drums && pinballSettings().drums) {
       this.box.setPattern(findPattern(rung.drums));
       this.box.start();
