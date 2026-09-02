@@ -634,6 +634,9 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
 
   // --------------------------------------------------------------- synth ---
+  // A synth is allowed to sound like one. What these gain is width — unison
+  // where a second detuned layer used to stand in for it — and a velocity
+  // range chosen rather than inherited.
   {
     id: 'saw-lead', name: 'Saw Lead', family: 'Synth',
     spec: steady({
@@ -643,6 +646,8 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       ],
       filter: { base: 2, track: 12, q: 3.4, qVel: 3, settle: 1.4, settleVel: 2.6, settleTime: 0.35 },
       env: { attack: 0.005, decay: 0.2, sustain: 0.7, release: 0.18 },
+      velDb: 18,
+      unison: { voices: 2, cents: 8 },
       reverb: 0.2, delay: 0.14,
     }),
   },
@@ -655,20 +660,25 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       ],
       filter: { base: 2.2, track: 10, q: 3, qVel: 3, settle: 1.5, settleVel: 2.4, settleTime: 0.35 },
       env: { attack: 0.004, decay: 0.18, sustain: 0.72, release: 0.16 },
+      velDb: 18,
+      unison: { voices: 2, cents: 6 },
       reverb: 0.2, delay: 0.16,
     }),
   },
   {
     id: 'supersaw', name: 'Supersaw', family: 'Synth',
+    // Six saws, not four: two layers ten cents either side of the note, each
+    // in three-voice unison, which spreads them from sixteen cents flat to
+    // sixteen sharp with nothing in the middle — the trance stack.
     spec: steady({
       layers: [
-        { type: 'sawtooth', ratio: 1, level: 0.26, detune: -14 },
-        { type: 'sawtooth', ratio: 1, level: 0.26, detune: -5 },
-        { type: 'sawtooth', ratio: 1, level: 0.26, detune: 6 },
-        { type: 'sawtooth', ratio: 1, level: 0.26, detune: 15 },
+        { type: 'sawtooth', ratio: 1, level: 0.35, detune: -10 },
+        { type: 'sawtooth', ratio: 1, level: 0.35, detune: 10 },
       ],
       filter: { base: 2, track: 11, q: 2.4, qVel: 2, settle: 1.6, settleVel: 2.4, settleTime: 0.5 },
       env: { attack: 0.01, decay: 0.3, sustain: 0.8, release: 0.4 },
+      velDb: 16,
+      unison: { voices: 3, cents: 6 },
       gain: 0.85, reverb: 0.35, delay: 0.2,
     }),
   },
@@ -682,6 +692,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       ],
       filter: { base: 2.4, track: 12, q: 4, qVel: 3, settle: 1.4, settleVel: 3, settleTime: 0.4 },
       env: { attack: 0.006, decay: 0.25, sustain: 0.55, release: 0.3 },
+      velDb: 20,
       reverb: 0.24, delay: 0.14,
     }),
   },
@@ -695,6 +706,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       ],
       filter: { base: 1.2, track: 3, q: 1, qVel: 1, settle: 0.9, settleVel: 1, settleTime: 0.3 },
       env: { attack: 0.004, decay: 0.3, sustain: 0.75, release: 0.14 },
+      velDb: 16,
       reverb: 0.04, delay: 0.02,
     }),
   },
