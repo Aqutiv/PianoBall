@@ -201,7 +201,9 @@ export class Overlay {
       this.body.querySelector(sel)!.addEventListener('click', fn);
     on('#btn-resume', () => this.shell.resumeMode());
     on('#btn-restart', () => { this.hide(); this.shell.restartMode(); });
-    on('#btn-home', () => this.show('home'));
+    // Through the shell rather than straight to the screen: this leaves the
+    // pause panel, and the bed the panel silenced has to come back with it.
+    on('#btn-home', () => this.shell.goHome());
     on('#btn-settings', () => this.show('settings'));
   }
 

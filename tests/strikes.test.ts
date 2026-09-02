@@ -200,6 +200,19 @@ describe('striking the table', () => {
     expect(cancelled.mallet).toBe(mallets.length);
   });
 
+  it('takes it back for a pause too, not only for the way out', () => {
+    const { mallets, game, audio, cancelled } = rig();
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    expect(mallets.length).toBeGreaterThan(1);
+
+    // The app's hush reaches what is in the engine's shot budget, and a
+    // flourish is deliberately not in it — so without this the rest of the
+    // run played out behind the pause panel.
+    audio.pause();
+
+    expect(cancelled.mallet).toBe(mallets.length);
+  });
+
   it('forgets a flourish that has already played out', () => {
     const { game, audio, engine, cancelled } = rig();
     game.bus.emit('objective', { id: 'arc', label: 'ARC' });

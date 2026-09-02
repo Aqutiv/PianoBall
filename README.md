@@ -373,8 +373,11 @@ sounding when the panel goes up mostly belongs to the app rather than to any of
 them: a chord still held, the bed comping on a timer of its own, a flourish
 already written onto the audio clock a second ahead. The shell puts all three
 down in one place, and starts the bed again on the way out unless the mode has
-already put its own back. Going home is not a pause: the menu keeps the bed
-under it, the way it has one at boot.
+already put its own back. The table's flourish stays the table's, though: a
+bonus run is music, and music is deliberately kept out of the voice-stealing
+budget the hush cuts through, so the handles the table already keeps for
+leaving mid-flourish are what take it back for a pause as well. Going home is
+not a pause: the menu keeps the bed under it, the way it has one at boot.
 
 **The rolling ball is the one that gets away.** `step` stops behind a panel but
 `draw` does not — the board has to stay on screen — and the table's roll is

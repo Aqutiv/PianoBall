@@ -87,6 +87,11 @@ export class PinballAudio {
     this.paused = true;
     this.box.stop();
     this.stopRolls();
+    // A flourish is placed a second or two ahead and is deliberately not in
+    // the engine's shot budget — a bonus run is music, and music does not get
+    // voice-stolen by the table falling over itself — so the app's hush cannot
+    // reach it. These handles are the only way back, the same as on the way out.
+    this.dropAhead();
   }
 
   /**
@@ -303,10 +308,15 @@ export class PinballAudio {
     this.box.stop();
     this.stopRolls();
     // Leaving mid-flourish must not keep playing it into the next mode.
-    for (const h of this.ahead) h.cancel();
-    this.ahead.length = 0;
+    this.dropAhead();
     // The bed is shared. The other modes expect to find it plain.
     this.apply(0);
+  }
+
+  /** Take back everything placed ahead that has not sounded yet. */
+  private dropAhead(): void {
+    for (const h of this.ahead) h.cancel();
+    this.ahead.length = 0;
   }
 
   /** Remember a one-shot placed ahead, dropping the ones already over. */

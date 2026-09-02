@@ -196,6 +196,10 @@ export class Shell {
   goHome(): void {
     this.pauseActive();
     this.playing = false;
+    // Reached from the pause panel as well as from a finished run, and the
+    // panel silenced the bed on the way in. The menu is not a pause: it has a
+    // bed under it, the way it has one at boot.
+    this.wakeBed();
     this.overlay.show('home');
   }
 
