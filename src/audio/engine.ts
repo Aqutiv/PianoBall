@@ -10,7 +10,7 @@ import {
 import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
 import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
-  type BedSpec, type VoiceLayer, type VoiceNoise, type VoiceSpec,
+  type BedSpec, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
 } from './voices';
 
 export interface AudioSettings {
@@ -167,7 +167,15 @@ interface KeyVoice {
    */
   release: number;
   damper?: VoiceNoise;
+  /** The voice's motion, tapped off the shared oscillators. Unhooked on release. */
+  taps: Tap[];
   releasing: boolean;
+}
+
+/** One connection from a pooled oscillator to a voice, through its own depth. */
+interface Tap {
+  lfo: OscillatorNode;
+  gain: GainNode;
 }
 
 /** The nodes every pitched voice shares, whatever its layers are made of. */
@@ -175,7 +183,16 @@ interface Chain {
   filter: BiquadFilterNode;
   amp: GainNode;
   panner: StereoPannerNode;
+  /** A gain after the amplifier for tremolo to move, when the voice has any. */
+  trem: GainNode | null;
 }
+
+/** Seconds a delayed motion takes to come up once its delay has passed. */
+const MOTION_RISE = 0.4;
+/** Cents of vibrato a rotary's horn adds at full depth. */
+const ROTARY_CENTS = 9;
+/** How far a rotary swings the note between the ears. */
+const ROTARY_SWING = 0.45;
 
 /** Send levels a chain is built with. Zero leaves that send out altogether. */
 interface Sends {
@@ -785,9 +802,10 @@ export class AudioEngine {
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
 
     // Harder notes go wetter, whatever the instrument's own send level is.
+    const moves = spec.lfo?.target === 'tremolo' || spec.lfo?.target === 'rotary';
     const chain = this.makeChain(pan, LEAD_WIDTH, {
       hall: spec.reverb * (1 + v * 0.7), cab: 0, delay: spec.delay * (1 + v * 1.4), body: spec.body,
-    }, this.musicBus);
+    }, this.musicBus, moves);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
       sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch));
@@ -795,14 +813,14 @@ export class AudioEngine {
     // Breath, or the knock of the key itself: a slice of the shared buffer,
     // the same layer the drums are mostly made of.
     for (const n of noises(spec.noise)) this.addNoise(chain.filter, n, freq, v, t, k);
-    this.attachExpression(sources, chain.filter);
+    const taps = this.attachExpression(sources, chain, spec.lfo, t);
     const peak = velocityPeak(v, spec.velDb) * spec.gain * k.level * h.level;
     this.applyEnvelope(chain, spec, freq, v, t, k, h, peak);
     this.duck(t);
 
     const voice: KeyVoice = {
       note, startedAt: t, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
-      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, releasing: false,
+      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, taps, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -842,7 +860,7 @@ export class AudioEngine {
     for (const layer of spec.layers) {
       sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0));
     }
-    this.attachExpression(sources, chain.filter);
+    this.attachExpression(sources, chain, undefined, t);
 
     // Swelled, not struck — but only just. A real pad attack would put the
     // sound behind the beat it was played on, and this is a rhythm game: the
@@ -868,7 +886,7 @@ export class AudioEngine {
 
     const voice: KeyVoice = {
       note, startedAt: t, sources, filter, amp, panner: chain.panner,
-      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, releasing: false,
+      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -882,14 +900,24 @@ export class AudioEngine {
    * panner, and whichever sends it was given. Layers are added in front of
    * the filter; the envelope is written onto the amplifier afterwards.
    */
-  private makeChain(pan: number, width: number, sends: Sends, into: AudioNode): Chain {
+  private makeChain(pan: number, width: number, sends: Sends, into: AudioNode, moves = false): Chain {
     const ctx = this.ctx!;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     const amp = ctx.createGain();
     const panner = ctx.createStereoPanner();
     panner.pan.value = clamp(pan, -1, 1) * width;
-    filter.connect(amp).connect(panner);
+    // Tremolo wants a gain of its own to swing about one: summed onto the
+    // amplifier it would ride the envelope instead of multiplying it, and be
+    // all that was left once the note had died away.
+    let trem: GainNode | null = null;
+    if (moves) {
+      trem = ctx.createGain();
+      trem.gain.value = 1;
+      filter.connect(amp).connect(trem).connect(panner);
+    } else {
+      filter.connect(amp).connect(panner);
+    }
     panner.connect(into);
     const send = (level: number, to: AudioNode) => {
       if (level <= 0) return;
@@ -901,7 +929,7 @@ export class AudioEngine {
     send(sends.cab, this.cabSend);
     send(sends.delay, this.delaySend);
     send(sends.body ?? 0, this.bodySend);
-    return { filter, amp, panner };
+    return { filter, amp, panner, trem };
   }
 
   /**
@@ -1019,13 +1047,60 @@ export class AudioEngine {
    * reaches the operators too. Cents are a ratio, so detuning carrier and
    * operator by the same amount slides the whole spectrum together and keeps
    * the ratio the timbre is made of.
+   *
+   * A voice's own motion is wired the same way, from the shared oscillator
+   * at its rate through a depth of its own — one gain node, whatever it
+   * moves. Delayed motion holds that depth at nothing until the delay has
+   * passed and then brings it up over a moment, which is how a real vibrato
+   * arrives: on the held note, never on the attack.
    */
-  private attachExpression(sources: readonly Pitched[], filter: BiquadFilterNode): void {
+  private attachExpression(
+    sources: readonly Pitched[], chain: Chain, lfo: VoiceLfo | undefined, t: number,
+  ): Tap[] {
     for (const s of sources) {
       this.bendSource.connect(s.detune);
       this.lfoVibrato.connect(s.detune);
     }
-    this.lfoColour.connect(filter.frequency);
+    this.lfoColour.connect(chain.filter.frequency);
+    const taps: Tap[] = [];
+    if (!lfo) return taps;
+    const ctx = this.ctx!;
+    const tap = (rate: number, depth: number, to: readonly AudioParam[]) => {
+      const gain = ctx.createGain();
+      const delay = lfo.delay ?? 0;
+      if (delay > 0) {
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.setValueAtTime(0, t + delay);
+        gain.gain.linearRampToValueAtTime(depth, t + delay + MOTION_RISE);
+      } else {
+        gain.gain.value = depth;
+      }
+      const osc = this.lfoAt(rate);
+      osc.connect(gain);
+      for (const param of to) gain.connect(param);
+      taps.push({ lfo: osc, gain });
+    };
+    const detunes = sources.map((s) => s.detune);
+    switch (lfo.target) {
+      case 'tremolo':
+        if (chain.trem) tap(lfo.rate, lfo.depth, [chain.trem.gain]);
+        break;
+      case 'vibrato':
+        tap(lfo.rate, lfo.depth, detunes);
+        break;
+      case 'filter':
+        tap(lfo.rate, lfo.depth, [chain.filter.frequency]);
+        break;
+      case 'rotary':
+        // The horn: its level and, through the Doppler of its spin, its
+        // pitch, both at the rotor's rate. The cabinet: the sound swung
+        // slowly between the ears.
+        if (chain.trem) tap(lfo.rate, lfo.depth, [chain.trem.gain]);
+        tap(lfo.rate, lfo.depth * ROTARY_CENTS, detunes);
+        tap(lfo.rate2 ?? lfo.rate / 8, ROTARY_SWING, [chain.panner.pan]);
+        break;
+    }
+    return taps;
   }
 
   /** The wave for a spectrum layer in a register: built on the first request, kept after. */
@@ -1091,6 +1166,11 @@ export class AudioEngine {
       this.lfoVibrato.disconnect(s.detune);
     }
     this.lfoColour.disconnect(voice.filter.frequency);
+    // The pooled oscillators are permanent too, and hold every tap they feed.
+    for (const { lfo, gain } of voice.taps) {
+      lfo.disconnect(gain);
+      gain.disconnect();
+    }
     const idx = this.active.indexOf(voice);
     if (idx >= 0) this.active.splice(idx, 1);
   }

@@ -88,6 +88,24 @@ export interface Unison {
   cents: number;
 }
 
+/**
+ * Motion a voice carries of its own, from the engine's shared oscillators.
+ *
+ * `depth` means what the target needs: a fraction of the level for tremolo
+ * and rotary, cents for vibrato, hertz for the filter. A `delay` holds the
+ * motion back for that many seconds after the strike — a flute's or a
+ * string's vibrato arrives once the note has settled, never on the attack.
+ * Rotary is a Leslie: tremolo with a little vibrato in it at `rate`, the
+ * cabinet swung between the ears at `rate2`.
+ */
+export interface VoiceLfo {
+  rate: number;
+  depth: number;
+  target: 'tremolo' | 'vibrato' | 'filter' | 'rotary';
+  delay?: number;
+  rate2?: number;
+}
+
 /** The noise of a spec as a list, however it was written. */
 export function noises(n: VoiceNoise | readonly VoiceNoise[] | undefined): readonly VoiceNoise[] {
   if (!n) return [];
@@ -136,6 +154,7 @@ export interface VoiceSpec {
   damper?: VoiceNoise;
   /** How much of the note is sent through the soundboard, 0..1. */
   body?: number;
+  lfo?: VoiceLfo;
 }
 
 const KEY_BASE: VoiceSpec = {
@@ -205,39 +224,71 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   {
     id: 'electric-piano', name: 'Electric Piano', family: 'Keys',
     // A tine: a sine with a bell ringing on top of it for a tenth of a second.
+    // Hit hard, the tine drives the pickup and the note barks — a narrow
+    // pulse that only a hard strike brings in and that is gone in a third of
+    // a second. The tremolo is the amplifier's, and it never stops.
     spec: key({
       layers: [
-        { type: 'sine', ratio: 1, level: 0.6, fm: { ratio: 14, index: 3.4, decay: 0.11 } },
-        { type: 'sine', ratio: 2, level: 0.12, decay: 0.7 },
+        { type: 'sine', ratio: 1, level: 0.56, fm: { ratio: 14, index: 3.4, decay: 0.11 } },
+        {
+          type: 'spectrum', spectrum: { gen: 'pulse', params: [0.15] }, ratio: 1,
+          level: 0.03, velLevel: 0.3, velCurve: 2.5, decay: 0.3,
+        },
+        { type: 'sine', ratio: 2, level: 0.1, decay: 0.7 },
       ],
+      noise: { freq: 2400, pitchTrack: 8, q: 1, decay: 0.012, gain: 0.05, velCurve: 2 },
+      damper: { freq: 250, q: 0.7, decay: 0.05, gain: 0.035 },
       filter: { base: 3, track: 6, q: 0.9, qVel: 1, settle: 2, settleVel: 1.5, settleTime: 0.5 },
-      env: { attack: 0.003, decay: 0.9, sustain: 0.26, release: 0.5 },
+      env: { attack: 0.003, decay: 1.2, sustain: 0.2, release: 0.5 },
+      velDb: 30, attackVel: 0.3,
+      keyTrack: { decay: -0.45, bright: 0.2, level: -0.08 },
+      stretch: 0.8,
+      lfo: { rate: 5.5, depth: 0.22, target: 'tremolo' },
       reverb: 0.22, delay: 0.12,
     }),
   },
   {
     id: 'wurlitzer', name: 'Wurlitzer', family: 'Keys',
+    // A reed rather than a tine: hollow, with a bark of its own when pushed,
+    // and the deeper, faster tremolo the instrument is known for.
     spec: key({
       layers: [
-        { type: 'triangle', ratio: 1, level: 0.5 },
-        { type: 'square', ratio: 1, level: 0.14, velLevel: 0.16 },
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.5 },
+        {
+          type: 'spectrum', spectrum: { gen: 'pulse', params: [0.12] }, ratio: 1,
+          level: 0.03, velLevel: 0.26, velCurve: 2, decay: 0.2,
+        },
         { type: 'sine', ratio: 3, level: 0.08, decay: 0.25 },
       ],
+      noise: { freq: 1800, pitchTrack: 6, q: 1, decay: 0.01, gain: 0.05, velCurve: 1.5 },
+      damper: { freq: 320, q: 0.7, decay: 0.04, gain: 0.03 },
       filter: { base: 2.6, track: 8, q: 1.6, qVel: 2, settle: 1.6, settleVel: 2, settleTime: 0.4 },
-      env: { attack: 0.003, decay: 0.5, sustain: 0.3, release: 0.35 },
+      env: { attack: 0.003, decay: 0.9, sustain: 0.28, release: 0.35 },
+      velDb: 28, attackVel: 0.3,
+      keyTrack: { decay: -0.4, bright: 0.15 },
+      lfo: { rate: 6, depth: 0.35, target: 'tremolo' },
       reverb: 0.18, delay: 0.1,
     }),
   },
   {
     id: 'clavinet', name: 'Clavinet', family: 'Keys',
-    // Short, tight and dry: the one voice in the bank that wants no room.
+    // Short, tight and dry: the one voice in the bank that wants no room. A
+    // plucked string under a pickup, so it is bright by partials rather than
+    // by filter, with the slap of the yarn damper when the key comes up.
     spec: key({
       layers: [
-        { type: 'square', ratio: 1, level: 0.5 },
-        { type: 'sawtooth', ratio: 1, level: 0.2, detune: 4 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [0.7] }, ratio: 1, level: 0.45 },
+        {
+          type: 'spectrum', spectrum: { gen: 'pulse', params: [0.1] }, ratio: 1,
+          level: 0.12, velLevel: 0.2, velCurve: 1.5, decay: 0.15,
+        },
       ],
+      noise: { freq: 3000, pitchTrack: 10, q: 1.5, decay: 0.008, gain: 0.08, velCurve: 1 },
+      damper: { freq: 900, q: 1.2, decay: 0.03, gain: 0.05 },
       filter: { base: 2.5, track: 14, q: 6, qVel: 3, settle: 1.4, settleVel: 2, settleTime: 0.12 },
       env: { attack: 0.002, decay: 0.11, sustain: 0.06, release: 0.1 },
+      velDb: 24, attackVel: 0.2,
+      keyTrack: { decay: -0.5, bright: 0.3 },
       reverb: 0.06, delay: 0.04,
     }),
   },
@@ -273,8 +324,11 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
         { type: 'sine', ratio: 9.1, level: 0.08, decay: 0.09 },
       ],
       noise: { freq: 3000, q: 2, decay: 0.012, gain: 0.12 },
+      damper: { freq: 2500, q: 2, decay: 0.01, gain: 0.04 },
       filter: { base: 5, track: 10, q: 1.4, qVel: 2, settle: 3, settleVel: 2, settleTime: 0.3 },
       env: { attack: 0.002, decay: 0.35, sustain: 0.04, release: 0.2 },
+      velDb: 22,
+      keyTrack: { decay: -0.4 },
       reverb: 0.24, delay: 0.08,
     }),
   },

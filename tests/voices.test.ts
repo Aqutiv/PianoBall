@@ -101,6 +101,14 @@ describe('the instrument bank', () => {
       within(v.id, 'body', s.body, 0, 1);
       within(v.id, 'damper decay', s.damper?.decay, 0.005, 0.3);
       within(v.id, 'unison cents', s.unison?.cents, 0.5, 20);
+      if (s.lfo) {
+        within(v.id, 'lfo rate', s.lfo.rate, 0.1, 12);
+        within(v.id, 'lfo delay', s.lfo.delay, 0, 2);
+        within(v.id, 'lfo rate2', s.lfo.rate2, 0.1, 12);
+        // Depth means what the target needs: a fraction, cents, or hertz.
+        const top = { tremolo: 1, rotary: 1, vibrato: 50, filter: 3000 }[s.lfo.target];
+        within(v.id, `${s.lfo.target} depth`, s.lfo.depth, 0, top);
+      }
       for (const [name, n] of Object.entries(s.keyTrack ?? {})) within(v.id, `keyTrack ${name}`, n, -1.5, 1.5);
       for (const l of s.layers) {
         within(v.id, 'velCurve', l.velCurve, 0, 4);
