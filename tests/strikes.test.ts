@@ -371,6 +371,20 @@ describe('the ball rolling', () => {
     for (const u of rolls[0].updates) expect(u.contact).toBe(1);
   });
 
+  it('opens no roll while audio cannot be heard, and opens one once it can', () => {
+    const { rolls, game, audio, engine } = rig();
+    engine.running = false;
+    game.spawnBall(400, 700, 500, 0);
+    audio.frame();
+    audio.frame();
+    // A roll opened now would be a no-op, cached for the life of the ball.
+    expect(rolls).toHaveLength(0);
+    engine.running = true;
+    audio.frame();
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0].updates).toHaveLength(1);
+  });
+
   it('stops every roll on pause and on the way out', () => {
     const { rolls, game, audio } = rig();
     game.spawnBall(400, 700, 500, 0);

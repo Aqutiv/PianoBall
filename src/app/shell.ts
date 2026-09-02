@@ -345,6 +345,9 @@ export class Shell {
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
       this.qualityHeld = 3;
+      // Bloom may already be off by choice, which makes this the first
+      // thing shed: the sound has to follow from here too.
+      this.audio.setLite(true);
     } else if (this.frameAvg < 7
       && (q.bloom !== want.bloom || q.shadows !== want.shadows)) {
       q.bloom = want.bloom;

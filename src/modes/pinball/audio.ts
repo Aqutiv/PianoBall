@@ -94,6 +94,10 @@ export class PinballAudio {
       seen.add(ball.id);
       let handle = this.rolls.get(ball.id);
       if (!handle) {
+        // Not until audio can be heard: a roll opened while the context is
+        // still locked is a no-op, and cached here it would stay one for the
+        // life of the ball. Leave the ball unrolled and try again next frame.
+        if (!this.engine.running) continue;
         handle = this.engine.roll();
         this.rolls.set(ball.id, handle);
       }

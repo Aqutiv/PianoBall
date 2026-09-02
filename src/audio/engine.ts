@@ -1309,7 +1309,22 @@ export class AudioEngine {
     // Half down, the dampers only brush the strings and the note fades slowly.
     const seconds = pedalRelease(voice.release, this.pedal);
     this.release(voice, seconds, true, this.pedal >= PEDAL_UP ? RECATCH_REPRIEVE : 0);
-    if (this.pedal >= PEDAL_UP) this.fading.push({ voice, at: this.ctx.currentTime });
+    if (this.pedal >= PEDAL_UP) this.remember(voice);
+  }
+
+  /**
+   * A note the pedal may still catch. What it can no longer catch is dropped
+   * at the same time, so a long half-pedalled passage never keeps every note
+   * it has let go.
+   */
+  private remember(voice: KeyVoice): void {
+    const t = this.ctx!.currentTime;
+    this.forgetFaded(t);
+    this.fading.push({ voice, at: t });
+  }
+
+  private forgetFaded(t: number): void {
+    this.fading = this.fading.filter((f) => t - f.at <= RECATCH);
   }
 
   /**
@@ -1375,7 +1390,7 @@ export class AudioEngine {
       if (!voice || voice.releasing) continue;
       this.voices.delete(note);
       this.release(voice, pedalRelease(voice.release, a), true, RECATCH_REPRIEVE);
-      this.fading.push({ voice, at: this.ctx.currentTime });
+      this.remember(voice);
     }
   }
 
@@ -1389,9 +1404,8 @@ export class AudioEngine {
    * note is a note saved, not a note struck again.
    */
   private recatch(t: number): void {
-    const keep: typeof this.fading = [];
+    this.forgetFaded(t);
     for (const f of this.fading) {
-      if (t - f.at > RECATCH) continue;
       const voice = f.voice;
       if (this.voices.has(voice.note)) continue;
       voice.amp.gain.cancelScheduledValues(t);
@@ -1407,7 +1421,7 @@ export class AudioEngine {
       this.active.push(voice);
       this.sustained.add(voice.note);
     }
-    this.fading = keep;
+    this.fading = [];
   }
 
   /** Oldest-first voice stealing, so a two-handed run never runs out. */
