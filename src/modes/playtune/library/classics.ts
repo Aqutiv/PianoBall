@@ -54,7 +54,7 @@ export const ODE_TO_JOY: Tune = {
   accompaniment: 'march',
   bedVoiceId: 'strings',
   borrows: LEADING,
-  pass: 0.65,
+  pass: 0.6,
   melody: line([
     [E4, 1], [E4, 1], [F4, 1], [G4, 1],
     [G4, 1], [F4, 1], [E4, 1], [D4, 1],
@@ -98,7 +98,7 @@ export const TWINKLE: Tune = {
   voiceId: 'music-box',
   bedVoiceId: 'bed-harp',
   borrows: LEADING,
-  pass: 0.65,
+  pass: 0.6,
   melody: line([
     [C4, 1], [C4, 1], [G4, 1], [G4, 1], [A4, 1], [A4, 1], [G4, 2],
     [F4, 1], [F4, 1], [E4, 1], [E4, 1], [D4, 1], [D4, 1], [C4, 2],
@@ -143,7 +143,7 @@ export const AMAZING_GRACE: Tune = {
   voiceId: 'pipe-organ',
   bedVoiceId: 'bed-choir',
   borrows: LEADING,
-  pass: 0.65,
+  pass: 0.6,
   melody: line([
     [D4, 1],
     [G4, 2], [B4, 0.5], [G4, 0.5],
@@ -195,7 +195,7 @@ export const SCARBOROUGH_FAIR: Tune = {
   accompaniment: 'waltz',
   voiceId: 'breath-flute',
   bedVoiceId: 'nylon-guitar',
-  pass: 0.68,
+  pass: 0.63,
   melody: line([
     [A4, 1], [A4, 1], [E5, 1],
     [E5, 2], [E5, 1],
@@ -272,7 +272,7 @@ export const GREENSLEEVES: Tune = {
   // The raised seventh. Greensleeves is the standard example of a minor tune
   // that borrows a major dominant, and it does it at the end of every phrase.
   borrows: LEADING,
-  pass: 0.7,
+  pass: 0.65,
   // The upper neighbour in each group — the F, the A, the G sharp — is
   // traditionally a snap: a dotted eighth answered by a sixteenth. Here the
   // beat already *is* the eighth, so writing that literally as 1.5 and 0.5
@@ -330,7 +330,7 @@ export const FUR_ELISE: Tune = {
   voiceId: 'felt-piano',
   bedVoiceId: 'bed-felt-piano',
   borrows: LEADING,
-  pass: 0.7,
+  pass: 0.65,
   // Barred as the piece is: the upbeat on its own, then the run, then the A it
   // lands on. That A used to be struck twice — once to end the run and again to
   // hold — which is one attack more than the piece has, and the extra beat was
@@ -394,7 +394,7 @@ export const LONDONDERRY_AIR: Tune = {
   voiceId: 'choir',
   bedVoiceId: 'bed-harp',
   borrows: LEADING,
-  pass: 0.7,
+  pass: 0.65,
   melody: line([
     [G4, 1],
     [C5, 2], [E5, 1], [G5, 1],
@@ -435,7 +435,7 @@ export const MINUET_IN_G: Tune = {
   voiceId: 'clavinet',
   bedVoiceId: 'bed-harp',
   borrows: LEADING,
-  pass: 0.72,
+  pass: 0.67,
   melody: line([
     [D5, 1], [G4, 0.5], [A4, 0.5], [B4, 0.5], [C5, 0.5],
     [D5, 1], [G4, 1], [G4, 1],
@@ -476,7 +476,7 @@ export const GYMNOPEDIE: Tune = {
   voiceId: 'felt-piano',
   bedVoiceId: 'bed-felt-piano',
   borrows: LEADING,
-  pass: 0.72,
+  pass: 0.67,
   melody: line([
     [Fs5, 3],
     [A5, 3],
@@ -553,7 +553,7 @@ export const CANON_IN_D: Tune = {
   voiceId: 'choir',
   bedVoiceId: 'strings',
   borrows: LEADING,
-  pass: 0.75,
+  pass: 0.7,
   melody: merge(CANON_LONG, CANON_RUN),
   chords: progression([
     ...CANON_GROUND.map(([d, q]) => [d, q, 4] as const),
@@ -601,7 +601,7 @@ export const JESU_JOY: Tune = {
   voiceId: 'pipe-organ',
   bedVoiceId: 'bed-organ',
   borrows: LEADING,
-  pass: 0.75,
+  pass: 0.7,
   melody: merge(
     JESU_LINE,
     shift(JESU_LINE, 36),

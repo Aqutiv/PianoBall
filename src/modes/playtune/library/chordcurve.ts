@@ -38,14 +38,14 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: CHORD_GROUND,
     role: {
-      difficulty: 1, pass: 0.6, pattern: 'sustain',
+      difficulty: 1, pass: 0.55, pattern: 'sustain',
       teaches: 'Two chords, one to a bar. Put it down and leave it there.',
     },
   },
   {
     tune: CHORD_THREE,
     role: {
-      difficulty: 1, pass: 0.62, pattern: 'sustain',
+      difficulty: 1, pass: 0.57, pattern: 'sustain',
       teaches: 'A third shape, and two chords to a bar.',
     },
   },
@@ -55,7 +55,7 @@ export const CHORD_CURVE: ChordEntry[] = [
     // seventh anyone meets is still a shape the hand already knows.
     tune: DRIFT,
     role: {
-      difficulty: 2, pass: 0.62, pattern: 'sustain', voicing: 'shell',
+      difficulty: 2, pass: 0.57, pattern: 'sustain', voicing: 'shell',
       teaches: 'Four beats a chord, and a seventh among them.',
       keysVoiceId: 'glass-pad', melodyVoiceId: 'bed-music-box',
     },
@@ -63,14 +63,14 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: CHORD_MARCH,
     role: {
-      difficulty: 2, pass: 0.64, pattern: 'march',
+      difficulty: 2, pass: 0.59, pattern: 'march',
       teaches: 'The strike is not the chord change.',
     },
   },
   {
     tune: ODE_TO_JOY,
     role: {
-      difficulty: 2, pass: 0.65, pattern: 'march',
+      difficulty: 2, pass: 0.6, pattern: 'march',
       teaches: 'The same march on two chords, with the cadences moving mid-bar.',
       keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
     },
@@ -78,7 +78,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: TWINKLE,
     role: {
-      difficulty: 2, pass: 0.65, pattern: 'march',
+      difficulty: 2, pass: 0.6, pattern: 'march',
       teaches: 'Three chords changing every half bar, and no rest in it.',
       keysVoiceId: 'warm', melodyVoiceId: 'bed-music-box',
     },
@@ -87,7 +87,7 @@ export const CHORD_CURVE: ChordEntry[] = [
     // Melody difficulty 5, chord position 7: the biggest inversion there is.
     tune: CANON_IN_D,
     role: {
-      difficulty: 3, pass: 0.68, pattern: 'march',
+      difficulty: 3, pass: 0.63, pattern: 'march',
       teaches: 'An eight-bar ground, learned once and played twice.',
       keysVoiceId: 'strings', melodyVoiceId: 'bed-harp',
     },
@@ -95,7 +95,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: LONDONDERRY_AIR,
     role: {
-      difficulty: 3, pass: 0.68, pattern: 'march',
+      difficulty: 3, pass: 0.63, pattern: 'march',
       teaches: 'A pickup chord that starts before the bar does.',
       keysVoiceId: 'bed-choir', melodyVoiceId: 'bed-harp',
     },
@@ -103,21 +103,21 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: FIRST_LIGHT,
     role: {
-      difficulty: 3, pass: 0.68, pattern: 'pulse',
+      difficulty: 3, pass: 0.63, pattern: 'pulse',
       teaches: 'A chord on every beat, on only three shapes.',
     },
   },
   {
     tune: TWO_HANDS,
     role: {
-      difficulty: 3, pass: 0.7, pattern: 'pulse',
+      difficulty: 3, pass: 0.65, pattern: 'pulse',
       teaches: 'The same pulse on six shapes — the widest vocabulary here.',
     },
   },
   {
     tune: AMAZING_GRACE,
     role: {
-      difficulty: 4, pass: 0.7, pattern: 'waltz',
+      difficulty: 4, pass: 0.65, pattern: 'waltz',
       teaches: 'Three-four, a pickup, and cadence chords lasting one beat.',
       keysVoiceId: 'bed-organ', melodyVoiceId: 'bed-choir',
     },
@@ -127,7 +127,7 @@ export const CHORD_CURVE: ChordEntry[] = [
     // enough that the shape is the only new thing.
     tune: GYMNOPEDIE,
     role: {
-      difficulty: 4, pass: 0.7, pattern: 'waltz',
+      difficulty: 4, pass: 0.65, pattern: 'waltz',
       teaches: 'Sevenths: four notes at once, three seconds apart.',
       keysVoiceId: 'warm', melodyVoiceId: 'bed-felt-piano',
     },
@@ -135,7 +135,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: SCARBOROUGH_FAIR,
     role: {
-      difficulty: 4, pass: 0.72, pattern: 'waltz',
+      difficulty: 4, pass: 0.67, pattern: 'waltz',
       teaches: 'Five shapes moving on the half bar of a waltz.',
       keysVoiceId: 'bed-choir', melodyVoiceId: 'nylon-guitar',
     },
@@ -143,7 +143,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: GREENSLEEVES,
     role: {
-      difficulty: 4, pass: 0.72, pattern: 'compound',
+      difficulty: 4, pass: 0.67, pattern: 'compound',
       teaches: 'Six-eight, and one finger turning the same chord major.',
       keysVoiceId: 'warm', melodyVoiceId: 'bed-harp',
     },
@@ -152,7 +152,7 @@ export const CHORD_CURVE: ChordEntry[] = [
     // Back to block chords from here: these three climb the rate of change.
     tune: FUR_ELISE,
     role: {
-      difficulty: 5, pass: 0.72, pattern: 'sustain',
+      difficulty: 5, pass: 0.67, pattern: 'sustain',
       teaches: 'Blocks at a hundred and sixty-eight.',
       keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
     },
@@ -160,7 +160,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: MINUET_IN_G,
     role: {
-      difficulty: 5, pass: 0.75, pattern: 'sustain',
+      difficulty: 5, pass: 0.7, pattern: 'sustain',
       teaches: 'The quickest harmony in the library: three chords, two thirds of a second apart.',
       keysVoiceId: 'strings', melodyVoiceId: 'bed-harp',
     },
@@ -168,7 +168,7 @@ export const CHORD_CURVE: ChordEntry[] = [
   {
     tune: JESU_JOY,
     role: {
-      difficulty: 5, pass: 0.75, pattern: 'sustain',
+      difficulty: 5, pass: 0.7, pattern: 'sustain',
       teaches: 'Twenty-odd changes at a hundred and seventy-six, and then again.',
       keysVoiceId: 'bed-organ', melodyVoiceId: 'bed-choir',
     },

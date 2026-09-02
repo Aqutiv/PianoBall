@@ -28,7 +28,7 @@ export const FIRST_LIGHT: Tune = {
   // The second degree. A pentatonic melody leaves it out; the harmony under it
   // cannot, because the A minor chord that answers the F major needs it.
   borrows: [2],
-  pass: 0.6,
+  pass: 0.55,
   melody: line([
     [D4, 1], [F4, 1], [A4, 1], [F4, 1],
     [D4, 4],
@@ -84,7 +84,7 @@ export const DRIFT: Tune = {
   // an F major an F major and a D minor seventh a seventh — and nothing else
   // from outside the scale is allowed in.
   borrows: [10],
-  pass: 0.65,
+  pass: 0.6,
   melody: line([
     [A4, 4], [E4, 4],
     [D5, 8],
@@ -151,7 +151,7 @@ export const TWO_HANDS: Tune = {
   root: D4,
   scaleId: 'aeolian',
   accompaniment: 'arpeggio',
-  pass: 0.7,
+  pass: 0.65,
   melody: merge(
     TUNE_A,
     TUNE_B,

@@ -11,12 +11,13 @@ export const WINDOWS: Windows = { perfect: 0.055, good: 0.11, ok: 0.17 };
  * How much of a note each verdict is worth towards accuracy.
  *
  * `good` used to be 0.75, which made a run that hit every note in the good
- * window worth exactly 75% — the same number Canon in D and Jesu, Joy ask to
- * pass, decided on the last bit of a float. Worse, once the long notes took
- * the hold floor, playing Greensleeves correctly and detached scored 68.9%
- * against its 70% mark: every key right, and a fail. A mode for learning a
- * melody should not do that, so a competent run now clears every pass mark in
- * the library with room, and perfect is still 20% better than good.
+ * window worth exactly 75% — which was then what Canon in D and Jesu, Joy
+ * asked to pass, decided on the last bit of a float. Worse, once the long
+ * notes took the hold floor, playing Greensleeves correctly and detached
+ * scored 68.9% against the 70% it asked for at the time: every key right, and
+ * a fail. A mode for learning a melody should not do that, so a competent run
+ * now clears every pass mark in the library with room, and perfect is still
+ * 20% better than good.
  *
  * `ok` used to be 0.4, so one millisecond either side of the good window more
  * than halved what a note was worth. The ladder should slope, not cliff: the
