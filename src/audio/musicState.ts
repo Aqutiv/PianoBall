@@ -1,3 +1,4 @@
+import type { Cadences, Step } from './music';
 import { EventBus } from '../core/events';
 import { clamp } from '../core/math';
 import { load, save } from '../core/storage';
@@ -70,6 +71,9 @@ export class MusicState {
   label = MODES[0].label;
   scale: number[] = [...MODES[0].scale];
   progression = MODES[0].progression;
+  variation: Step[] | undefined = MODES[0].variation;
+  turnaround: Step | undefined = MODES[0].turnaround;
+  cadences: Cadences | undefined = MODES[0].cadences;
 
   private readonly defaults: MusicDefaults;
 
@@ -94,6 +98,7 @@ export class MusicState {
       root: this.root, bpm: this.bpm,
       id: this.id, label: this.label,
       scale: this.scale, progression: this.progression,
+      variation: this.variation, turnaround: this.turnaround, cadences: this.cadences,
     };
   }
 
@@ -135,6 +140,9 @@ export class MusicState {
     this.label = mode.label;
     this.scale = mode.scale;
     this.progression = mode.progression;
+    this.variation = mode.variation;
+    this.turnaround = mode.turnaround;
+    this.cadences = mode.cadences;
     if (!quiet) this.bus.emit('change', this.active);
   }
 

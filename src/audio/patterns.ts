@@ -71,7 +71,7 @@ export const PATTERNS: readonly RhythmPattern[] = [
   }),
   sixteenths('disco', 'Disco', 'Straight', {
     kick:    'X...X...X...X...',
-    snare:   '....X.......X...',
+    snare:   '....X..-....X..-',
     openhat: '..x...x...x...x.',
     hat:     'x...x...x...x...',
   }),
@@ -83,7 +83,7 @@ export const PATTERNS: readonly RhythmPattern[] = [
   }),
   sixteenths('motorik', 'Motorik', 'Straight', {
     kick:    'X.......X.X.....',
-    snare:   '....X.......X...',
+    snare:   '....X.......X.-.',
     hat:     'x.x.x.x.x.x.x.x.',
   }),
 
@@ -95,7 +95,7 @@ export const PATTERNS: readonly RhythmPattern[] = [
   }),
   sixteenths('pop', 'Pop', 'Backbeat', {
     kick:    'X.....x.X.....x.',
-    snare:   '....X.......X...',
+    snare:   '....X..-....X.-.',
     hat:     'x.x.x.x.x.x.x.x.',
   }),
   sixteenths('stadium', 'Stadium', 'Backbeat', {
@@ -104,12 +104,12 @@ export const PATTERNS: readonly RhythmPattern[] = [
   }),
   sixteenths('ballad', 'Ballad', 'Backbeat', {
     kick:    'X.......X.......',
-    rim:     '....X.......X...',
+    rim:     '....X.....-.X...',
     hat:     'x...x...x...x...',
   }),
   sixteenths('half-time', 'Half-Time', 'Backbeat', {
     kick:    'X.....x.........',
-    snare:   '........X.......',
+    snare:   '........X....-..',
     hat:     'x.x.x.x.x.x.x.x.',
   }),
   sixteenths('train', 'Train Beat', 'Backbeat', {
@@ -140,7 +140,7 @@ export const PATTERNS: readonly RhythmPattern[] = [
   }),
   sixteenths('dnb', 'Drum and Bass', 'Broken', {
     kick:    'X.........X.....',
-    snare:   '....X.......X...',
+    snare:   '....X..-....X.-.',
     hat:     'x.x.x.x.x.x.x.x.',
     ride:    '..x...x...x...x.',
   }),

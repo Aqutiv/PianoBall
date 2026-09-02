@@ -1,3 +1,4 @@
+import { chordNotes, degreeToNote } from '../src/audio/music';
 import { describe, expect, it } from 'vitest';
 import { AudioEngine } from '../src/audio/engine';
 import { wireGlobalControls } from '../src/audio/controls';
@@ -22,6 +23,13 @@ describe('cutting the pads short', () => {
 
     expect(engine.ready).toBe(false);
     expect(() => engine.stopPads()).not.toThrow();
+  });
+
+  it('takes the pedal in any position before the graph exists', () => {
+    const engine = new AudioEngine();
+    expect(() => engine.setSustain(true)).not.toThrow();
+    expect(() => engine.setSustain(0.5)).not.toThrow();
+    expect(() => engine.setSustain(0)).not.toThrow();
   });
 });
 
@@ -167,8 +175,101 @@ describe("the loop's pattern", () => {
     const tick = () => (bed as never as { schedule(): void }).schedule();
     /** Wind the clock a bar forward, a scheduler tick at a time. */
     const bar = () => { for (let t = 0; t < BAR; t += 0.04) { engine.now += 0.04; tick(); } };
-    return { pads, engine, bed, tick, bar };
+    return { pads, engine, bed, tick, bar, music };
   }
+
+  // The harness rolls a scale at random, as the game does, so these assert
+  // against the chord the bed says it is on rather than against a note.
+  it('voices and colours the loop as the table asks, from the next bar', () => {
+    const { pads, bed, tick, bar } = harness();
+    tick();
+    const plain = pads[0].notes.length;
+    expect(plain).toBe(bed.chordSpec.notes.length);
+    expect(bed.chordTones).toHaveLength(plain);
+    bed.setLoopStyle({ voicing: 'spread', colour: 1 });
+    bar();
+    const chords = pads.filter((p) => p.notes.length > 1);
+    // The bar already written keeps its voicing; the next one takes the new.
+    expect(chords[0].notes).toHaveLength(plain);
+    const coloured = chords[chords.length - 1].notes;
+    expect(coloured.length).toBeGreaterThanOrEqual(plain);
+    expect(coloured.length).toBeLessThanOrEqual(5);
+    expect(Math.max(...coloured) - Math.min(...coloured)).toBeLessThanOrEqual(19);
+    expect(bed.chordTones).toEqual(coloured);
+    // And back to plain, from the bar after — which is the next chord's.
+    bed.setLoopStyle({});
+    bar();
+    expect(pads.filter((p) => p.notes.length > 1).pop()!.notes).toHaveLength(bed.chordSpec.notes.length);
+  });
+
+  it('walks the bass into the next chord on the last bar of the one before', () => {
+    const { pads, bed, tick, bar } = harness();
+    bed.setLoopPattern('pulse', ['chord', 'bass']);
+    bed.setLoopStyle({ bass: 'walk' });
+    tick();
+    const root = bed.chordSpec.root - 12;
+    bar();
+    bar();
+    const next = bed.chordSpec.root - 12;
+    const single = pads.filter((p) => p.notes.length === 1);
+    const near = (at: number, beats: number) => Math.abs(at - beats * BEAT) < 1e-6;
+    // The fifth on three, in both bars of the chord.
+    expect(single.some((p) => near(p.at, 2) && p.notes[0] === root + 7)).toBe(true);
+    expect(single.some((p) => near(p.at, 6) && p.notes[0] === root + 7)).toBe(true);
+    // A step into the next chord on the last half-beat of the second bar,
+    // from just below it, and nothing of the kind in the first bar.
+    expect(single.some((p) => near(p.at, 3.5))).toBe(false);
+    const step = single.find((p) => near(p.at, 7.5));
+    expect(step).toBeDefined();
+    expect(next - step!.notes[0]).toBeGreaterThanOrEqual(1);
+    expect(next - step!.notes[0]).toBeLessThanOrEqual(2);
+  });
+
+  it('turns around at the end of the loop and plays its second loop the second time round', () => {
+    const { bed, tick, bar, music } = harness();
+    const rootOf = (step: { degree: number }) => degreeToNote(step.degree, music.root, music.scale) - 12;
+    tick();
+    expect(bed.chordSpec.root).toBe(rootOf(music.progression[0]));
+    // Sixteen bars: eight chords of two. The last bar of the eighth turns around.
+    for (let i = 0; i < 15; i++) bar();
+    expect(bed.chordIndex).toBe(7);
+    expect(bed.chordSpec.root).toBe(rootOf(music.turnaround!));
+    // And the seventeenth is the top of the other loop.
+    bar();
+    expect(bed.chordIndex).toBe(0);
+    expect(bed.chordSpec.root).toBe(rootOf(music.variation![0]));
+    // Sixteen more, and it is the first loop again.
+    for (let i = 0; i < 16; i++) bar();
+    expect(bed.chordSpec.root).toBe(rootOf(music.progression[0]));
+  });
+
+  it('comes home through a cadence when asked, then starts over or carries on', () => {
+    for (const then of ['restart', 'resume'] as const) {
+      const { pads, bed, tick, bar, music } = harness();
+      const pcs = (ns: readonly number[]) => new Set(ns.map((n) => ((n % 12) + 12) % 12));
+      const chordOf = (step: { degree: number; quality: 'maj' | 'min' | 'min7' | 'maj7' | 'sus2' | 'sus4' | 'dom7' | 'dim' }) =>
+        pcs(chordNotes(degreeToNote(step.degree, music.root, music.scale), step.quality));
+      const lastChord = () => pcs(pads.filter((p) => p.notes.length > 1).pop()!.notes);
+      tick();
+      bar();
+      bar();
+      expect(bed.chordIndex).toBe(1);
+      bed.cadence('authentic', then);
+      const steps = music.cadences!.authentic;
+      bar();
+      expect(lastChord(), then).toEqual(chordOf(steps[0]));
+      bar();
+      expect(lastChord(), then).toEqual(chordOf(steps[steps.length - 1]));
+      bar();
+      if (then === 'restart') {
+        expect(bed.chordIndex).toBe(0);
+        expect(lastChord()).toEqual(chordOf(music.progression[0]));
+      } else {
+        expect(bed.chordIndex).toBe(1);
+        expect(lastChord()).toEqual(chordOf(music.progression[1]));
+      }
+    }
+  });
 
   it('sounds as it always has until it is asked otherwise', () => {
     const { pads, tick } = harness();

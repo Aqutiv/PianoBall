@@ -1,5 +1,5 @@
 import { World } from '../physics/world';
-import type { Contact } from '../physics/world';
+import type { Contact, ContactKind } from '../physics/world';
 import { makeBall, type Ball } from '../physics/ball';
 import { buildTable, type BuiltTable, type TableDef, type TableElement } from './table/schema';
 import type { SoundTag } from '../physics/colliders';
@@ -25,7 +25,15 @@ export interface GameEvents {
   key: { key: KeyState; note: number; force: number; source: string };
   keyup: { note: number };
   launch: LaunchEvent;
-  impact: { sound: SoundTag; energy: number; note: number | null; x: number; y: number; ball: number };
+  /**
+   * The ball meeting something. `energy` is the closing speed along the
+   * normal and `slide` the speed across it, so the sound can tell a square
+   * hit from a graze; `kind` tells a wall from a key from another ball.
+   */
+  impact: {
+    sound: SoundTag; energy: number; slide: number; kind: ContactKind;
+    note: number | null; x: number; y: number; nx: number; ny: number; ball: number;
+  };
   element: { el: TableElement; energised: boolean; impact: number; x: number; y: number };
   score: { amount: number; total: number; x: number; y: number; label: string };
   drain: { x: number; y: number; ballId: number; saved: boolean };
@@ -623,8 +631,8 @@ export class Game {
     for (const c of contacts) {
       if (c.impact > 24 && c.kind !== 'sensor-exit') {
         this.bus.emit('impact', {
-          sound: c.sound, energy: c.impact, note: c.note,
-          x: c.x, y: c.y, ball: c.ballId,
+          sound: c.sound, energy: c.impact, slide: c.slide, kind: c.kind, note: c.note,
+          x: c.x, y: c.y, nx: c.nx, ny: c.ny, ball: c.ballId,
         });
       }
       if (!c.owner) continue;

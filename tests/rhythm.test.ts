@@ -230,6 +230,32 @@ describe('RhythmBox', () => {
     }
   });
 
+  it('drifts within its feel when it is given one, and not at all otherwise', () => {
+    let seed = 42;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const sink = new FakeSink();
+    const box = new RhythmBox(sink, () => 120, rock);
+    box.level = 1;
+    box.human = { rng, jitter: 0.008, gain: 0.1 };
+    box.start();
+    run(sink, 4);
+    box.stop();
+
+    const step = 0.125;
+    let moved = 0;
+    for (const h of sink.hits) {
+      const index = Math.round(h.at / step);
+      const offset = Math.abs(h.at - index * step);
+      expect(offset).toBeLessThanOrEqual(0.008 + 1e-9);
+      if (offset > 1e-9) moved++;
+      const written = STEP_LEVELS[rock.lanes[h.voice]![index % 16]];
+      expect(h.gain).toBeGreaterThanOrEqual(written * 0.9 - 1e-9);
+      expect(h.gain).toBeLessThanOrEqual(written * 1.1 + 1e-9);
+      expect(h.at).toBeGreaterThanOrEqual(0);
+    }
+    expect(moved).toBeGreaterThan(sink.hits.length / 2);
+  });
+
   it('makes no sound while the context is not running', () => {
     const sink = new FakeSink();
     sink.running = false;

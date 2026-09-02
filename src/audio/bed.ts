@@ -1,8 +1,36 @@
 import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
-import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
-import { compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern } from './comp';
+import {
+  Groove, approachNote, chordNotes, degreeToNote, voiceChord, voiceLead,
+  type Step, type VoicingStyle,
+} from './music';
+
+/** How a loop comes home: through its dominant, or its subdominant. */
+export type CadenceKind = 'authentic' | 'plagal';
+/** What the loop does once a cadence has landed: start again, or carry on where it was. */
+export type AfterCadence = 'restart' | 'resume';
+import {
+  compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
+} from './comp';
+
+/**
+ * The hand on the bed, in the units a hand moves by: seconds and fractions.
+ * The bed turns them into beats for each chord it writes, so the same feel
+ * is the same feel at any tempo. Null is a sequencer, which is what the
+ * tests want.
+ */
+export interface Feel {
+  rng: () => number;
+  /** Seconds either side of the written moment a struck note may land. */
+  jitter: number;
+  /** Fraction either side of the written gain. */
+  gain: number;
+  /** Seconds between the notes of a rolled chord. */
+  roll: number;
+  /** Multiplier on whatever lands on the bar line. */
+  accent: number;
+}
 
 /** A chord placed at a beat, for a bed driven by a written piece. */
 export interface TrackChord {
@@ -33,6 +61,20 @@ export interface BeatClock {
   timeOf(beat: number): number;
 }
 
+/** How the bass under the loop moves: on the root, or walking towards the next chord. */
+export type BassStyle = 'root' | 'walk';
+
+/**
+ * How the scale's own loop is voiced, beyond which pattern plays it. All
+ * optional; what is left out is the bed as it always was.
+ */
+export interface LoopStyle {
+  voicing?: VoicingStyle;
+  /** Colour from the key on top of the triad: half is the seventh, one adds the ninth. */
+  colour?: number;
+  bass?: BassStyle;
+}
+
 /** How often the scheduler wakes, and how far ahead it writes. */
 const TICK_MS = 40;
 const LOOKAHEAD = 0.15;
@@ -54,6 +96,8 @@ export class ChordBed {
   readonly groove: Groove;
   /** Index into the current chord progression. */
   chordIndex = 0;
+  /** Who is playing the chords. Set by the shell; left null, the bed is exact. */
+  feel: Feel | null = null;
   /**
    * Bars each chord is held for. Two at 96 bpm is five seconds — the bed keeps
    * moving without turning into a backing track that competes with the player.
@@ -96,6 +140,18 @@ export class ChordBed {
    */
   private loopPattern: CompPattern = 'sustain';
   private loopParts: readonly CompPart[] = ['chord', 'bass'];
+  private loopVoicing: VoicingStyle = 'close';
+  private loopColour = 0;
+  private loopBass: BassStyle = 'root';
+  /** Times round the loop so far. The second loop plays on the odd passes. */
+  private pass = 0;
+  /**
+   * A cadence waiting to play, a chord a bar, ahead of whatever the loop was
+   * doing. Queued rather than played at once, so it lands on a bar line like
+   * every other change.
+   */
+  private cadenceQueue: Step[] = [];
+  private afterCadence: AfterCadence = 'resume';
   /**
    * A tune the game plays itself, when the player is busy with the chords.
    *
@@ -233,6 +289,8 @@ export class ChordBed {
   /** Back to the top of the progression, with no voicing to lead from. */
   reset(): void {
     this.chordIndex = 0;
+    this.pass = 0;
+    this.cadenceQueue.length = 0;
     this.barsLeft = this.barsPerChord;
     // A written track keeps its place. Rewinding the cursor here would send the
     // next sweep back over chords whose moment has passed, which drops every
@@ -250,9 +308,54 @@ export class ChordBed {
 
   /** Push the progression on early. Completing an objective does this. */
   advance(): void {
-    const n = this.music.progression.length;
+    const n = this.loop(this.pass).length;
     this.chordIndex = (this.chordIndex + 1) % n;
+    if (this.chordIndex === 0) this.pass++;
     this.barsLeft = this.barsPerChord;
+  }
+
+  /**
+   * Bring the loop home, from the next bar: the cadence's chords one bar
+   * each, and then either the top of the loop again or the chord the loop
+   * was on. A drain ends a ball, so it restarts; a save is a reprieve, so it
+   * resumes. Nothing while a written piece is playing — its harmony is its own.
+   */
+  cadence(kind: CadenceKind, then: AfterCadence = 'resume'): void {
+    if (this.track) return;
+    const steps = this.music.cadences?.[kind];
+    if (!steps?.length) return;
+    this.cadenceQueue = [...steps];
+    this.afterCadence = then;
+  }
+
+  /** Which loop a pass plays: the second every other time round, where the mode has one. */
+  private loop(pass: number): readonly Step[] {
+    const m = this.music;
+    return pass % 2 === 1 && m.variation?.length ? m.variation : m.progression;
+  }
+
+  /**
+   * The chord at an index of the current pass — and on the last bar of the
+   * last chord, the turnaround instead, when there is one and the chord has
+   * more than one bar to give.
+   */
+  private stepAt(index: number, lastBar: boolean): Step {
+    const list = this.loop(this.pass);
+    const m = this.music;
+    if (lastBar && index === list.length - 1 && m.turnaround && this.barsPerChord >= 2) return m.turnaround;
+    return list[index % list.length];
+  }
+
+  /** The chord after this index, which may be the first of the other loop. */
+  private stepAfter(index: number): Step {
+    const list = this.loop(this.pass);
+    const next = (index + 1) % list.length;
+    return next === 0 ? this.loop(this.pass + 1)[0] : list[next];
+  }
+
+  private rootOf(step: Step): number {
+    const m = this.music;
+    return degreeToNote(step.degree, m.root, m.scale) - 12;
   }
 
   /**
@@ -269,14 +372,35 @@ export class ChordBed {
   }
 
   /**
+   * How the loop's chords are voiced, from the next bar on. Only the fields
+   * move, like `setLoopPattern`; a bar already written keeps its voicing.
+   */
+  setLoopStyle(style: LoopStyle): void {
+    this.loopVoicing = style.voicing ?? 'close';
+    this.loopColour = style.colour ?? 0;
+    this.loopBass = style.bass ?? 'root';
+  }
+
+  /** How the bass under the loop moves. */
+  get bassStyle(): BassStyle { return this.loopBass; }
+
+  /**
+   * The tones the bed is sounding, as voiced. What a flourish arpeggiates,
+   * so a run over the table is a run through the chord under it rather than
+   * through the scale. The chord to come, before the first bar has played.
+   */
+  get chordTones(): number[] {
+    return this.lastVoicing.length ? this.lastVoicing : this.chordSpec.notes;
+  }
+
+  /**
    * Current chord of the progression. The root is kept alongside the notes
    * because voice leading can leave it anywhere in the voicing, and the bass
    * still has to play the actual root.
    */
   get chordSpec(): { root: number; notes: number[] } {
-    const m = this.music;
-    const step = m.progression[this.chordIndex % m.progression.length];
-    const root = degreeToNote(step.degree, m.root, m.scale) - 12;
+    const step = this.stepAt(this.chordIndex, this.barsLeft === 0);
+    const root = this.rootOf(step);
     return { root, notes: chordNotes(root, step.quality) };
   }
 
@@ -301,9 +425,23 @@ export class ChordBed {
     while (this.nextBar < now + LOOKAHEAD) {
       // The chord clock rides the bar loop rather than a timer of its own, so
       // a change always lands on a downbeat.
-      if (this.barsLeft <= 0) this.advance();
-      this.barsLeft--;
-      this.play(bar);
+      if (this.cadenceQueue.length) {
+        // A cadence, a chord a bar, in front of the loop; when it has landed
+        // the loop either starts over or picks up where it was.
+        const step = this.cadenceQueue.shift()!;
+        const following = this.cadenceQueue[0] ?? this.stepAfterCadence();
+        this.playStep(step, bar, following);
+        if (!this.cadenceQueue.length && this.afterCadence === 'restart') {
+          this.chordIndex = 0;
+          this.barsLeft = this.barsPerChord;
+          this.pass = 0;
+        }
+      } else {
+        if (this.barsLeft <= 0) this.advance();
+        this.barsLeft--;
+        const last = this.barsLeft === 0;
+        this.playStep(this.stepAt(this.chordIndex, last), bar, last ? this.stepAfter(this.chordIndex) : undefined);
+      }
       // Onto the shared grid. `Groove` and the rhythm box both measure phase
       // from audio time zero, so the bed's downbeats have to land there too,
       // or the harmony moves against the drums. Rounding rather than ceiling
@@ -342,7 +480,8 @@ export class ChordBed {
       // for the whole of it, so the comping inside a chord costs no more
       // scheduler wakes than the single pad it replaces.
       const phase = c.beat - this.barOrigin;
-      for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase)) {
+      const opts = { human: this.human(beat) };
+      for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase, opts)) {
         // A role may keep only part of the accompaniment: PlayTune's chord role
         // leaves the bed the bass and takes the chords for the player.
         if (!this.parts.includes(ev.part)) continue;
@@ -393,14 +532,33 @@ export class ChordBed {
    * the bar line rather than handed straight to the engine, so a stab three
    * beats in lands three beats in.
    */
-  private play(bar: number): void {
-    const { root, notes } = this.chordSpec;
-    const voiced = voiceLead(this.lastVoicing, notes);
+  private playStep(step: Step, bar: number, next?: Step): void {
+    const root = this.rootOf(step);
+    const notes = chordNotes(root, step.quality);
+    const m = this.music;
+    const key = { root: m.root, scale: m.scale };
+    const voiced = voiceChord(this.lastVoicing, notes, this.loopVoicing, this.loopColour, key);
     this.lastVoicing = voiced;
     const beat = bar / 4;
-    for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0)) {
+    // When the chord to come is known — this is the last bar of this one — a
+    // walking bass steps into it.
+    const approach = this.loopBass === 'walk' && next ? approachNote(this.rootOf(next) - 12, key) : undefined;
+    const opts = { human: this.human(beat), bass: { style: this.loopBass, approach } };
+    for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0, opts)) {
       if (!this.loopParts.includes(ev.part)) continue;
       this.pending.push({ at: this.nextBar + ev.offset * beat, ev });
     }
+  }
+
+  /** What the loop plays once a cadence has landed: its top, or the chord it left. */
+  private stepAfterCadence(): Step {
+    return this.afterCadence === 'restart' ? this.loop(0)[0] : this.stepAt(this.chordIndex, false);
+  }
+
+  /** The feel, in beats of this length. */
+  private human(beatSeconds: number): Humanize | undefined {
+    const f = this.feel;
+    if (!f) return undefined;
+    return { rng: f.rng, jitter: f.jitter / beatSeconds, gain: f.gain, roll: f.roll / beatSeconds, accent: f.accent };
   }
 }

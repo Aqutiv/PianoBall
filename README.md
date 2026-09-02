@@ -59,13 +59,19 @@ and the die beside it draws again; whatever it lands on is named underneath.
 **The bed starts off** — you came here to make your own sound, so the backing is
 offered rather than assumed.
 
-**Twenty-four instruments and fourteen backings**, grouped the way the rhythms
-are. The keys can be a Rhodes, a drawbar organ, a choir, a music box, a tubular
-bell or a supersaw; the bed under them can be strings, a nylon guitar, an organ
-or a glass pad. None of it is sampled — a bell is inharmonic partials dying at
-their own rates, and the Rhodes tine is one oscillator bending another. The
-first entry in each list is the sound the app has always made, and it is where
-both start.
+**Twenty-seven instruments and fourteen backings**, grouped the way the rhythms
+are. The keys can be a grand piano, a Rhodes, a drawbar organ through a rotary
+cabinet, a choir, a bowed string, a glockenspiel, a harp or a supersaw; the bed
+under them can be strings, a nylon guitar, an organ or a glass pad. None of it
+is sampled, and nothing recorded ships: a piano is three strings a few cents
+apart on a spectrum that thins going up the keyboard, with a hammer, a damper
+and a share of a rendered soundboard; a harp is a real plucked string, rendered
+in a millisecond the first time a note is asked for; a bell is inharmonic
+partials dying at their own rates; the Rhodes tine is one oscillator bending
+another. Every instrument changes across the keyboard, answers how hard it is
+hit, and never plays a note twice quite the same way. The first entry in each
+list is where both start: the piano, and the warm pad — with the synth the app
+grew up with right behind the piano, as the Classic.
 
 **Choosing** is Freestyle's alone. Pick a choir here and Pinball still sounds
 exactly as it did, and so does every tune in PlayTune — which has instruments of
@@ -113,17 +119,30 @@ a good run is also a piece of music.
   playfield; seconds and sevenths count for a little and say nothing. Which key
   you throw from starts to matter musically as well as ballistically.
 - **The table is a band.** The slings are the kick and the tom, the spinners a
-  shaker with a hat rolling behind them for as long as they spin, the lanes
+  shaker with a tick rolling behind them for as long as they spin, the lanes
   under the dome bells, the targets plucks, and the bumpers the mallet they
   have always been.
+- **The table is a machine.** Under the music, every surface rings at its own
+  modes when the ball meets it — rubber thumps, wood knocks, a steel post rings
+  on, glass sings — quieter and duller the further up the table, brighter for a
+  graze than for a square hit. A coil fires under every bumper and sling, the
+  flipper clacks with each throw, the plunger's spring lets go on the serve,
+  drop targets fall, switches close under the rollovers, a spinner ticks as it
+  slows, and a lost ball drops into the trough or is thrown back by the saver.
+  The ball itself is heard rolling, following it across the table and slowing
+  in slow motion, and scrapes when it skims a rail.
 - **The bed plays along.** The chord bed under the table follows the rally. A
   ball waiting at the serve gets the sustained chord it always had; a combo
   moves it to a pulse, a longer one to broken chords with a bass line, and
   multiball to a full arpeggio, with the rhythm box coming in a kick at a time
-  underneath. It changes only on a bar line, winds down rather than cutting out
-  when a rally lapses, and stops with the ball. *Settings → Pinball → Drums
-  under a rally* keeps the drums out for whoever wants the chords without a
-  band.
+  underneath. The harmony opens up as it climbs: the chords are led, then
+  opened, then spread like a left hand, a seventh arrives and then a ninth, and
+  the bass starts to walk — the fifth on three, a step into each change. It
+  changes only on a bar line, winds down rather than cutting out when a rally
+  lapses, and stops with the ball. Losing the ball brings the harmony home
+  through the dominant and starts the loop over; a ball save comes home
+  through the subdominant and carries on. *Settings → Pinball → Drums under a
+  rally* keeps the drums out for whoever wants the chords without a band.
 - **The beat is on the table.** A ring around the bumpers and a strip along the
   keybed breathe with the bed's beat, harder on the downbeat, and a key played
   on the beat throws a ring off the key. Groove was always worth points; now
@@ -216,8 +235,13 @@ belongs and no black key does.
   more than two semitones from where it was authored.
 - **The chord bed follows.** Each scale carries its own eight-chord loop written
   in its own degrees, so the backing is idiomatic to the mode rather than
-  transposed into it. PlayTune replaces that loop with the tune's own harmony,
-  in the tune's own key, without disturbing what you picked.
+  transposed into it — and a second loop, played every other time round, with
+  a turnaround on the last bar and two cadences of its own, so a long game does
+  not go round the same eight chords for ever. The bed is played by a hand
+  rather than a sequencer: chords roll from the bottom, land a few milliseconds
+  either side of where they are written, and lean on the bar line. PlayTune
+  replaces the loop with the tune's own harmony, in the tune's own key, without
+  disturbing what you picked.
 - **Assist snaps to it — on the table only.** With *Snap off-scale notes into
   the key* on, anything you play in Pinball is pulled to the nearest tone of the
   running scale. The other two modes ignore it on purpose: PlayTune takes the
@@ -294,18 +318,38 @@ up the table.
 
 **Audio is hand-built Web Audio**, scheduled straight against `currentTime` with
 no lookahead queue, so the gap between pressing a key and hearing it is as short
-as the hardware allows (~10 ms measured). Bend and modulation are a
-`ConstantSourceNode` and an LFO wired into every live voice's `detune`, which
-means expression costs no per-frame JavaScript at all. Only the chord bed is
-scheduled ahead, one bar at a time.
+as the hardware allows. Bend and modulation are a `ConstantSourceNode` and an
+LFO wired into every live voice's `detune`, which means expression costs no
+per-frame JavaScript at all; a voice's own tremolo or vibrato is one gain tapped
+off a shared pool of slow oscillators. The master chain has one compressor and
+only one, because each carries six milliseconds of look-ahead, and ends in a
+soft clipper, which costs nothing in time. Only the chord bed is scheduled
+ahead, one bar at a time.
+
+**Nothing is recorded, and everything is rendered.** The two rooms — a hall for
+the music, a cabinet for the table — are impulse responses written from a
+handful of numbers at start-up: a pre-delay, early reflections, and a tail whose
+highs die before its lows, drawn from one seed so they are the same rooms on
+every load. The soundboard under the piano is a plate with a dozen modes,
+rendered the same way. A spectrum layer is a table of partials from a named
+generator, built per register and cached. A plucked string is a Karplus-Strong
+loop rendered into a buffer the first time a note is asked for, tuned by an
+allpass to within a few cents, and kept in a cache that forgets by count and by
+weight. A surface the ball hits is a short burst of noise through a resonator
+per mode, and a mechanism is a thump, a click and a sweep put together. None of
+it existed before the note was asked for.
 
 **Instruments are data, not code.** A voice is a few oscillator layers — a wave,
-a ratio to the fundamental, a level, sometimes a decay of its own or a second
-operator bending the first — over one filter and one envelope. That is the same
-bargain the drum bank and the rhythm library already struck: thirty-eight
-patterns and thirty-eight instruments between them, and one synthesis routine
-each, because the character lives in a table you can read rather than in forty
-branches you cannot.
+a spectrum or a string, a ratio to the fundamental, a level, sometimes a decay
+of its own or a second operator bending the first — over one filter and one
+envelope, with the touch and the keyboard written alongside: how many decibels
+of velocity it has, how its decay and brightness change per octave, how many
+strings sit behind a note and how far apart, what happens when the key is let
+go, how much of the soundboard it gets, and what moves it. That is the same
+bargain the drum bank, the surface table and the rhythm library already struck:
+thirty-eight patterns, forty-one instruments and nine surfaces between them,
+and one synthesis routine each, because the character lives in a table you can
+read rather than in forty branches you cannot.
 
 **Two clocks, and only one of them is trusted for timing.** The game clock is
 driven by requestAnimationFrame and multiplied by slow motion; the audio clock is

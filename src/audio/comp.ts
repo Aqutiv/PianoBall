@@ -44,6 +44,51 @@ export interface CompEvent {
   part: CompPart;
 }
 
+/**
+ * The hand on the chords.
+ *
+ * A pattern written out exactly is a sequencer. A player lands each note a
+ * few milliseconds either side of where it is written, a little louder or
+ * softer, leans on the bar line, and rolls a chord from the bottom rather
+ * than striking every note at once. All of it is in beats, like the pattern,
+ * so the caller converts from the milliseconds a hand actually moves by.
+ */
+export interface Humanize {
+  rng: () => number;
+  /** Beats either side of the written offset a struck note may land. */
+  jitter: number;
+  /** Fraction either side of the written gain. */
+  gain: number;
+  /** Beats between the notes of a rolled chord, bottom up. Zero strikes them together. */
+  roll: number;
+  /** Multiplier on whatever lands on the bar line. */
+  accent: number;
+}
+
+/**
+ * What a caller may add to a chord beyond the pattern. An object rather than
+ * more positional arguments, so the next thing added is a field.
+ */
+export interface CompOptions {
+  human?: Humanize;
+  bass?: BassOptions;
+}
+
+/**
+ * The bass under a chord: on the root, or walking — the fifth on the third
+ * beat, and a step into the next chord on the last half-beat when the caller
+ * knows what is coming. The approach note is the caller's to find, because
+ * it needs the key and the chord to come, and this file knows neither.
+ */
+export interface BassOptions {
+  style: 'root' | 'walk';
+  /** The note to step through on the chord's last half-beat, into the next chord. */
+  approach?: number;
+}
+
+/** A struck event, as opposed to a swell. The tests draw the same line. */
+const STRUCK = 0.1;
+
 /** Gains, kept together because they are only ever chosen against each other. */
 const PAD = 0.075;
 const PAD_BASS = 0.05;
@@ -108,6 +153,87 @@ function upDown(voiced: readonly number[]): number[] {
  * rather than on the chord's own first beat.
  */
 export function compEvents(
+  pattern: CompPattern,
+  voiced: readonly number[],
+  root: number,
+  chordLen: number,
+  beatsPerBar: number,
+  barPhase = 0,
+  opts: CompOptions = {},
+): CompEvent[] {
+  const phase = mod(barPhase, beatsPerBar);
+  let out = writtenEvents(pattern, voiced, root, chordLen, beatsPerBar, barPhase);
+  if (opts.bass?.style === 'walk') out = walked(out, root - 12, chordLen, beatsPerBar, phase, opts.bass.approach);
+  return opts.human ? played(out, opts.human, chordLen, beatsPerBar, phase) : out;
+}
+
+/**
+ * The bass walking: the root on the bar line as written, the fifth on the
+ * third beat, and a step towards the next chord on the last half-beat. A
+ * note is only ever added where the pattern struck none, and the chord's
+ * first beat is never touched, so the floor stays exactly where it was.
+ */
+function walked(
+  events: CompEvent[], bass: number, chordLen: number, beatsPerBar: number, phase: number, approach?: number,
+): CompEvent[] {
+  const out = [...events];
+  const struckBass = (e: CompEvent) => e.part === 'bass' && e.attack < STRUCK;
+  const taken = new Set(out.filter(struckBass).map((e) => e.offset));
+  const put = (offset: number, note: number, len: number) => {
+    if (offset <= 0 || offset >= chordLen - 1e-6 || taken.has(offset)) return;
+    taken.add(offset);
+    out.push({ offset, len: Math.min(len, chordLen - offset), notes: [note], gain: BASS, attack: STAB, part: 'bass' });
+  };
+  if (beatsPerBar === 4) {
+    // The fifth on three, in every bar the chord covers. Where the pattern
+    // already struck the root there — a march does — that note becomes the fifth.
+    for (let offset = mod(2 - phase, beatsPerBar); offset < chordLen - 1e-6; offset += beatsPerBar) {
+      if (offset <= 0) continue;
+      const there = out.find((e) => struckBass(e) && e.offset === offset);
+      if (there) there.notes = [bass + 7];
+      else put(offset, bass + 7, 1);
+    }
+  }
+  if (approach !== undefined && chordLen >= 1) put(chordLen - 0.5, approach, 0.5);
+  return out;
+}
+
+/**
+ * The pattern as a hand plays it. Swells keep their written moment — they
+ * are placed, not struck — and everything struck moves within the jitter,
+ * never before the chord and never past its end. A struck chord is rolled
+ * from the bottom, each note at its share of the gain: `pad` divides a
+ * chord's gain by its notes, so the split has to do the same.
+ */
+function played(
+  events: readonly CompEvent[], h: Humanize, chordLen: number, beatsPerBar: number, phase: number,
+): CompEvent[] {
+  const out: CompEvent[] = [];
+  const drift = () => h.rng() * 2 - 1;
+  const end = chordLen * 1.06;
+  for (const ev of events) {
+    const onBar = mod(phase + ev.offset, beatsPerBar) === 0;
+    const gain = ev.gain * (onBar ? h.accent : 1) * (1 + drift() * h.gain);
+    if (ev.attack >= STRUCK) {
+      out.push({ ...ev, gain });
+      continue;
+    }
+    const offset = Math.min(Math.max(0, ev.offset + drift() * h.jitter), chordLen - 1e-6);
+    if (ev.notes.length > 1 && h.roll > 0) {
+      const notes = [...ev.notes].sort((a, b) => a - b);
+      notes.forEach((n, i) => {
+        const at = offset + i * h.roll;
+        if (at >= chordLen) return;
+        out.push({ ...ev, offset: at, len: Math.min(ev.len, end - at), notes: [n], gain: gain / notes.length });
+      });
+    } else {
+      out.push({ ...ev, offset, len: Math.min(ev.len, end - offset), gain });
+    }
+  }
+  return out;
+}
+
+function writtenEvents(
   pattern: CompPattern,
   voiced: readonly number[],
   root: number,

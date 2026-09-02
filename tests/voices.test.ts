@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine } from '../src/audio/engine';
 import {
   BED_FAMILIES, BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE,
-  LEAD_FAMILIES, LEAD_VOICES, findBedVoice, findLeadVoice,
+  LEAD_FAMILIES, LEAD_VOICES, findBedVoice, findLeadVoice, noises,
 } from '../src/audio/voices';
+import { SPECTRA } from '../src/audio/spectra';
 
-const OSC_TYPES = ['sine', 'square', 'sawtooth', 'triangle'];
+const LAYER_TYPES = ['sine', 'square', 'sawtooth', 'triangle', 'spectrum', 'string'];
+
+/** Oscillators a voice will put in the graph for one note, operators and unison included. */
+const sourcesOf = (layers: readonly { level: number; fm?: unknown }[], unison?: { voices: number }) =>
+  layers.reduce((n, l) => n + 1 + (l.fm ? 1 : 0), 0) * (unison?.voices ?? 1);
 
 describe('the instrument bank', () => {
   it('has no repeated id, in either bank', () => {
@@ -51,11 +56,102 @@ describe('the instrument bank', () => {
       // the size of the signature one, and this is what keeps it there.
       expect(v.spec.layers.length, `${v.id} is too many layers`).toBeLessThanOrEqual(4);
       for (const l of v.spec.layers) {
-        expect(OSC_TYPES.includes(l.type), `${v.id}: ${l.type}`).toBe(true);
+        expect(LAYER_TYPES.includes(l.type), `${v.id}: ${l.type}`).toBe(true);
+        // A spectrum layer names a table the generator library has; a basic
+        // wave names none, so a table nobody plays cannot sit there unheard.
+        if (l.type === 'spectrum') {
+          expect(SPECTRA.includes(l.spectrum?.gen as never), `${v.id} spectrum ${l.spectrum?.gen}`).toBe(true);
+        } else {
+          expect(l.spectrum, `${v.id} names a spectrum on a ${l.type}`).toBeUndefined();
+        }
+        // A string layer is rendered from the voice's string, so there has to be one.
+        if (l.type === 'string') expect(v.spec.string, `${v.id} has a string layer and no string`).toBeDefined();
         expect(l.ratio, `${v.id} ratio`).toBeGreaterThan(0);
         expect(l.level, `${v.id} level`).toBeGreaterThan(0);
         expect(Math.abs(l.detune ?? 0), `${v.id} detune`).toBeLessThanOrEqual(100);
       }
+    }
+  });
+
+  it('keeps every voice inside the polyphony budget, unison and all', () => {
+    // Forty-eight voices of about this size is what the audio thread is
+    // budgeted for. Unison multiplies every layer and an operator is a source
+    // of its own, so a three-string piano is legal and a supersaw in unison
+    // is not.
+    for (const v of LEAD_VOICES) {
+      const n = sourcesOf(v.spec.layers, v.spec.unison) + noises(v.spec.noise).length;
+      expect(n, `${v.id} is ${n} sources`).toBeLessThanOrEqual(8);
+    }
+    for (const v of BED_VOICES) {
+      const n = sourcesOf(v.spec.layers, v.spec.unison);
+      expect(n, `${v.id} is ${n} sources`).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('keeps every knob it was given somewhere sensible', () => {
+    const within = (id: string, name: string, n: number | undefined, lo: number, hi: number) => {
+      if (n === undefined) return;
+      expect(n, `${id} ${name}`).toBeGreaterThanOrEqual(lo);
+      expect(n, `${id} ${name}`).toBeLessThanOrEqual(hi);
+    };
+    for (const v of LEAD_VOICES) {
+      const s = v.spec;
+      within(v.id, 'velDb', s.velDb, 12, 36);
+      within(v.id, 'attackVel', s.attackVel, 0, 0.9);
+      within(v.id, 'stretch', s.stretch, 0, 4);
+      within(v.id, 'humanize', s.humanize, 0, 1);
+      within(v.id, 'body', s.body, 0, 1);
+      within(v.id, 'damper decay', s.damper?.decay, 0.005, 0.3);
+      within(v.id, 'unison cents', s.unison?.cents, 0.5, 20);
+      if (s.lfo) {
+        within(v.id, 'lfo rate', s.lfo.rate, 0.1, 12);
+        within(v.id, 'lfo delay', s.lfo.delay, 0, 2);
+        within(v.id, 'lfo rate2', s.lfo.rate2, 0.1, 12);
+        // Depth means what the target needs: a fraction, cents, or hertz.
+        const top = { tremolo: 1, rotary: 1, vibrato: 50, filter: 3000 }[s.lfo.target];
+        within(v.id, `${s.lfo.target} depth`, s.lfo.depth, 0, top);
+      }
+      for (const [name, n] of Object.entries(s.keyTrack ?? {})) within(v.id, `keyTrack ${name}`, n, -1.5, 1.5);
+      for (const l of s.layers) {
+        within(v.id, 'velCurve', l.velCurve, 0, 4);
+        within(v.id, 'layer attack', l.attack, 0, 2);
+        within(v.id, 'layer hold', l.hold, 0, 2);
+      }
+      for (const n of noises(s.noise)) {
+        within(v.id, 'noise pitchTrack', n.pitchTrack, 0.1, 40);
+        within(v.id, 'noise attack', n.attack, 0, 0.5);
+        within(v.id, 'noise delay', n.delay, 0, 1);
+        within(v.id, 'noise velCurve', n.velCurve, 0, 4);
+      }
+    }
+    for (const v of BED_VOICES) within(v.id, 'unison cents', v.spec.unison?.cents, 0.5, 20);
+    for (const v of [...LEAD_VOICES, ...BED_VOICES]) {
+      const s = v.spec.string;
+      if (!s) continue;
+      within(v.id, 'string decay', s.decay, 0.2, 4);
+      within(v.id, 'string keyTrack', s.keyTrack, -1.5, 0);
+      within(v.id, 'string damp', s.damp, 0, 0.9);
+      within(v.id, 'string stretch', s.stretch, 0.1, 0.9);
+      within(v.id, 'string pick', s.pick, 0.05, 0.5);
+      within(v.id, 'string bright', s.bright, 200, 20000);
+      within(v.id, 'string velBright', s.velBright, s.bright, 20000);
+    }
+  });
+
+  it('glides only where a line is played one note at a time, and briefly', () => {
+    for (const v of LEAD_VOICES) {
+      if (v.spec.glide === undefined) continue;
+      expect(['Synth', 'Air'].includes(v.family), `${v.id} glides but is ${v.family}`).toBe(true);
+      expect(v.spec.glide, v.id).toBeGreaterThan(0);
+      expect(v.spec.glide, v.id).toBeLessThanOrEqual(0.15);
+    }
+    expect(LEAD_VOICES.some((v) => v.spec.glide !== undefined)).toBe(true);
+  });
+
+  it('lets organs and synths hold their pitch while everything else drifts', () => {
+    for (const v of LEAD_VOICES) {
+      const steady = v.family === 'Organ' || v.family === 'Synth';
+      expect(v.spec.humanize ?? 1, `${v.id}`).toBe(steady ? 0 : 1);
     }
   });
 
@@ -117,6 +213,8 @@ describe('the instrument bank', () => {
         expect(v.spec.pluck, `${v.id} pluck`).toBeGreaterThan(0.2);
         expect(v.spec.pluck, `${v.id} rings longer than a bar`).toBeLessThanOrEqual(4);
       }
+      // A rendered string in the bed is a plucked thing by definition.
+      if (v.spec.string) expect(v.family, `${v.id} has a string`).toBe('Plucked');
     }
   });
 
@@ -129,18 +227,46 @@ describe('the instrument bank', () => {
   });
 });
 
-describe('the sound the app has always made', () => {
-  // These are not style: they are the numbers `noteOn` and `pad` were written
-  // with before either had a bank to pick from. The same synth in all three
-  // modes is the app's identity, and a picker is no reason to lose it.
+describe('the default sound', () => {
+  // The same sound in all three modes is the app's identity, and a picker is
+  // no reason to lose it. The default is the piano, and it is pinned by its
+  // character rather than its numbers, because the numbers are tuned by ear.
 
-  it('is the first thing in each bank, and the default', () => {
+  it('is the first thing in each bank', () => {
     expect(LEAD_VOICES[0].id).toBe(DEFAULT_LEAD_VOICE);
+    expect(DEFAULT_LEAD_VOICE).toBe('grand');
     expect(BED_VOICES[0].id).toBe(DEFAULT_BED_VOICE);
+    expect(DEFAULT_BED_VOICE).toBe('warm');
+  });
+
+  it('is a piano: strings in unison, a hammer, a damper and a board', () => {
+    const s = findLeadVoice('grand').spec;
+    expect(s.layers[0].type).toBe('spectrum');
+    expect(s.layers[0].spectrum?.gen).toBe('piano');
+    expect(s.unison?.voices).toBe(3);
+    expect(s.keyTrack?.decay ?? 0).toBeLessThan(0);
+    expect(s.velDb ?? 0).toBeGreaterThanOrEqual(24);
+    expect(s.stretch ?? 0).toBeGreaterThan(0);
+    expect(s.body ?? 0).toBeGreaterThan(0);
+    expect(noises(s.noise).some((n) => (n.pitchTrack ?? 0) > 0)).toBe(true);
+    expect(s.damper).toBeDefined();
+  });
+});
+
+describe('the classic sound', () => {
+  // These are not style: they are the numbers `noteOn` and `pad` were written
+  // with before either had a bank to pick from. The synth the app grew up with
+  // is kept exactly, under its own name, whatever the default has become.
+
+  it('is still in the bank, right behind the default', () => {
+    const v = findLeadVoice('signature');
+    expect(v.id).toBe('signature');
+    expect(v.name).toBe('PianoBall Classic');
+    expect(LEAD_VOICES[1].id).toBe('signature');
   });
 
   it('still plays a saw, a square seven and a half cents up, and a sub', () => {
-    const spec = findLeadVoice(DEFAULT_LEAD_VOICE).spec;
+    const spec = findLeadVoice('signature').spec;
 
     expect(spec.layers).toEqual([
       { type: 'sawtooth', ratio: 1, level: 0.5 },

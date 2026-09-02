@@ -15,13 +15,34 @@ export const SCALES = {
 
 export type ScaleName = keyof typeof SCALES;
 
+/** One chord of a loop: a degree of the mode's own scale, and a quality. */
+export interface Step {
+  degree: number;
+  quality: ChordQuality;
+}
+
+/** The two ways a loop can come home: through its dominant, or through its subdominant. */
+export interface Cadences {
+  authentic: Step[];
+  plagal: Step[];
+}
+
 /** A scale plus a chord loop written in that scale's own degrees. */
 export interface MusicMode {
   id: ScaleName;
   /** Bare mode name. The HUD prefixes the root: "D minor pentatonic". */
   label: string;
   scale: number[];
-  progression: { degree: number; quality: ChordQuality }[];
+  progression: Step[];
+  /**
+   * A second loop, played every other time round, so a long game does not
+   * go round the same eight chords for ever. Starts somewhere the first loop
+   * does not, and ends on the chord that leads back to the top.
+   */
+  variation?: Step[];
+  /** What the last bar of the last chord becomes: the chord that wants to go home. */
+  turnaround?: Step;
+  cadences?: Cadences;
 }
 
 /**
@@ -46,6 +67,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'min' },
       { degree: 4, quality: 'dom7' },
     ],
+    variation: [
+      { degree: 5, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 0, quality: 'maj' },
+      { degree: 4, quality: 'maj' },
+      { degree: 5, quality: 'min' },
+      { degree: 1, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'dom7' },
+    ],
+    turnaround: { degree: 4, quality: 'dom7' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'dom7' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'minorPentatonic',
@@ -61,6 +97,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'maj' },
       { degree: 3, quality: 'min' },
     ],
+    variation: [
+      { degree: 2, quality: 'sus4' },
+      { degree: 1, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'sus4' },
+      { degree: 3, quality: 'min7' },
+      { degree: 4, quality: 'maj' },
+      { degree: 3, quality: 'min' },
+    ],
+    turnaround: { degree: 3, quality: 'min' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'min' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 2, quality: 'sus4' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'majorPentatonic',
@@ -76,6 +127,21 @@ export const MODES: MusicMode[] = [
       { degree: 3, quality: 'maj' },
       { degree: 4, quality: 'min7' },
     ],
+    variation: [
+      { degree: 3, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 0, quality: 'maj' },
+      { degree: 1, quality: 'sus4' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 2, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+    ],
+    turnaround: { degree: 3, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 1, quality: 'sus4' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'dorian',
@@ -91,6 +157,21 @@ export const MODES: MusicMode[] = [
       { degree: 4, quality: 'min7' },
       { degree: 6, quality: 'maj' },
     ],
+    variation: [
+      { degree: 6, quality: 'maj' },
+      { degree: 2, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'min7' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+      { degree: 2, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+    ],
+    turnaround: { degree: 3, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min7' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'aeolian',
@@ -106,6 +187,21 @@ export const MODES: MusicMode[] = [
       { degree: 5, quality: 'maj' },
       { degree: 4, quality: 'min' },
     ],
+    variation: [
+      { degree: 2, quality: 'maj' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'min' },
+      { degree: 4, quality: 'min' },
+      { degree: 2, quality: 'maj' },
+      { degree: 5, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 6, quality: 'maj' },
+    ],
+    turnaround: { degree: 6, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 3, quality: 'min' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'lydian',
@@ -121,6 +217,21 @@ export const MODES: MusicMode[] = [
       { degree: 2, quality: 'min' },
       { degree: 0, quality: 'maj7' },
     ],
+    variation: [
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 0, quality: 'maj7' },
+      { degree: 1, quality: 'maj' },
+      { degree: 5, quality: 'min' },
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 1, quality: 'maj' },
+    ],
+    turnaround: { degree: 1, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'maj' }, { degree: 0, quality: 'maj7' }],
+      plagal: [{ degree: 1, quality: 'maj' }, { degree: 0, quality: 'maj7' }],
+    },
   },
   {
     id: 'mixolydian',
@@ -136,6 +247,21 @@ export const MODES: MusicMode[] = [
       { degree: 3, quality: 'maj' },
       { degree: 0, quality: 'dom7' },
     ],
+    variation: [
+      { degree: 3, quality: 'maj' },
+      { degree: 0, quality: 'dom7' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 1, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 6, quality: 'maj' },
+    ],
+    turnaround: { degree: 6, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'blues',
@@ -151,6 +277,21 @@ export const MODES: MusicMode[] = [
       { degree: 4, quality: 'dom7' },
       { degree: 0, quality: 'min7' },
     ],
+    variation: [
+      { degree: 2, quality: 'min7' },
+      { degree: 0, quality: 'min7' },
+      { degree: 5, quality: 'maj' },
+      { degree: 4, quality: 'dom7' },
+      { degree: 2, quality: 'min7' },
+      { degree: 0, quality: 'min7' },
+      { degree: 2, quality: 'dom7' },
+      { degree: 4, quality: 'dom7' },
+    ],
+    turnaround: { degree: 4, quality: 'dom7' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'dom7' }, { degree: 0, quality: 'min7' }],
+      plagal: [{ degree: 2, quality: 'min7' }, { degree: 0, quality: 'min7' }],
+    },
   },
   {
     id: 'kumoi',
@@ -166,6 +307,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'sus4' },
       { degree: 0, quality: 'min' },
     ],
+    variation: [
+      { degree: 3, quality: 'min7' },
+      { degree: 2, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'dim' },
+      { degree: 3, quality: 'min7' },
+      { degree: 1, quality: 'sus4' },
+      { degree: 2, quality: 'maj' },
+      { degree: 1, quality: 'sus4' },
+    ],
+    turnaround: { degree: 1, quality: 'sus4' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'min7' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 1, quality: 'sus4' }, { degree: 0, quality: 'min' }],
+    },
   },
 ];
 
@@ -181,7 +337,10 @@ export interface ActiveMusic {
   id: string;
   label: string;
   scale: number[];
-  progression: { degree: number; quality: ChordQuality }[];
+  progression: Step[];
+  variation?: Step[];
+  turnaround?: Step;
+  cadences?: Cadences;
 }
 
 const CHORD_INTERVALS: Record<ChordQuality, number[]> = {
@@ -282,6 +441,159 @@ export function voiceLead(prev: readonly number[], notes: readonly number[]): nu
   return notes
     .map((n) => n + Math.round((centre - n) / 12) * 12)
     .sort((a, b) => a - b);
+}
+
+/**
+ * How a chord is laid out under the hands.
+ *
+ * `close` is `voiceLead` exactly: the chord folded into the octave nearest
+ * the last one. `led` also chooses the inversion that moves the voices least.
+ * `open` then drops the second voice from the top an octave, which is how a
+ * pad stops sounding like a fist. `spread` is the pianist's left hand: root
+ * at the bottom, the seventh and the ninth in the middle, third and fifth on
+ * top.
+ */
+export type VoicingStyle = 'close' | 'led' | 'open' | 'spread';
+
+/** A key: a tonic and a scale, for colour tones that have to belong to it. */
+export interface Key {
+  root: number;
+  scale: readonly number[];
+}
+
+/**
+ * The note a bass steps through into `target`: the scale tone just below it
+ * when the scale has one within a tone, else the half-step below, which is
+ * what a walking bass does whatever the key.
+ */
+export function approachNote(target: number, key?: Key): number {
+  if (key) {
+    for (let d = 1; d <= 2; d++) if (inScale(target - d, key.root, key.scale)) return target - d;
+  }
+  return target - 1;
+}
+
+/** Most tones a coloured chord may carry. Past five the harmony is a cluster. */
+const MAX_TONES = 5;
+
+/**
+ * The colour a chord may take from its key: its seventh at half colour, its
+ * ninth at full. Both are found by scale degree rather than by interval, so
+ * they belong to the key by construction — a minor seventh in the pentatonic,
+ * a major seventh in lydian, an added sixth where the scale has no seventh.
+ * A tone the chord already has is not added twice, a diminished chord takes
+ * none, and the chord never grows past five tones.
+ */
+export function colourTones(root: number, notes: readonly number[], colour: number, key: Key): number[] {
+  if (colour < 0.5 || !notes.length) return [];
+  const deg = scaleDegree(root, key.root, key.scale);
+  if (deg < 0) return [];
+  // A diminished chord's tritone is its identity; colour on top of it is mud.
+  if (notes.some((n) => pitchClass(n - root) === 6)) return [];
+  const have = new Set(notes.map(pitchClass));
+  const out: number[] = [];
+  const add = (note: number) => {
+    if (have.has(pitchClass(note)) || notes.length + out.length >= MAX_TONES) return;
+    have.add(pitchClass(note));
+    out.push(note);
+  };
+  const n = key.scale.length;
+  // The scale tone a step below the root's octave, placed above the root —
+  // if it is a sixth or wider. Narrower than that the scale has no seventh
+  // for this chord, only a tone that would sit on the fifth.
+  const seventh = pitchClass(degreeToNote(deg + n - 1, key.root, key.scale) - root);
+  if (seventh >= 9) add(root + seventh);
+  // The scale tone a step above the root, placed above that octave — if it
+  // is a second. A third up there is the chord's own third, or a clash with it.
+  if (colour >= 1) {
+    const ninth = pitchClass(degreeToNote(deg + 1, key.root, key.scale) - root);
+    if (ninth >= 1 && ninth <= 2) add(root + 12 + ninth);
+  }
+  return out;
+}
+
+/**
+ * A chord voiced for the bed.
+ *
+ * With colour and a key, the chord takes its seventh and ninth from the key
+ * first. The style then decides the layout. Every style keeps the pitch
+ * classes exact, so the chord is the same chord, and leads from the previous
+ * voicing where there is one. `notes[0]` is taken to be the root, which is
+ * what `chordNotes` builds.
+ */
+export function voiceChord(
+  prev: readonly number[], notes: readonly number[], style: VoicingStyle, colour = 0, key?: Key,
+): number[] {
+  if (!notes.length) return [];
+  const tones = key ? [...notes, ...colourTones(notes[0], notes, colour, key)] : [...notes];
+  if (style === 'close') return voiceLead(prev, tones);
+  if (style === 'spread') return spread(prev, notes[0], tones);
+  const led = leastMovement(prev, tones);
+  return style === 'open' ? drop2(led) : led;
+}
+
+/** How far the voices move between two voicings, lowest to lowest and so on. */
+function movement(prev: readonly number[], next: readonly number[]): number {
+  const a = [...prev].sort((x, y) => x - y);
+  const b = [...next].sort((x, y) => x - y);
+  let cost = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) cost += Math.abs(a[i] - b[i]);
+  return cost;
+}
+
+/**
+ * The inversion that moves the voices least from where they were. Each
+ * inversion is the chord with its lowest tones raised an octave, shifted by
+ * whole octaves to sit where the last chord sat; the cheapest one wins.
+ */
+function leastMovement(prev: readonly number[], tones: readonly number[]): number[] {
+  if (!prev.length) return [...tones];
+  const centre = prev.reduce((a, b) => a + b, 0) / prev.length;
+  let best: number[] = [...tones];
+  let bestCost = Infinity;
+  for (let k = 0; k < tones.length; k++) {
+    const inversion = tones.map((n, i) => (i < k ? n + 12 : n));
+    const mid = inversion.reduce((a, b) => a + b, 0) / inversion.length;
+    const shift = Math.round((centre - mid) / 12) * 12;
+    const voicing = inversion.map((n) => n + shift).sort((a, b) => a - b);
+    const cost = movement(prev, voicing);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = voicing;
+    }
+  }
+  return best;
+}
+
+/** Drop-2: the second voice from the top taken down an octave. Fewer than three voices are left alone. */
+function drop2(voicing: readonly number[]): number[] {
+  if (voicing.length < 3) return [...voicing];
+  const out = [...voicing].sort((a, b) => a - b);
+  out[out.length - 2] -= 12;
+  return out.sort((a, b) => a - b);
+}
+
+/**
+ * The left hand's spread: the root at the bottom, whatever colour the chord
+ * carries above it, and its third and fifth an octave up. Placed so the top
+ * voice is nearest the last chord's top, or left where it was built with
+ * nothing to lead from.
+ */
+function spread(prev: readonly number[], root: number, tones: readonly number[]): number[] {
+  const out = [root];
+  for (const n of tones) {
+    const i = n - root;
+    if (i <= 0) continue;
+    // Thirds (and the seconds and fourths that stand in for them) and
+    // fifths go up an octave; sevenths stay below them; a ninth is already up.
+    if (i <= 8) out.push(n + 12);
+    else out.push(n);
+  }
+  out.sort((a, b) => a - b);
+  if (!prev.length) return out;
+  const top = out[out.length - 1];
+  const shift = Math.round((Math.max(...prev) - top) / 12) * 12;
+  return out.map((n) => n + shift);
 }
 
 /** A chord shape, written as intervals above its own root. */
@@ -557,6 +869,12 @@ export class Groove {
     const step = this.stepSeconds;
     const phase = time / step;
     return (phase - Math.round(phase)) * step;
+  }
+
+  /** The first subdivision strictly after `time`: where a flourish placed now should start. */
+  nextStep(time: number): number {
+    const step = this.stepSeconds;
+    return (Math.floor(time / step + 1e-6) + 1) * step;
   }
 
   /**

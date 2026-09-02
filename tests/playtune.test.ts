@@ -234,7 +234,7 @@ describe('the tune library', () => {
     // stops the library reading as a costume box.
     const plain = LIBRARY.filter((t) => !t.voiceId && !t.bedVoiceId);
     expect(plain.map((t) => t.id)).toEqual(['first-light', 'two-hands']);
-    expect(DEFAULT_LEAD_VOICE).toBe('signature');
+    expect(DEFAULT_LEAD_VOICE).toBe('grand');
     expect(DEFAULT_BED_VOICE).toBe('warm');
   });
 
