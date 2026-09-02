@@ -336,60 +336,82 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   // --------------------------------------------------------------- organ ---
   // An organ does not decay: it holds while the key is down and stops when it
   // is let go, which is `sustain: 1` and a release measured in hundredths.
+  // Nor does it care how hard the key was hit, so the velocity range is as
+  // narrow as the bank allows. The click of the key's contacts, on and off,
+  // is most of what tells the ear which organ it is listening to.
   {
     id: 'drawbar', name: 'Drawbar', family: 'Organ',
+    // Three bars out — 16', 5⅓', 8' — with the percussion stop on the third
+    // harmonic, through a Leslie running fast. The registration is the
+    // spectrum, so the 16' is the fundamental and the layer plays at half.
     spec: steady({
       layers: [
-        { type: 'sine', ratio: 0.5, level: 0.3 },
-        { type: 'sine', ratio: 1, level: 0.36 },
-        { type: 'sine', ratio: 1.5, level: 0.14 },
-        { type: 'sine', ratio: 2, level: 0.2 },
+        { type: 'spectrum', spectrum: { gen: 'drawbar', params: [8, 8, 8, 0, 0, 0, 0, 0, 0] }, ratio: 0.5, level: 0.7 },
+        { type: 'sine', ratio: 3, level: 0.16, decay: 0.2 },
       ],
-      filter: { base: 6, track: 4, q: 0.7, qVel: 0.5, settle: 6, settleVel: 2, settleTime: 0.2 },
-      env: { attack: 0.006, decay: 0.05, sustain: 1, release: 0.08 },
+      noise: { freq: 2500, q: 1.5, decay: 0.006, gain: 0.06 },
+      damper: { freq: 2000, q: 1.5, decay: 0.005, gain: 0.04 },
+      filter: { base: 8, track: 2, q: 0.5, qVel: 0.3, settle: 8, settleVel: 1, settleTime: 0.2 },
+      env: { attack: 0.005, decay: 0.05, sustain: 1, release: 0.06 },
+      velDb: 12,
+      lfo: { rate: 6.7, depth: 0.28, target: 'rotary', rate2: 0.7 },
       reverb: 0.24, delay: 0.06,
     }),
   },
   {
     id: 'rock-organ', name: 'Rock Organ', family: 'Organ',
+    // Every bar out and the amplifier pushed: a full registration with a
+    // square on the octave for the grit, a harder click, and the rotary
+    // deeper and a touch faster.
     spec: steady({
       layers: [
-        { type: 'square', ratio: 1, level: 0.34 },
-        { type: 'sine', ratio: 2, level: 0.22 },
-        { type: 'sine', ratio: 3, level: 0.14, decay: 0.25 },
-        { type: 'square', ratio: 4, level: 0.08 },
+        { type: 'spectrum', spectrum: { gen: 'drawbar', params: [8, 8, 8, 8, 6, 4, 3, 2, 2] }, ratio: 0.5, level: 0.62 },
+        { type: 'square', ratio: 2, level: 0.12 },
+        { type: 'sine', ratio: 3, level: 0.1, decay: 0.25 },
       ],
-      noise: { freq: 2400, q: 2, decay: 0.01, gain: 0.08 },
-      filter: { base: 4, track: 8, q: 2, qVel: 2, settle: 3.4, settleVel: 2, settleTime: 0.25 },
-      env: { attack: 0.004, decay: 0.06, sustain: 0.95, release: 0.09 },
+      noise: { freq: 3000, q: 2, decay: 0.008, gain: 0.1 },
+      damper: { freq: 2400, q: 2, decay: 0.006, gain: 0.05 },
+      filter: { base: 4, track: 6, q: 1.6, qVel: 1.5, settle: 3.4, settleVel: 2, settleTime: 0.25 },
+      env: { attack: 0.004, decay: 0.06, sustain: 0.95, release: 0.08 },
+      velDb: 14,
+      lfo: { rate: 6.7, depth: 0.35, target: 'rotary', rate2: 0.8 },
       reverb: 0.2, delay: 0.08,
     }),
   },
   {
     id: 'pipe-organ', name: 'Pipe Organ', family: 'Organ',
+    // Flue pipes: a principal with a steep rolloff, an octave rank and a
+    // quint over it, two of each a few cents apart the way two ranks never
+    // quite agree, and the chiff of the wind hitting the mouth. No motion
+    // of its own; the building moves for it.
     spec: steady({
       layers: [
-        { type: 'sine', ratio: 1, level: 0.34 },
-        { type: 'sine', ratio: 2, level: 0.2 },
-        { type: 'sine', ratio: 3, level: 0.13 },
-        { type: 'sine', ratio: 4, level: 0.09 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.6] }, ratio: 1, level: 0.5 },
+        { type: 'sine', ratio: 2, level: 0.18 },
+        { type: 'sine', ratio: 3, level: 0.1 },
       ],
-      noise: { freq: 1800, q: 1.2, decay: 0.06, gain: 0.05 },
-      filter: { base: 5, track: 5, q: 0.8, qVel: 0.5, settle: 5, settleVel: 2, settleTime: 0.3 },
+      noise: { freq: 1800, pitchTrack: 4, q: 1.2, decay: 0.06, gain: 0.06, attack: 0.01 },
+      filter: { base: 6, track: 3, q: 0.8, qVel: 0.5, settle: 6, settleVel: 1, settleTime: 0.3 },
       env: { attack: 0.05, decay: 0.1, sustain: 1, release: 0.5 },
+      velDb: 12,
+      unison: { voices: 2, cents: 6 },
       reverb: 0.55, delay: 0.05,
     }),
   },
   {
     id: 'reed-organ', name: 'Reed Organ', family: 'Organ',
+    // A harmonium: a reed and a second rank a little sharp of it, breath
+    // under the note, and the faint unsteadiness of a bellows.
     spec: steady({
       layers: [
-        { type: 'square', ratio: 1, level: 0.36 },
-        { type: 'sawtooth', ratio: 1, level: 0.22, detune: 6 },
-        { type: 'sine', ratio: 3, level: 0.12 },
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.55 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.2] }, ratio: 1, level: 0.2, detune: 6 },
       ],
+      noise: { freq: 1200, pitchTrack: 3, q: 1, decay: 0.3, gain: 0.04, attack: 0.03 },
       filter: { base: 2.2, track: 5, q: 2.4, qVel: 2, settle: 2, settleVel: 1.5, settleTime: 0.3 },
       env: { attack: 0.02, decay: 0.08, sustain: 0.95, release: 0.15 },
+      velDb: 14,
+      lfo: { rate: 4.5, depth: 0.08, target: 'tremolo', delay: 0.3 },
       reverb: 0.3, delay: 0.08,
     }),
   },
