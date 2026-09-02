@@ -71,6 +71,19 @@ export interface Humanize {
  */
 export interface CompOptions {
   human?: Humanize;
+  bass?: BassOptions;
+}
+
+/**
+ * The bass under a chord: on the root, or walking — the fifth on the third
+ * beat, and a step into the next chord on the last half-beat when the caller
+ * knows what is coming. The approach note is the caller's to find, because
+ * it needs the key and the chord to come, and this file knows neither.
+ */
+export interface BassOptions {
+  style: 'root' | 'walk';
+  /** The note to step through on the chord's last half-beat, into the next chord. */
+  approach?: number;
 }
 
 /** A struck event, as opposed to a swell. The tests draw the same line. */
@@ -148,8 +161,41 @@ export function compEvents(
   barPhase = 0,
   opts: CompOptions = {},
 ): CompEvent[] {
-  const written = writtenEvents(pattern, voiced, root, chordLen, beatsPerBar, barPhase);
-  return opts.human ? played(written, opts.human, chordLen, beatsPerBar, mod(barPhase, beatsPerBar)) : written;
+  const phase = mod(barPhase, beatsPerBar);
+  let out = writtenEvents(pattern, voiced, root, chordLen, beatsPerBar, barPhase);
+  if (opts.bass?.style === 'walk') out = walked(out, root - 12, chordLen, beatsPerBar, phase, opts.bass.approach);
+  return opts.human ? played(out, opts.human, chordLen, beatsPerBar, phase) : out;
+}
+
+/**
+ * The bass walking: the root on the bar line as written, the fifth on the
+ * third beat, and a step towards the next chord on the last half-beat. A
+ * note is only ever added where the pattern struck none, and the chord's
+ * first beat is never touched, so the floor stays exactly where it was.
+ */
+function walked(
+  events: CompEvent[], bass: number, chordLen: number, beatsPerBar: number, phase: number, approach?: number,
+): CompEvent[] {
+  const out = [...events];
+  const struckBass = (e: CompEvent) => e.part === 'bass' && e.attack < STRUCK;
+  const taken = new Set(out.filter(struckBass).map((e) => e.offset));
+  const put = (offset: number, note: number, len: number) => {
+    if (offset <= 0 || offset >= chordLen - 1e-6 || taken.has(offset)) return;
+    taken.add(offset);
+    out.push({ offset, len: Math.min(len, chordLen - offset), notes: [note], gain: BASS, attack: STAB, part: 'bass' });
+  };
+  if (beatsPerBar === 4) {
+    // The fifth on three, in every bar the chord covers. Where the pattern
+    // already struck the root there — a march does — that note becomes the fifth.
+    for (let offset = mod(2 - phase, beatsPerBar); offset < chordLen - 1e-6; offset += beatsPerBar) {
+      if (offset <= 0) continue;
+      const there = out.find((e) => struckBass(e) && e.offset === offset);
+      if (there) there.notes = [bass + 7];
+      else put(offset, bass + 7, 1);
+    }
+  }
+  if (approach !== undefined && chordLen >= 1) put(chordLen - 0.5, approach, 0.5);
+  return out;
 }
 
 /**

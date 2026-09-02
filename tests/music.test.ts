@@ -1,4 +1,4 @@
-import { colourTones, voiceChord, type Key } from '../src/audio/music';
+import { approachNote, colourTones, voiceChord, type Key } from '../src/audio/music';
 import { describe, it, expect } from 'vitest';
 import {
   SCALES, MODES, findMode, chordNotes, snapToScale, inScale, scaleDegree, degreeToNote,
@@ -445,6 +445,21 @@ describe('voicings', () => {
       for (const step of m.progression) {
         const chord = chordNotes(degreeToNote(step.degree, D, m.scale) - 12, step.quality);
         expect(cost(prev, voiceChord(prev, chord, 'led'))).toBeLessThanOrEqual(cost(prev, voiceLead(prev, chord)));
+      }
+    }
+  });
+
+  it('steps into a chord from just below, on the scale where it can', () => {
+    expect(approachNote(62, C_MAJOR)).toBe(60);
+    expect(approachNote(60, C_MAJOR)).toBe(59);
+    expect(approachNote(62, D_PENT)).toBe(60);
+    expect(approachNote(65, D_PENT)).toBe(64);
+    expect(approachNote(65)).toBe(64);
+    for (const m of MODES) {
+      for (let n = 40; n < 80; n++) {
+        const a = approachNote(n, { root: D, scale: m.scale });
+        expect(a).toBeLessThan(n);
+        expect(n - a).toBeLessThanOrEqual(2);
       }
     }
   });

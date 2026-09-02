@@ -170,10 +170,13 @@ describe("the loop's pattern", () => {
     return { pads, engine, bed, tick, bar };
   }
 
+  // The harness rolls a scale at random, as the game does, so these assert
+  // against the chord the bed says it is on rather than against a note.
   it('voices and colours the loop as the table asks, from the next bar', () => {
     const { pads, bed, tick, bar } = harness();
     tick();
     const plain = pads[0].notes.length;
+    expect(plain).toBe(bed.chordSpec.notes.length);
     expect(bed.chordTones).toHaveLength(plain);
     bed.setLoopStyle({ voicing: 'spread', colour: 1 });
     bar();
@@ -181,13 +184,37 @@ describe("the loop's pattern", () => {
     // The bar already written keeps its voicing; the next one takes the new.
     expect(chords[0].notes).toHaveLength(plain);
     const coloured = chords[chords.length - 1].notes;
-    expect(coloured.length).toBeGreaterThan(plain);
+    expect(coloured.length).toBeGreaterThanOrEqual(plain);
     expect(coloured.length).toBeLessThanOrEqual(5);
+    expect(Math.max(...coloured) - Math.min(...coloured)).toBeLessThanOrEqual(19);
     expect(bed.chordTones).toEqual(coloured);
-    // And back to plain, from the bar after.
+    // And back to plain, from the bar after — which is the next chord's.
     bed.setLoopStyle({});
     bar();
-    expect(pads.filter((p) => p.notes.length > 1).pop()!.notes).toHaveLength(plain);
+    expect(pads.filter((p) => p.notes.length > 1).pop()!.notes).toHaveLength(bed.chordSpec.notes.length);
+  });
+
+  it('walks the bass into the next chord on the last bar of the one before', () => {
+    const { pads, bed, tick, bar } = harness();
+    bed.setLoopPattern('pulse', ['chord', 'bass']);
+    bed.setLoopStyle({ bass: 'walk' });
+    tick();
+    const root = bed.chordSpec.root - 12;
+    bar();
+    bar();
+    const next = bed.chordSpec.root - 12;
+    const single = pads.filter((p) => p.notes.length === 1);
+    const near = (at: number, beats: number) => Math.abs(at - beats * BEAT) < 1e-6;
+    // The fifth on three, in both bars of the chord.
+    expect(single.some((p) => near(p.at, 2) && p.notes[0] === root + 7)).toBe(true);
+    expect(single.some((p) => near(p.at, 6) && p.notes[0] === root + 7)).toBe(true);
+    // A step into the next chord on the last half-beat of the second bar,
+    // from just below it, and nothing of the kind in the first bar.
+    expect(single.some((p) => near(p.at, 3.5))).toBe(false);
+    const step = single.find((p) => near(p.at, 7.5));
+    expect(step).toBeDefined();
+    expect(next - step!.notes[0]).toBeGreaterThanOrEqual(1);
+    expect(next - step!.notes[0]).toBeLessThanOrEqual(2);
   });
 
   it('sounds as it always has until it is asked otherwise', () => {

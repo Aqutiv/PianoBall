@@ -302,6 +302,18 @@ export interface Key {
   scale: readonly number[];
 }
 
+/**
+ * The note a bass steps through into `target`: the scale tone just below it
+ * when the scale has one within a tone, else the half-step below, which is
+ * what a walking bass does whatever the key.
+ */
+export function approachNote(target: number, key?: Key): number {
+  if (key) {
+    for (let d = 1; d <= 2; d++) if (inScale(target - d, key.root, key.scale)) return target - d;
+  }
+  return target - 1;
+}
+
 /** Most tones a coloured chord may carry. Past five the harmony is a cluster. */
 const MAX_TONES = 5;
 

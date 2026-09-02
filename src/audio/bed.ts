@@ -1,7 +1,9 @@
 import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
-import { Groove, chordNotes, degreeToNote, voiceChord, voiceLead, type VoicingStyle } from './music';
+import {
+  Groove, approachNote, chordNotes, degreeToNote, voiceChord, voiceLead, type VoicingStyle,
+} from './music';
 import {
   compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
 } from './comp';
@@ -458,14 +460,26 @@ export class ChordBed {
   private play(bar: number): void {
     const { root, notes } = this.chordSpec;
     const m = this.music;
-    const voiced = voiceChord(this.lastVoicing, notes, this.loopVoicing, this.loopColour, { root: m.root, scale: m.scale });
+    const key = { root: m.root, scale: m.scale };
+    const voiced = voiceChord(this.lastVoicing, notes, this.loopVoicing, this.loopColour, key);
     this.lastVoicing = voiced;
     const beat = bar / 4;
-    const opts = { human: this.human(beat) };
+    // On a chord's last bar a walking bass knows where it is going next, and
+    // steps into it. `barsLeft` has already been counted down for this bar.
+    const walking = this.loopBass === 'walk' && this.barsLeft === 0;
+    const approach = walking ? approachNote(this.nextRoot() - 12, key) : undefined;
+    const opts = { human: this.human(beat), bass: { style: this.loopBass, approach } };
     for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0, opts)) {
       if (!this.loopParts.includes(ev.part)) continue;
       this.pending.push({ at: this.nextBar + ev.offset * beat, ev });
     }
+  }
+
+  /** The root of the chord after this one, in the loop, an octave down like `chordSpec`'s. */
+  private nextRoot(): number {
+    const m = this.music;
+    const step = m.progression[(this.chordIndex + 1) % m.progression.length];
+    return degreeToNote(step.degree, m.root, m.scale) - 12;
   }
 
   /** The feel, in beats of this length. */

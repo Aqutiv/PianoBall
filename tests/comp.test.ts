@@ -119,6 +119,54 @@ describe('accompaniment patterns', () => {
   });
 });
 
+describe('the bass walking', () => {
+  const walk = (pattern: CompPattern, len: number, per: number, phase = 0, approach?: number) =>
+    compEvents(pattern, VOICED, ROOT, len, per, phase, { bass: { style: 'walk', approach } });
+  const bassLine = (evs: readonly CompEvent[]) => evs
+    .filter((e) => e.part === 'bass' && e.attack < 0.1)
+    .sort((a, b) => a.offset - b.offset)
+    .map((e) => [e.offset, e.notes[0]]);
+
+  it('changes nothing while the bass stays on the root', () => {
+    for (const pattern of COMP_PATTERNS) {
+      expect(compEvents(pattern, VOICED, ROOT, 4, 4, 0, { bass: { style: 'root', approach: 41 } }))
+        .toEqual(events(pattern, 4, 4));
+    }
+  });
+
+  it('puts the fifth on three and steps into the next chord on the last half-beat', () => {
+    expect(bassLine(walk('pulse', 4, 4, 0, 41))).toEqual([[0, 36], [2, 43], [3.5, 41]]);
+    // A march already strikes the root on three: that note becomes the fifth.
+    expect(bassLine(walk('march', 4, 4))).toEqual([[0, 36], [2, 43]]);
+    // Two bars of one chord walk in both, and only the last bar steps on.
+    expect(bassLine(walk('pulse', 8, 4, 0, 41))).toEqual([[0, 36], [2, 43], [4, 36], [6, 43], [7.5, 41]]);
+  });
+
+  it('never steps into a chord it cannot see, and never off the bar line', () => {
+    expect(bassLine(walk('pulse', 4, 4))).toEqual([[0, 36], [2, 43]]);
+    // A chord starting on three has its floor there; the floor is never turned into a fifth.
+    expect(bassLine(walk('march', 2, 4, 2, 41))).toEqual([[0, 36], [1.5, 41]]);
+  });
+
+  it('keeps the floor on the root, every bass note unique, and everything inside the chord', () => {
+    for (const pattern of COMP_PATTERNS) {
+      for (const [len, per, phase] of [[4, 4, 0], [3, 4, 1], [2, 4, 2], [8, 4, 0], [3, 3, 0], [1, 3, -1]] as const) {
+        const evs = walk(pattern, len, per, phase, 41);
+        const line = bassLine(evs);
+        expect(new Set(line.map(([o]) => o)).size, `${pattern} ${len}/${per}@${phase}`).toBe(line.length);
+        const floor = evs.filter((e) => e.offset === 0 && e.part === 'bass');
+        expect(floor.length, `${pattern} ${len}/${per}@${phase}`).toBeGreaterThan(0);
+        for (const e of floor) expect(e.notes, `${pattern} ${len}/${per}@${phase}`).toEqual([ROOT - 12]);
+        for (const e of evs) {
+          expect(e.offset, pattern).toBeGreaterThanOrEqual(0);
+          expect(e.offset, pattern).toBeLessThan(len);
+          expect(e.offset + e.len, pattern).toBeLessThanOrEqual(len * 1.06 + 1e-9);
+        }
+      }
+    }
+  });
+});
+
 describe('the hand on the chords', () => {
   const hand = (over: Partial<Humanize> = {}): Humanize =>
     ({ rng: makeRng(3), jitter: 0.02, gain: 0.1, roll: 0.03, accent: 1.1, ...over });
