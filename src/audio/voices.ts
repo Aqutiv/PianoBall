@@ -417,50 +417,90 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
 
   // ----------------------------------------------------------------- air ---
+  // Sung and blown things. What they share is that the vibrato arrives late:
+  // a singer or a player settles the note first and then lets it move.
   {
     id: 'choir', name: 'Choir', family: 'Air',
+    // Vowels rather than saws: an open 'ah' in three voices a few cents
+    // apart, with a darker 'oo' underneath, breath over the top, and a
+    // vibrato that comes in once the chord has settled.
     spec: key({
       layers: [
-        { type: 'sawtooth', ratio: 1, level: 0.3, detune: -7 },
-        { type: 'sawtooth', ratio: 1, level: 0.3, detune: 7 },
-        { type: 'sine', ratio: 2, level: 0.1 },
-        { type: 'sine', ratio: 3, level: 0.06 },
+        { type: 'spectrum', spectrum: { gen: 'formant', params: [800, 1150, 2900, 150] }, ratio: 1, level: 0.5 },
+        { type: 'spectrum', spectrum: { gen: 'formant', params: [350, 900, 2600, 120] }, ratio: 1, level: 0.2 },
       ],
       noise: { freq: 1200, q: 1, decay: 0.4, gain: 0.05 },
-      filter: { base: 2, track: 3, q: 1.5, qVel: 1, settle: 2.2, settleVel: 1, settleTime: 0.8 },
+      filter: { base: 2.5, track: 3, q: 1.2, qVel: 1, settle: 2.5, settleVel: 1, settleTime: 0.8 },
       env: { attack: 0.14, decay: 0.4, sustain: 0.85, release: 0.5 },
+      velDb: 18,
+      unison: { voices: 3, cents: 8 },
+      lfo: { rate: 5, depth: 12, target: 'vibrato', delay: 0.35 },
       reverb: 0.5, delay: 0.12,
     }),
   },
   {
     id: 'vox-pad', name: 'Vox Pad', family: 'Air',
+    // An 'oh' held by a crowd: wider apart than the choir, slower to arrive
+    // and slower to move, with an octave under it.
     spec: key({
       layers: [
-        { type: 'sawtooth', ratio: 1, level: 0.3, detune: -10 },
-        { type: 'sawtooth', ratio: 1, level: 0.3, detune: 10 },
+        { type: 'spectrum', spectrum: { gen: 'formant', params: [600, 1040, 2250, 140] }, ratio: 1, level: 0.42 },
         { type: 'sine', ratio: 0.5, level: 0.14 },
       ],
-      filter: { base: 1.8, track: 3, q: 1.2, qVel: 1, settle: 2, settleVel: 1, settleTime: 1 },
+      filter: { base: 2, track: 3, q: 1.2, qVel: 1, settle: 2, settleVel: 1, settleTime: 1 },
       env: { attack: 0.3, decay: 0.6, sustain: 0.9, release: 0.9 },
+      velDb: 16,
+      unison: { voices: 3, cents: 10 },
+      lfo: { rate: 4.5, depth: 8, target: 'vibrato', delay: 0.5 },
       reverb: 0.6, delay: 0.16,
     }),
   },
   {
     id: 'breath-flute', name: 'Breath Flute', family: 'Air',
+    // Nearly a sine, which is what a flute is; the rest is air. A chiff at
+    // the start, breath under the whole note that thins going up, and a
+    // vibrato that the player adds once the note is placed.
     spec: key({
       layers: [
-        { type: 'sine', ratio: 1, level: 0.62 },
+        { type: 'sine', ratio: 1, level: 0.6 },
         { type: 'sine', ratio: 2, level: 0.08 },
         { type: 'sine', ratio: 3, level: 0.04 },
       ],
-      noise: { freq: 2200, q: 1.4, decay: 0.5, gain: 0.14 },
+      noise: [
+        { freq: 2200, pitchTrack: 5, q: 1.4, decay: 0.5, gain: 0.14, attack: 0.03 },
+        { freq: 3000, pitchTrack: 8, q: 1, decay: 0.03, gain: 0.06 },
+      ],
       filter: { base: 4, track: 5, q: 1, qVel: 1, settle: 3.5, settleVel: 1.5, settleTime: 0.5 },
       env: { attack: 0.06, decay: 0.2, sustain: 0.9, release: 0.22 },
+      velDb: 20, attackVel: 0.4,
+      keyTrack: { noise: -0.3 },
+      lfo: { rate: 5.2, depth: 14, target: 'vibrato', delay: 0.45 },
       reverb: 0.4, delay: 0.14,
     }),
   },
   {
+    id: 'solo-string', name: 'Solo String', family: 'Air',
+    // A bowed string: the body's resonance near two kilohertz written into
+    // the partials, the hiss of the bow under the attack, a swell rather
+    // than a strike, and a wide vibrato once the note is found.
+    spec: key({
+      layers: [
+        { type: 'spectrum', spectrum: { gen: 'bowed' }, ratio: 1, level: 0.5 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.3] }, ratio: 1, level: 0.16, detune: 4 },
+      ],
+      noise: { freq: 2500, pitchTrack: 6, q: 1, decay: 0.25, gain: 0.06, attack: 0.04 },
+      filter: { base: 3, track: 4, q: 1.2, qVel: 1, settle: 2.5, settleVel: 1, settleTime: 0.5 },
+      env: { attack: 0.08, decay: 0.3, sustain: 0.9, release: 0.3 },
+      velDb: 22, attackVel: 0.5,
+      keyTrack: { bright: 0.15 },
+      lfo: { rate: 5.5, depth: 16, target: 'vibrato', delay: 0.3 },
+      reverb: 0.45, delay: 0.12,
+    }),
+  },
+  {
     id: 'glass', name: 'Glass', family: 'Air',
+    // A glass rim, rubbed: partials that are not harmonic, a long bloom, and
+    // the slow waver of a wet finger going round.
     spec: key({
       layers: [
         { type: 'sine', ratio: 1, level: 0.44 },
@@ -469,6 +509,9 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       ],
       filter: { base: 6, track: 6, q: 1, qVel: 1, settle: 5, settleVel: 2, settleTime: 0.9 },
       env: { attack: 0.02, decay: 1.2, sustain: 0.2, release: 0.9 },
+      velDb: 24,
+      keyTrack: { decay: -0.35 },
+      lfo: { rate: 3, depth: 0.15, target: 'tremolo', delay: 0.6 },
       reverb: 0.6, delay: 0.2,
     }),
   },
