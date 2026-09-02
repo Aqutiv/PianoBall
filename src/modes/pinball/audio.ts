@@ -1,4 +1,4 @@
-import type { AudioEngine, Scheduled } from '../../audio/engine';
+import type { AudioEngine, RollHandle, Scheduled } from '../../audio/engine';
 import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
@@ -20,6 +20,11 @@ import { strikeFor } from './strikes';
  * other mode and lives elsewhere; the rhythm box is this mode's own, and
  * follows the rally rather than the mode, the way Freestyle's follows the run.
  */
+/** A graze: sliding this fast, and this many times faster than it struck. One scrape per ball per gap. */
+const SCRAPE_MIN = 300;
+const SCRAPE_RATIO = 2.5;
+const SCRAPE_GAP = 0.08;
+
 /** A key press that landed on the beat. */
 export interface GrooveHit {
   key: KeyState;
@@ -46,6 +51,10 @@ export class PinballAudio {
   /** The last key struck: how hard, and where. The plunger fires from the serve it aimed. */
   private lastForce = 0.5;
   private lastPan = 0;
+  /** The rolling sound under every live ball, by id. */
+  private readonly rolls = new Map<number, RollHandle>();
+  /** When each ball last scraped, so a long graze is one scrape and not forty. */
+  private readonly scraped = new Map<number, number>();
 
   constructor(
     private readonly engine: AudioEngine,
@@ -59,8 +68,49 @@ export class PinballAudio {
   /** Whether the rhythm box is running. The teardown tests read this. */
   get drumming(): boolean { return this.box.playing; }
 
-  /** Nothing should keep drumming behind a menu. */
-  pause(): void { this.box.stop(); }
+  /** Nothing should keep drumming, or rolling, behind a menu. */
+  pause(): void {
+    this.box.stop();
+    this.stopRolls();
+  }
+
+  /**
+   * Once a frame: a rolling sound under every ball on the table.
+   *
+   * A roll is a state the ball is in rather than something that happens to
+   * it, so it cannot come off the bus; the mode calls this from its draw,
+   * which is the rate the eye gets, and the engine smooths the rest. The
+   * simulation never leaves the plane, so a ball is always on the table and
+   * only its speed says how much it rolls: a ball in slow motion rolls
+   * slowly, a resting ball is silent, and a ball that is gone is stopped.
+   */
+  frame(): void {
+    const game = this.game;
+    const seen = new Set<number>();
+    for (const ball of game.balls) {
+      if (!ball.alive) continue;
+      seen.add(ball.id);
+      let handle = this.rolls.get(ball.id);
+      if (!handle) {
+        handle = this.engine.roll();
+        this.rolls.set(ball.id, handle);
+      }
+      const speed = Math.hypot(ball.v.x, ball.v.y) * game.timeScale;
+      handle.update(speed, 1, this.pan(ball.p.x), this.depth(ball.p.y));
+    }
+    for (const [id, handle] of this.rolls) {
+      if (seen.has(id)) continue;
+      handle.stop();
+      this.rolls.delete(id);
+      this.scraped.delete(id);
+    }
+  }
+
+  private stopRolls(): void {
+    for (const handle of this.rolls.values()) handle.stop();
+    this.rolls.clear();
+    this.scraped.clear();
+  }
 
   /** Back to whatever rung the table is on, drums included. */
   resume(): void { this.apply(this.game.intensity); }
@@ -114,14 +164,24 @@ export class PinballAudio {
 
     // The ball meeting the table: the surface rung at its own modes, from
     // wherever on the table it happened, as square or as glancing as it was.
-    offs.push(bus.on('impact', ({ sound, energy, slide, kind, note, x, y }) => {
+    offs.push(bus.on('impact', ({ sound, energy, slide, kind, note, x, y, ball }) => {
       const pan = this.pan(x);
       if (kind === 'ball') {
         engine.mech('ballclick', clamp01(energy / 900), pan);
         return;
       }
+      const depth = this.depth(y);
       const glance = energy / Math.max(1e-6, Math.hypot(energy, slide));
-      engine.hit(sound, energy, { pan, depth: this.depth(y), glance, note });
+      engine.hit(sound, energy, { pan, depth, glance, note });
+      // A graze — far more sliding than striking — scrapes as well, but a
+      // ball skimming a rail touches it every step, and that is one scrape.
+      if (slide > SCRAPE_MIN && slide > SCRAPE_RATIO * energy) {
+        const last = this.scraped.get(ball) ?? -Infinity;
+        if (engine.now - last >= SCRAPE_GAP) {
+          this.scraped.set(ball, engine.now);
+          engine.scrape(slide, pan, depth);
+        }
+      }
     }));
 
     // The serve: the spring let go, from the key that aimed it.
@@ -212,6 +272,7 @@ export class PinballAudio {
     this.offs.length = 0;
     this.onGroove = null;
     this.box.stop();
+    this.stopRolls();
     // Leaving mid-flourish must not keep playing it into the next mode.
     for (const h of this.ahead) h.cancel();
     this.ahead.length = 0;

@@ -127,6 +127,8 @@ export class PinballMode extends ModeBase implements GameMode {
 
   draw(alpha: number, frameDt: number): void {
     this.predict();
+    // The rolling sound follows the balls at the rate the eye gets them.
+    this.audio.frame();
     // Where the beat is, for the pulse. Only meaningful once the audio clock
     // is actually running; before that there is no beat to show.
     const { audio, bed } = this.ctx;

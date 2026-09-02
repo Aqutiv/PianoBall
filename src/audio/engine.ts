@@ -139,6 +139,27 @@ interface StringAt {
   bucket: Bucket;
 }
 
+/**
+ * A ball's rolling sound, alive for as long as the ball is. Fed once a
+ * frame; smoothed on the audio side, so a frame's worth of change is a slope
+ * rather than a step.
+ */
+export interface RollHandle {
+  /** `speed` in table units a second, `contact` how much of the ball is on the table, 0..1. */
+  update(speed: number, contact: number, pan: number, depth: number): void;
+  stop(): void;
+}
+
+/** A roll that never reached the graph. */
+const NO_ROLL: RollHandle = { update() {}, stop() {} };
+
+/** Speed at which a roll is as loud as it gets, and how loud that is. */
+const ROLL_FULL = 1800;
+const ROLL_GAIN = 0.12;
+/** Sliding speed at which a scrape is as loud as it gets, and how loud that is. */
+const SCRAPE_FULL = 1800;
+const SCRAPE_GAIN = 0.25;
+
 /** Where a hit is placed and how it landed. All optional: a bare hit is square, near and centred. */
 interface HitOptions {
   pan?: number;
@@ -1464,6 +1485,81 @@ export class AudioEngine {
     this.place(out, pan, MECH_HALL, MECH_CAB);
     if (m.surface) this.hit(m.surface.tag, m.surface.energy * IMPACT_FULL * level, { pan, at: t });
     return { cancel: () => out.disconnect() };
+  }
+
+  /**
+   * The ball rolling: noise, banded by its speed, under every ball on the
+   * table. A roll is a state rather than an event, so it is a handle the
+   * mode feeds once a frame rather than a call, and it is gone the moment
+   * the ball is. Every parameter is ramped, so a frame's worth of change
+   * never zips.
+   */
+  roll(): RollHandle {
+    if (!this.running || !this.ctx) return NO_ROLL;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 120;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 600;
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const panner = ctx.createStereoPanner();
+    src.connect(hp).connect(bp).connect(g).connect(panner);
+    panner.connect(this.fxBus);
+    const box = ctx.createGain();
+    box.gain.value = 0.4;
+    panner.connect(box).connect(this.cabSend);
+    src.start();
+    let stopped = false;
+    return {
+      update: (speed, contact, pan, depth) => {
+        if (stopped) return;
+        const t = ctx.currentTime;
+        const s = clamp01(speed / ROLL_FULL);
+        const level = Math.pow(s, 1.3) * clamp01(contact) * ROLL_GAIN * (1 - 0.35 * clamp01(depth));
+        g.gain.setTargetAtTime(level, t, 0.05);
+        bp.frequency.setTargetAtTime(300 + 1500 * s, t, 0.08);
+        panner.pan.setTargetAtTime(clamp(pan, -1, 1), t, 0.05);
+      },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        const t = ctx.currentTime;
+        g.gain.setTargetAtTime(0, t, 0.03);
+        src.stop(t + 0.2);
+      },
+    };
+  }
+
+  /** The ball grazing a surface: a short scrape, brighter and longer the faster it slid. */
+  scrape(slide: number, pan = 0, depth = 0): void {
+    if (!this.running || !this.ctx) return;
+    const ctx = this.ctx;
+    const s = clamp01(slide / SCRAPE_FULL);
+    const level = Math.pow(s, 1.2) * SCRAPE_GAIN * (1 - 0.35 * clamp01(depth));
+    if (level < 0.003) return;
+    const t = ctx.currentTime;
+    const seconds = 0.04 + 0.08 * s;
+    const out = ctx.createGain();
+    if (!this.shots.admit(t, 0, t + seconds, () => cutShort(out, ctx.currentTime))) return;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = Math.min(12000, 800 + 0.8 * slide);
+    bp.Q.value = 1.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(level, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    src.connect(bp).connect(g).connect(out);
+    this.place(out, pan, HIT_HALL, HIT_CAB);
+    src.start(t, Math.random() * 0.9, seconds + 0.02);
   }
 
   /** A one-shot's way out: through a panner to the effects bus and the two rooms. */

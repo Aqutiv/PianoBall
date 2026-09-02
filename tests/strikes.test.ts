@@ -43,6 +43,13 @@ interface Mallet { note: number; gain: number; bright: number }
 interface Drum { voice: DrumVoice; gain: number; at: number }
 interface Mech { name: MechName; gain: number; pan: number; at: number }
 interface Hit { tag: SoundTag; energy: number; pan?: number; depth?: number; glance?: number; note?: number | null }
+interface Scrape { slide: number; pan: number; depth: number }
+interface Roll {
+  updates: { speed: number; contact: number; pan: number; depth: number }[];
+  stopped: boolean;
+  update(speed: number, contact: number, pan: number, depth: number): void;
+  stop(): void;
+}
 
 /** A game wired to an engine that only records what it is asked to play. */
 function rig() {
@@ -50,12 +57,24 @@ function rig() {
   const drums: Drum[] = [];
   const mechs: Mech[] = [];
   const hits: Hit[] = [];
+  const scrapes: Scrape[] = [];
+  const rolls: Roll[] = [];
   /** How many one-shots were taken back, by voice. */
   const cancelled = { mallet: 0, drum: 0, mech: 0 };
   const engine = {
     running: true,
     now: 10,
     settings: { bed: true, assist: false },
+    roll: () => {
+      const roll: Roll = {
+        updates: [], stopped: false,
+        update: (speed, contact, pan, depth) => { roll.updates.push({ speed, contact, pan, depth }); },
+        stop: () => { roll.stopped = true; },
+      };
+      rolls.push(roll);
+      return roll;
+    },
+    scrape: (slide: number, pan: number, depth: number) => { scrapes.push({ slide, pan, depth }); },
     mallet: (note: number, gain: number, _pan: number, bright: number) => {
       mallets.push({ note, gain, bright });
       return { cancel: () => { cancelled.mallet++; } };
@@ -84,7 +103,7 @@ function rig() {
     el.spinRate = spinRate;
     game.bus.emit('element', { el, energised, impact, x: el.x, y: el.y });
   };
-  return { mallets, drums, mechs, hits, hit, game, audio, engine, cancelled };
+  return { mallets, drums, mechs, hits, scrapes, rolls, hit, game, audio, engine, cancelled };
 }
 
 describe('striking the table', () => {
@@ -196,7 +215,7 @@ describe('striking the table', () => {
 describe('the ball on the table', () => {
   const contact = (over: Partial<{
     sound: SoundTag; energy: number; slide: number; kind: 'surface' | 'paddle' | 'ball';
-    note: number | null; x: number; y: number;
+    note: number | null; x: number; y: number; ball: number;
   }> = {}) => ({
     sound: 'wood' as SoundTag, energy: 900, slide: 0, kind: 'surface' as const,
     note: null, x: 512, y: 700, nx: 0, ny: 1, ball: 1, ...over,
@@ -247,5 +266,74 @@ describe('the ball on the table', () => {
     game.bus.emit('drain', { x: 512, y: 30, ballId: 1, saved: false });
     game.bus.emit('drain', { x: 512, y: 30, ballId: 2, saved: true });
     expect(mechs.map((m) => m.name)).toEqual(['plunger', 'trough', 'kickback']);
+  });
+
+  it('scrapes a graze once, not once a step', () => {
+    const { scrapes, hits, game, engine } = rig();
+    const graze = contact({ energy: 100, slide: 900 });
+    game.bus.emit('impact', graze);
+    game.bus.emit('impact', graze);
+    game.bus.emit('impact', graze);
+    expect(hits).toHaveLength(3);
+    expect(scrapes).toHaveLength(1);
+    expect(scrapes[0].slide).toBe(900);
+    engine.now += 0.1;
+    game.bus.emit('impact', graze);
+    expect(scrapes).toHaveLength(2);
+    // A square hit slides too little to scrape, however fast.
+    game.bus.emit('impact', contact({ energy: 900, slide: 200, ball: 2 }));
+    expect(scrapes).toHaveLength(2);
+  });
+});
+
+describe('the ball rolling', () => {
+  it('keeps a roll under every ball and stops it when the ball is gone', () => {
+    const { rolls, game, audio } = rig();
+    game.spawnBall(400, 700, 500, 0);
+    audio.frame();
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0].updates[0].speed).toBeCloseTo(500, 6);
+    expect(rolls[0].updates[0].pan).toBeLessThan(0);
+
+    game.spawnBall(700, 900, 0, 0);
+    audio.frame();
+    expect(rolls).toHaveLength(2);
+    expect(rolls[0].updates).toHaveLength(2);
+
+    // The first ball is gone from the table: its roll is stopped, the other's is not.
+    game.balls.splice(0, 1);
+    audio.frame();
+    expect(rolls[0].stopped).toBe(true);
+    expect(rolls[1].stopped).toBe(false);
+    expect(rolls[1].updates).toHaveLength(2);
+  });
+
+  it('rolls slowly in slow motion, and follows the ball across the table', () => {
+    const { rolls, game, audio } = rig();
+    const ball = game.spawnBall(400, 700, 600, 0)!;
+    audio.frame();
+    game.timeScale = 0.25;
+    audio.frame();
+    ball.p.x = game.def.width - 100;
+    ball.p.y = game.def.height - 50;
+    audio.frame();
+    const [full, slow, far] = rolls[0].updates;
+    expect(full.speed).toBeCloseTo(600, 6);
+    expect(slow.speed).toBeCloseTo(150, 6);
+    expect(far.pan).toBeGreaterThan(0);
+    expect(far.depth).toBeGreaterThan(0.9);
+    for (const u of rolls[0].updates) expect(u.contact).toBe(1);
+  });
+
+  it('stops every roll on pause and on the way out', () => {
+    const { rolls, game, audio } = rig();
+    game.spawnBall(400, 700, 500, 0);
+    audio.frame();
+    audio.pause();
+    expect(rolls[0].stopped).toBe(true);
+    audio.frame();
+    expect(rolls).toHaveLength(2);
+    audio.detach();
+    expect(rolls[1].stopped).toBe(true);
   });
 });
