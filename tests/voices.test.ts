@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine } from '../src/audio/engine';
 import {
   BED_FAMILIES, BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE,
-  LEAD_FAMILIES, LEAD_VOICES, findBedVoice, findLeadVoice,
+  LEAD_FAMILIES, LEAD_VOICES, findBedVoice, findLeadVoice, noises,
 } from '../src/audio/voices';
+import { SPECTRA } from '../src/audio/spectra';
 
-const OSC_TYPES = ['sine', 'square', 'sawtooth', 'triangle'];
+const LAYER_TYPES = ['sine', 'square', 'sawtooth', 'triangle', 'spectrum'];
+
+/** Oscillators a voice will put in the graph for one note, operators and unison included. */
+const sourcesOf = (layers: readonly { level: number; fm?: unknown }[], unison?: { voices: number }) =>
+  layers.reduce((n, l) => n + 1 + (l.fm ? 1 : 0), 0) * (unison?.voices ?? 1);
 
 describe('the instrument bank', () => {
   it('has no repeated id, in either bank', () => {
@@ -51,11 +56,69 @@ describe('the instrument bank', () => {
       // the size of the signature one, and this is what keeps it there.
       expect(v.spec.layers.length, `${v.id} is too many layers`).toBeLessThanOrEqual(4);
       for (const l of v.spec.layers) {
-        expect(OSC_TYPES.includes(l.type), `${v.id}: ${l.type}`).toBe(true);
+        expect(LAYER_TYPES.includes(l.type), `${v.id}: ${l.type}`).toBe(true);
+        // A spectrum layer names a table the generator library has; a basic
+        // wave names none, so a table nobody plays cannot sit there unheard.
+        if (l.type === 'spectrum') {
+          expect(SPECTRA.includes(l.spectrum?.gen as never), `${v.id} spectrum ${l.spectrum?.gen}`).toBe(true);
+        } else {
+          expect(l.spectrum, `${v.id} names a spectrum on a ${l.type}`).toBeUndefined();
+        }
         expect(l.ratio, `${v.id} ratio`).toBeGreaterThan(0);
         expect(l.level, `${v.id} level`).toBeGreaterThan(0);
         expect(Math.abs(l.detune ?? 0), `${v.id} detune`).toBeLessThanOrEqual(100);
       }
+    }
+  });
+
+  it('keeps every voice inside the polyphony budget, unison and all', () => {
+    // Forty-eight voices of about this size is what the audio thread is
+    // budgeted for. Unison multiplies every layer and an operator is a source
+    // of its own, so a three-string piano is legal and a supersaw in unison
+    // is not.
+    for (const v of LEAD_VOICES) {
+      const n = sourcesOf(v.spec.layers, v.spec.unison) + noises(v.spec.noise).length;
+      expect(n, `${v.id} is ${n} sources`).toBeLessThanOrEqual(8);
+    }
+    for (const v of BED_VOICES) {
+      const n = sourcesOf(v.spec.layers, v.spec.unison);
+      expect(n, `${v.id} is ${n} sources`).toBeLessThanOrEqual(8);
+    }
+  });
+
+  it('keeps every knob it was given somewhere sensible', () => {
+    const within = (id: string, name: string, n: number | undefined, lo: number, hi: number) => {
+      if (n === undefined) return;
+      expect(n, `${id} ${name}`).toBeGreaterThanOrEqual(lo);
+      expect(n, `${id} ${name}`).toBeLessThanOrEqual(hi);
+    };
+    for (const v of LEAD_VOICES) {
+      const s = v.spec;
+      within(v.id, 'velDb', s.velDb, 12, 36);
+      within(v.id, 'attackVel', s.attackVel, 0, 0.9);
+      within(v.id, 'stretch', s.stretch, 0, 4);
+      within(v.id, 'humanize', s.humanize, 0, 1);
+      within(v.id, 'unison cents', s.unison?.cents, 0.5, 20);
+      for (const [name, n] of Object.entries(s.keyTrack ?? {})) within(v.id, `keyTrack ${name}`, n, -1.5, 1.5);
+      for (const l of s.layers) {
+        within(v.id, 'velCurve', l.velCurve, 0, 4);
+        within(v.id, 'layer attack', l.attack, 0, 2);
+        within(v.id, 'layer hold', l.hold, 0, 2);
+      }
+      for (const n of noises(s.noise)) {
+        within(v.id, 'noise pitchTrack', n.pitchTrack, 0.1, 40);
+        within(v.id, 'noise attack', n.attack, 0, 0.5);
+        within(v.id, 'noise delay', n.delay, 0, 1);
+        within(v.id, 'noise velCurve', n.velCurve, 0, 4);
+      }
+    }
+    for (const v of BED_VOICES) within(v.id, 'unison cents', v.spec.unison?.cents, 0.5, 20);
+  });
+
+  it('lets organs and synths hold their pitch while everything else drifts', () => {
+    for (const v of LEAD_VOICES) {
+      const steady = v.family === 'Organ' || v.family === 'Synth';
+      expect(v.spec.humanize ?? 1, `${v.id}`).toBe(steady ? 0 : 1);
     }
   });
 

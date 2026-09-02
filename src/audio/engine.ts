@@ -3,10 +3,14 @@ import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
 import { DRUM_SPECS, type DrumVoice } from './drums';
 import { CAB, HALL, HALL_LITE, roomImpulse, type RoomSpec } from './rooms';
-import { makeRng } from './shaping';
 import {
-  DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice,
-  type BedSpec, type VoiceSpec,
+  NO_TRACK, humanize, keyFactors, makeRng, stretchCents, unisonDetunes, velocityPeak,
+  type Humanized, type KeyFactors,
+} from './shaping';
+import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
+import {
+  DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
+  type BedSpec, type VoiceLayer, type VoiceNoise, type VoiceSpec,
 } from './voices';
 
 export interface AudioSettings {
@@ -131,16 +135,19 @@ const DELAY_MAX = 2;
 
 const dottedEighth = (bpm: number) => clamp((60 / bpm) * 0.75, 0.02, DELAY_MAX);
 
+/** A source with a pitch to bend: an oscillator today, a rendered string later. */
+type Pitched = OscillatorNode;
+
 interface KeyVoice {
   note: number;
   startedAt: number;
   /**
-   * Every oscillator the voice owns, layers and FM operators alike. They are
-   * one list because expression has to reach all of them: an operator sits at
-   * a ratio to its carrier, and bending only the carrier would slide the two
+   * Every source the voice owns, layers and FM operators alike. They are one
+   * list because expression has to reach all of them: an operator sits at a
+   * ratio to its carrier, and bending only the carrier would slide the two
    * apart and detune the timbre instead of transposing the note.
    */
-  oscs: OscillatorNode[];
+  sources: Pitched[];
   filter: BiquadFilterNode;
   amp: GainNode;
   /**
@@ -151,6 +158,34 @@ interface KeyVoice {
   release: number;
   releasing: boolean;
 }
+
+/** The nodes every pitched voice shares, whatever its layers are made of. */
+interface Chain {
+  filter: BiquadFilterNode;
+  amp: GainNode;
+  panner: StereoPannerNode;
+}
+
+/** Send levels a chain is built with. Zero leaves that send out altogether. */
+interface Sends {
+  hall: number;
+  cab: number;
+  delay: number;
+}
+
+/**
+ * How much of the small random drift every note gets, before a voice scales
+ * it. Nobody plays a note twice the same way — the pitch, the attack and the
+ * level of each strike all move a hair — and it is the absence of that which
+ * makes repeated notes sound like a machine gun. Organs and synths set their
+ * own scale to zero: there the drift reads as a fault.
+ */
+const HUMANIZE = 1;
+/** Beds drift less than the keys under a hand. */
+const BED_HUMANIZE = 0.5;
+
+/** What a spectrum layer that names no table falls back to: a sawtooth, by partials. */
+const DEFAULT_SPECTRUM: SpectrumRef = { gen: 'saw' };
 
 /**
  * The whole sound of the game.
@@ -223,6 +258,8 @@ export class AudioEngine {
   private tempo = 96;
   private voices = new Map<number, KeyVoice>();
   private active: KeyVoice[] = [];
+  /** Every periodic wave built so far, by spectrum and register. */
+  private waves = new Map<string, PeriodicWave>();
   private sustained = new Set<number>();
   private sustainOn = false;
 
@@ -405,6 +442,13 @@ export class AudioEngine {
     lfo.connect(this.lfoColour);
     lfo.start();
     this.applyMod();
+
+    // The graph is built inside the first gesture, and so are the tables the
+    // current instruments will want, so the first note pays for none of it.
+    this.ready = true;
+    this.warm(this.leadSpec);
+    this.warm(this.bedSpec);
+    this.warm(this.keyBedSpec);
   }
 
   setSettings(patch: Partial<AudioSettings>): void {
@@ -474,12 +518,14 @@ export class AudioEngine {
     const voice = findLeadVoice(id);
     this.leadId = voice.id;
     this.leadSpec = voice.spec;
+    this.warm(voice.spec);
   }
 
   setBedVoice(id: string): void {
     const voice = findBedVoice(id);
     this.bedId = voice.id;
     this.bedSpec = voice.spec;
+    this.warm(voice.spec);
   }
 
   /**
@@ -494,6 +540,7 @@ export class AudioEngine {
     const voice = findBedVoice(id);
     this.keyBedId = voice.id;
     this.keyBedSpec = voice.spec;
+    this.warm(voice.spec);
   }
 
   /**
@@ -619,109 +666,38 @@ export class AudioEngine {
   noteOn(note: number, velocity: number, pan = 0): void {
     if (!this.running || !this.ctx) return;
     if (this.keyVoicingMode === 'bed') { this.bedKeyOn(note, velocity, pan); return; }
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = this.ctx.currentTime;
     this.noteOff(note, true);
 
     const v = clamp01(velocity);
     const freq = noteToFreq(note);
     const spec = this.leadSpec;
-    const { filter: f, env } = spec;
-
-    const amp = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    // Brightness tracks how hard the key was hit: this is most of why a synth
-    // reads as an instrument rather than a beep.
-    filter.frequency.setValueAtTime(clamp(freq * (f.base + v * v * f.track), 180, 15000), t);
-    filter.Q.value = f.q + v * f.qVel;
-
-    // Every layer of the instrument, and every operator modulating one.
-    const oscs: OscillatorNode[] = [];
-    for (const layer of spec.layers) {
-      const osc = ctx.createOscillator();
-      osc.type = layer.type;
-      osc.frequency.setValueAtTime(freq * layer.ratio, t);
-      if (layer.detune) osc.detune.setValueAtTime(layer.detune, t);
-
-      if (layer.fm) {
-        // Bright at the strike and gone a moment later, which is what turns a
-        // sine into a tine. `ping` has always done this; now it is a field.
-        const mod = ctx.createOscillator();
-        mod.type = 'sine';
-        mod.frequency.value = freq * layer.fm.ratio;
-        const modGain = ctx.createGain();
-        modGain.gain.setValueAtTime(freq * layer.fm.index, t);
-        modGain.gain.exponentialRampToValueAtTime(1, t + layer.fm.decay);
-        mod.connect(modGain).connect(osc.frequency);
-        mod.start(t);
-        oscs.push(mod);
-      }
-
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(layer.level + v * (layer.velLevel ?? 0), t);
-      // A layer given a decay of its own dies before the note does: the
-      // difference between a bell's strike and the tone left ringing under it.
-      if (layer.decay) g.gain.exponentialRampToValueAtTime(0.0001, t + layer.decay);
-      osc.connect(g).connect(filter);
-      osc.start(t);
-      oscs.push(osc);
-    }
-
-    // Breath, or the knock of the key itself: a slice of the shared buffer,
-    // the same layer the drums are mostly made of.
-    if (spec.noise) {
-      const n = spec.noise;
-      const src = ctx.createBufferSource();
-      src.buffer = this.noise;
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = n.freq;
-      bp.Q.value = n.q;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(n.gain * (0.5 + v * 0.5), t + 0.002);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + n.decay);
-      src.connect(bp).connect(g).connect(filter);
-      src.start(t, Math.random() * 0.9, n.decay + 0.02);
-    }
-
-    // Expression rides on top of whatever the envelopes below are doing, and
-    // it reaches the operators too. Cents are a ratio, so detuning carrier and
-    // operator by the same amount slides the whole spectrum together and keeps
-    // the ratio the timbre is made of. (The deviation itself is fixed at the
-    // strike, so bending an octave leaves the tine fractionally duller — worth
-    // far less than the sidebands staying where they belong.)
-    for (const osc of oscs) {
-      this.bendSource.connect(osc.detune);
-      this.lfoVibrato.connect(osc.detune);
-    }
-    this.lfoColour.connect(filter.frequency);
-
-    const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1) * LEAD_WIDTH;
-    filter.connect(amp).connect(pannerNode);
-    pannerNode.connect(this.musicBus);
+    // Everything about this strike that is arithmetic rather than a node.
+    const k = keyFactors(spec.keyTrack, note);
+    const h = humanize(Math.random, HUMANIZE * (spec.humanize ?? 1));
+    const register = registerOf(note);
+    const stretch = stretchCents(spec.stretch, note);
+    const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
 
     // Harder notes go wetter, whatever the instrument's own send level is.
-    const rev = ctx.createGain(); rev.gain.value = spec.reverb * (1 + v * 0.7);
-    const dly = ctx.createGain(); dly.gain.value = spec.delay * (1 + v * 1.4);
-    pannerNode.connect(rev).connect(this.hallSend);
-    pannerNode.connect(dly).connect(this.delaySend);
+    const chain = this.makeChain(pan, LEAD_WIDTH, {
+      hall: spec.reverb * (1 + v * 0.7), cab: 0, delay: spec.delay * (1 + v * 1.4),
+    }, this.musicBus);
+    const sources: Pitched[] = [];
+    for (const layer of spec.layers) {
+      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch));
+    }
+    // Breath, or the knock of the key itself: a slice of the shared buffer,
+    // the same layer the drums are mostly made of.
+    for (const n of noises(spec.noise)) this.addNoise(chain.filter, n, freq, v, t, k);
+    this.attachExpression(sources, chain.filter);
+    const peak = velocityPeak(v, spec.velDb) * spec.gain * k.level * h.level;
+    this.applyEnvelope(chain, spec, freq, v, t, k, h, peak);
     this.duck(t);
 
-    const peak = (0.06 + v * 0.3) * spec.gain;
-    amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.exponentialRampToValueAtTime(peak, t + env.attack);
-    // `decay` is measured from the strike, not from the top of the attack, so
-    // a slow swell and a fast one still arrive at the same place.
-    amp.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * env.sustain), t + env.decay);
-    // The filter closes as the note decays, the way a struck string does.
-    filter.frequency.exponentialRampToValueAtTime(
-      clamp(freq * (f.settle + v * f.settleVel), 160, 12000), t + f.settleTime);
-
     const voice: KeyVoice = {
-      note, startedAt: t, oscs, filter, amp, release: env.release, releasing: false,
+      note, startedAt: t, sources, filter: chain.filter, amp: chain.amp,
+      release: spec.env.release * k.release, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -743,46 +719,25 @@ export class AudioEngine {
    */
   private bedKeyOn(note: number, velocity: number, pan: number): void {
     if (!this.ctx) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = this.ctx.currentTime;
     this.noteOff(note, true);
 
     const v = clamp01(velocity);
     const freq = noteToFreq(note);
     const spec = this.keyBedSpec;
     const cut = spec.filter;
+    const h = humanize(Math.random, HUMANIZE * BED_HUMANIZE);
+    const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
 
-    const amp = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-
-    const oscs: OscillatorNode[] = [];
-    for (const layer of spec.layers) {
-      const osc = ctx.createOscillator();
-      osc.type = layer.type;
-      osc.frequency.setValueAtTime(freq * layer.ratio, t);
-      if (layer.detune) osc.detune.setValueAtTime(layer.detune, t);
-      const g = ctx.createGain();
-      g.gain.value = layer.level;
-      osc.connect(g).connect(filter);
-      osc.start(t);
-      oscs.push(osc);
-    }
-
-    for (const osc of oscs) {
-      this.bendSource.connect(osc.detune);
-      this.lfoVibrato.connect(osc.detune);
-    }
-    this.lfoColour.connect(filter.frequency);
-
-    const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1) * LEAD_WIDTH;
-    filter.connect(amp).connect(pannerNode);
-    pannerNode.connect(this.musicBus);
     // A pad lives further back in the room than a struck note does.
-    const rev = ctx.createGain(); rev.gain.value = BED_KEY_REVERB * (1 + v * 0.5);
-    pannerNode.connect(rev).connect(this.hallSend);
-    this.duck(t);
+    const chain = this.makeChain(pan, LEAD_WIDTH, {
+      hall: BED_KEY_REVERB * (1 + v * 0.5), cab: 0, delay: 0,
+    }, this.musicBus);
+    const sources: Pitched[] = [];
+    for (const layer of spec.layers) {
+      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0));
+    }
+    this.attachExpression(sources, chain.filter);
 
     // Swelled, not struck — but only just. A real pad attack would put the
     // sound behind the beat it was played on, and this is a rhythm game: the
@@ -790,6 +745,7 @@ export class AudioEngine {
     // arrive sooner, so playing into the key is how you sharpen it.
     const attack = BED_KEY_ATTACK * (1 - v * 0.45);
     const peak = (0.035 + v * 0.06) * spec.gain;
+    const { amp, filter } = chain;
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.exponentialRampToValueAtTime(peak, t + attack);
     // A plucked bed voice is a plucked thing whoever is holding the key: a harp
@@ -803,13 +759,192 @@ export class AudioEngine {
     filter.frequency.linearRampToValueAtTime(
       cut.end + (cut.peak - cut.end) * 0.35, t + BED_KEY_SETTLE);
     filter.Q.value = cut.q;
+    this.duck(t);
 
     const voice: KeyVoice = {
-      note, startedAt: t, oscs, filter, amp, release: BED_KEY_RELEASE, releasing: false,
+      note, startedAt: t, sources, filter, amp, release: BED_KEY_RELEASE, releasing: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
     this.cull();
+  }
+
+  // ------------------------------------------------------- voice builders ---
+
+  /**
+   * The nodes every pitched voice shares: one lowpass, one amplifier, one
+   * panner, and whichever sends it was given. Layers are added in front of
+   * the filter; the envelope is written onto the amplifier afterwards.
+   */
+  private makeChain(pan: number, width: number, sends: Sends, into: AudioNode): Chain {
+    const ctx = this.ctx!;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    const amp = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = clamp(pan, -1, 1) * width;
+    filter.connect(amp).connect(panner);
+    panner.connect(into);
+    const send = (level: number, to: AudioNode) => {
+      if (level <= 0) return;
+      const g = ctx.createGain();
+      g.gain.value = level;
+      panner.connect(g).connect(to);
+    };
+    send(sends.hall, this.hallSend);
+    send(sends.cab, this.cabSend);
+    send(sends.delay, this.delaySend);
+    return { filter, amp, panner };
+  }
+
+  /**
+   * One layer of a voice: its oscillator, its operator if it has one, and a
+   * gain that is the layer's own envelope. Unison turns it into several
+   * oscillators a few cents apart, each at a share of the level, so that the
+   * sum lands where one oscillator did and only the width has changed.
+   *
+   * The only place the engine asks what a layer is made of. A basic wave is
+   * the oscillator's own; a spectrum is a table from the cache.
+   */
+  private addLayer(
+    into: AudioNode, layer: VoiceLayer, freq: number, v: number, t: number,
+    k: KeyFactors, h: Humanized, register: Register, detunes: readonly number[], stretch: number,
+  ): Pitched[] {
+    const ctx = this.ctx!;
+    const out: Pitched[] = [];
+    const curve = layer.velCurve ? Math.pow(v, layer.velCurve) : 1;
+    const level = Math.max(
+      0.0001, ((layer.level + v * (layer.velLevel ?? 0)) * curve * h.level) / Math.sqrt(detunes.length));
+    const attack = layer.attack ?? 0;
+    const hold = layer.hold ?? 0;
+    for (const d of detunes) {
+      const osc = ctx.createOscillator();
+      if (layer.type === 'spectrum') osc.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register));
+      else osc.type = layer.type;
+      osc.frequency.setValueAtTime(freq * layer.ratio, t);
+      osc.detune.setValueAtTime((layer.detune ?? 0) + d + h.detune + stretch, t);
+
+      if (layer.fm) {
+        // Bright at the strike and gone a moment later, which is what turns a
+        // sine into a tine. `ping` has always done this; here it is a field.
+        const mod = ctx.createOscillator();
+        mod.type = 'sine';
+        mod.frequency.value = freq * layer.fm.ratio;
+        const modGain = ctx.createGain();
+        modGain.gain.setValueAtTime(freq * layer.fm.index, t);
+        modGain.gain.exponentialRampToValueAtTime(1, t + layer.fm.decay);
+        mod.connect(modGain).connect(osc.frequency);
+        mod.start(t);
+        out.push(mod);
+      }
+
+      const g = ctx.createGain();
+      if (attack > 0) {
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(level, t + attack);
+      } else {
+        g.gain.setValueAtTime(level, t);
+      }
+      if (hold > 0) g.gain.setValueAtTime(level, t + attack + hold);
+      // A layer given a decay of its own dies before the note does: the
+      // difference between a bell's strike and the tone left ringing under it.
+      if (layer.decay) g.gain.exponentialRampToValueAtTime(0.0001, t + attack + hold + layer.decay * k.decay);
+      osc.connect(g).connect(into);
+      osc.start(t);
+      out.push(osc);
+    }
+    return out;
+  }
+
+  /**
+   * A slice of the shared noise buffer under a note: breath, or a hammer.
+   * Its band can follow the pitch, which is how a hammer's knock stays a
+   * knock up the keyboard rather than turning into a hiss.
+   */
+  private addNoise(into: AudioNode, n: VoiceNoise, freq: number, v: number, t: number, k: KeyFactors): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = clamp(n.pitchTrack ? freq * n.pitchTrack : n.freq, 40, 16000);
+    bp.Q.value = n.q;
+    const g = ctx.createGain();
+    const start = t + (n.delay ?? 0);
+    const attack = n.attack ?? 0.002;
+    const curve = n.velCurve ? Math.pow(v, n.velCurve) : 1;
+    const level = Math.max(0.0001, n.gain * (0.5 + v * 0.5) * curve * k.noise);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(level, start + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + attack + n.decay);
+    src.connect(bp).connect(g).connect(into);
+    src.start(start, Math.random() * 0.9, attack + n.decay + 0.02);
+  }
+
+  /**
+   * The note's own envelope, on the amplifier and the filter together.
+   *
+   * Brightness tracks how hard the key was hit — most of why a synth reads as
+   * an instrument rather than a beep — and closes as the note decays, the way
+   * a struck string does. `decay` is measured from the strike, not from the
+   * top of the attack, so a slow swell and a fast one still arrive at the
+   * same place.
+   */
+  private applyEnvelope(
+    chain: Chain, spec: VoiceSpec, freq: number, v: number, t: number,
+    k: KeyFactors, h: Humanized, peak: number,
+  ): void {
+    const { filter: f, env } = spec;
+    const attack = Math.max(0.001, env.attack * (1 - (spec.attackVel ?? 0) * v) * h.attack);
+    const open = clamp(freq * (f.base + v * v * f.track) * k.bright * h.bright, 180, 15000);
+    chain.filter.frequency.setValueAtTime(open, t);
+    chain.filter.Q.value = f.q + v * f.qVel;
+    chain.amp.gain.setValueAtTime(0.0001, t);
+    chain.amp.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), t + attack);
+    chain.amp.gain.exponentialRampToValueAtTime(
+      Math.max(0.0002, peak * env.sustain), t + Math.max(attack + 0.001, env.decay * k.decay));
+    chain.filter.frequency.exponentialRampToValueAtTime(
+      clamp(freq * (f.settle + v * f.settleVel) * k.bright, 160, 12000), t + f.settleTime);
+  }
+
+  /**
+   * Expression rides on top of whatever the envelopes are doing, and it
+   * reaches the operators too. Cents are a ratio, so detuning carrier and
+   * operator by the same amount slides the whole spectrum together and keeps
+   * the ratio the timbre is made of.
+   */
+  private attachExpression(sources: readonly Pitched[], filter: BiquadFilterNode): void {
+    for (const s of sources) {
+      this.bendSource.connect(s.detune);
+      this.lfoVibrato.connect(s.detune);
+    }
+    this.lfoColour.connect(filter.frequency);
+  }
+
+  /** The wave for a spectrum layer in a register: built on the first request, kept after. */
+  private wave(ref: SpectrumRef, register: Register): PeriodicWave {
+    const key = spectrumKey(ref, register);
+    let w = this.waves.get(key);
+    if (!w) {
+      const ctx = this.ctx!;
+      const { real, imag } = spectrum(ref, register, ctx.sampleRate);
+      w = ctx.createPeriodicWave(real, imag);
+      this.waves.set(key, w);
+    }
+    return w;
+  }
+
+  /**
+   * Build every table a voice will ask for, now rather than on its first note.
+   * A periodic wave is a few dozen band-limited tables and a millisecond or
+   * two to make, which is a millisecond or two the note path does not have.
+   */
+  private warm(spec: { layers: readonly VoiceLayer[] }): void {
+    if (!this.ready) return;
+    for (const layer of spec.layers) {
+      if (layer.type !== 'spectrum') continue;
+      for (const r of REGISTERS) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r);
+    }
   }
 
   noteOff(note: number, immediate = false): void {
@@ -829,12 +964,12 @@ export class AudioEngine {
     voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
     const stop = t + seconds + 0.02;
-    for (const osc of voice.oscs) osc.stop(stop);
+    for (const s of voice.sources) s.stop(stop);
     // The expression sources are permanent and hold a reference to every param
     // they feed, so a voice that is not explicitly unhooked never goes away.
-    for (const osc of voice.oscs) {
-      this.bendSource.disconnect(osc.detune);
-      this.lfoVibrato.disconnect(osc.detune);
+    for (const s of voice.sources) {
+      this.bendSource.disconnect(s.detune);
+      this.lfoVibrato.disconnect(s.detune);
     }
     this.lfoColour.disconnect(voice.filter.frequency);
     const idx = this.active.indexOf(voice);
@@ -1119,7 +1254,11 @@ export class AudioEngine {
    * few milliseconds the same voice is a struck chord, which is what an
    * accompaniment pattern comps with. A separate percussive voice would have
    * meant a second timbre, and `mallet` in particular feeds a delay whose time
-   * is pinned to 96 bpm.
+   * is pinned to the tempo.
+   *
+   * One filter and one envelope per note, in front of every layer. The layers
+   * used to carry one each, all identical — and a sum of identical linear
+   * filters is the same signal through a single one, at a third of the cost.
    */
   pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0, attack = seconds * 0.35): void {
     if (!this.running || !this.ctx || !this.settings.bed) return;
@@ -1135,41 +1274,39 @@ export class AudioEngine {
     const struck = fall > 0 || rise < seconds * 0.2;
     const cut = spec.filter;
     const share = (gain / notes.length) * spec.gain;
+    const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
     for (let i = 0; i < notes.length; i++) {
       const freq = noteToFreq(notes[i]);
+      const h = humanize(Math.random, HUMANIZE * BED_HUMANIZE);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(struck ? cut.startStruck : cut.start, t);
+      f.frequency.linearRampToValueAtTime(
+        struck ? cut.peakStruck : cut.peak,
+        t + (fall ? Math.min(fall * 0.1, 0.02) : struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
+      );
+      // Brightness dies with the note, not with the bar it was given.
+      f.frequency.linearRampToValueAtTime(cut.end, t + (fall || seconds));
+      f.Q.value = cut.q;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      if (fall) {
+        // Struck and left to ring. The caller still owns how long the note
+        // occupies — a plucked voice only decides what happens inside it.
+        g.gain.exponentialRampToValueAtTime(share, t + Math.min(0.006, fall * 0.2));
+        g.gain.exponentialRampToValueAtTime(0.0001, t + fall);
+      } else {
+        g.gain.linearRampToValueAtTime(share, t + rise);
+        g.gain.linearRampToValueAtTime(0.0001, t + seconds);
+      }
+      const pannerNode = ctx.createStereoPanner();
+      pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
+      f.connect(g).connect(pannerNode);
+      pannerNode.connect(this.padGen);
       for (const layer of spec.layers) {
-        const osc = ctx.createOscillator();
-        osc.type = layer.type;
-        osc.frequency.value = freq * layer.ratio;
-        osc.detune.value = layer.detune ?? 0;
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.frequency.setValueAtTime(struck ? cut.startStruck : cut.start, t);
-        f.frequency.linearRampToValueAtTime(
-          struck ? cut.peakStruck : cut.peak,
-          t + (fall ? Math.min(fall * 0.1, 0.02) : struck ? Math.min(seconds * 0.9, rise + 0.03) : seconds * 0.5),
-        );
-        // Brightness dies with the note, not with the bar it was given.
-        f.frequency.linearRampToValueAtTime(cut.end, t + (fall || seconds));
-        f.Q.value = cut.q;
-        const g = ctx.createGain();
-        const peak = share * layer.level;
-        g.gain.setValueAtTime(0.0001, t);
-        if (fall) {
-          // Struck and left to ring. The caller still owns how long the note
-          // occupies — a plucked voice only decides what happens inside it.
-          g.gain.exponentialRampToValueAtTime(peak, t + Math.min(0.006, fall * 0.2));
-          g.gain.exponentialRampToValueAtTime(0.0001, t + fall);
-        } else {
-          g.gain.linearRampToValueAtTime(peak, t + rise);
-          g.gain.linearRampToValueAtTime(0.0001, t + seconds);
+        for (const s of this.addLayer(f, layer, freq, 0.5, t, NO_TRACK, h, registerOf(notes[i]), detunes, 0)) {
+          s.stop(t + seconds + 0.1);
         }
-        const pannerNode = ctx.createStereoPanner();
-        pannerNode.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
-        osc.connect(f).connect(g).connect(pannerNode);
-        pannerNode.connect(this.padGen);
-        osc.start(t);
-        osc.stop(t + seconds + 0.1);
       }
     }
   }

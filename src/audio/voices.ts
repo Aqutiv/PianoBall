@@ -16,11 +16,21 @@
  * everywhere is the app's identity, and a picker is no reason to lose it.
  */
 
+import type { KeyTrack } from './shaping';
+import type { SpectrumRef } from './spectra';
+
 // ------------------------------------------------------------ played keys ---
+
+/**
+ * What a layer's oscillator is made of: one of the browser's four waves, or a
+ * `spectrum` — a table of partials from `spectra.ts`, which is how a layer
+ * gets to be a piano string or a vowel rather than a saw.
+ */
+export type LayerType = OscillatorType | 'spectrum';
 
 /** One oscillator of a key voice. */
 export interface VoiceLayer {
-  type: OscillatorType;
+  type: LayerType;
   /** Multiple of the fundamental. 0.5 is a sub, 2.76 an inharmonic partial. */
   ratio: number;
   level: number;
@@ -40,6 +50,17 @@ export interface VoiceLayer {
    * away over `decay` — a bright strike that settles into a tone.
    */
   fm?: { ratio: number; index: number; decay: number };
+  /** The partial table of a `spectrum` layer. Ignored on the basic waves. */
+  spectrum?: SpectrumRef;
+  /**
+   * Level follows v^velCurve on top of `velLevel`: a bright layer that is
+   * silent when the key is stroked and takes over when it is hit, which is
+   * what a sampler's velocity layers do.
+   */
+  velCurve?: number;
+  /** This layer's own onset, in seconds: a rise of its own, and a hold before its own decay. */
+  attack?: number;
+  hold?: number;
 }
 
 /** A slice of the shared noise buffer under the attack: breath, or a click. */
@@ -48,11 +69,33 @@ export interface VoiceNoise {
   q: number;
   decay: number;
   gain: number;
+  /**
+   * The band's centre as a multiple of the note rather than in Hz, so a
+   * hammer's knock stays a knock up the keyboard instead of becoming a hiss.
+   */
+  pitchTrack?: number;
+  /** Seconds to full, and seconds before it starts at all. */
+  attack?: number;
+  delay?: number;
+  /** As a layer's: the burst follows v to this power. */
+  velCurve?: number;
+}
+
+/** Two or three oscillators a few cents apart for every one: the strings behind a piano note. */
+export interface Unison {
+  voices: 2 | 3;
+  cents: number;
+}
+
+/** The noise of a spec as a list, however it was written. */
+export function noises(n: VoiceNoise | readonly VoiceNoise[] | undefined): readonly VoiceNoise[] {
+  if (!n) return [];
+  return Array.isArray(n) ? n : [n as VoiceNoise];
 }
 
 export interface VoiceSpec {
   layers: readonly VoiceLayer[];
-  noise?: VoiceNoise;
+  noise?: VoiceNoise | readonly VoiceNoise[];
   /**
    * The lowpass every layer runs through. It opens to `freq * (base + v² *
    * track)` on the attack and settles at `freq * (settle + v * settleVel)`,
@@ -70,6 +113,20 @@ export interface VoiceSpec {
   /** Send levels, before the shared tilt that sends a harder note wetter. */
   reverb: number;
   delay: number;
+  /**
+   * How far down the softest strike is from the hardest, in decibels. Left
+   * out, the velocity curve is the straight line the app has always had.
+   */
+  velDb?: number;
+  /** Fraction the attack shortens by at full velocity. */
+  attackVel?: number;
+  /** How the voice changes up and down the keyboard. See `shaping.ts`. */
+  keyTrack?: KeyTrack;
+  unison?: Unison;
+  /** Scale on the small random drift every note gets. Zero for a voice that must not drift. */
+  humanize?: number;
+  /** Stretch tuning, in cents at one octave from the middle, growing with the square of the distance. */
+  stretch?: number;
 }
 
 const KEY_BASE: VoiceSpec = {
@@ -82,6 +139,8 @@ const KEY_BASE: VoiceSpec = {
 };
 
 const key = (p: Partial<VoiceSpec>): VoiceSpec => ({ ...KEY_BASE, ...p });
+/** A voice that must not drift: an organ's pipes and a synth's oscillators hold their pitch. */
+const steady = (p: Partial<VoiceSpec>): VoiceSpec => key({ humanize: 0, ...p });
 
 export interface VoiceDef {
   id: string;
@@ -178,7 +237,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   // is let go, which is `sustain: 1` and a release measured in hundredths.
   {
     id: 'drawbar', name: 'Drawbar', family: 'Organ',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'sine', ratio: 0.5, level: 0.3 },
         { type: 'sine', ratio: 1, level: 0.36 },
@@ -192,7 +251,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'rock-organ', name: 'Rock Organ', family: 'Organ',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'square', ratio: 1, level: 0.34 },
         { type: 'sine', ratio: 2, level: 0.22 },
@@ -207,7 +266,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'pipe-organ', name: 'Pipe Organ', family: 'Organ',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'sine', ratio: 1, level: 0.34 },
         { type: 'sine', ratio: 2, level: 0.2 },
@@ -222,7 +281,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'reed-organ', name: 'Reed Organ', family: 'Organ',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'square', ratio: 1, level: 0.36 },
         { type: 'sawtooth', ratio: 1, level: 0.22, detune: 6 },
@@ -367,7 +426,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   // --------------------------------------------------------------- synth ---
   {
     id: 'saw-lead', name: 'Saw Lead', family: 'Synth',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'sawtooth', ratio: 1, level: 0.5 },
         { type: 'sawtooth', ratio: 1, level: 0.22, detune: 12 },
@@ -379,7 +438,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'square-lead', name: 'Square Lead', family: 'Synth',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'square', ratio: 1, level: 0.5 },
         { type: 'square', ratio: 1, level: 0.18, detune: -9 },
@@ -391,7 +450,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'supersaw', name: 'Supersaw', family: 'Synth',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'sawtooth', ratio: 1, level: 0.26, detune: -14 },
         { type: 'sawtooth', ratio: 1, level: 0.26, detune: -5 },
@@ -405,7 +464,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'bright-poly', name: 'Bright Poly', family: 'Synth',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'square', ratio: 1, level: 0.34 },
         { type: 'sawtooth', ratio: 1, level: 0.26, detune: 8 },
@@ -418,7 +477,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'sub-bass', name: 'Sub Bass', family: 'Synth',
-    spec: key({
+    spec: steady({
       layers: [
         { type: 'sine', ratio: 0.5, level: 0.6 },
         { type: 'triangle', ratio: 1, level: 0.2 },
@@ -444,10 +503,11 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
  * length it actually *sounds* for.
  */
 export interface BedLayer {
-  type: OscillatorType;
+  type: LayerType;
   ratio: number;
   level: number;
   detune?: number;
+  spectrum?: SpectrumRef;
 }
 
 export interface BedSpec {
@@ -473,6 +533,7 @@ export interface BedSpec {
    */
   pluck?: number;
   gain: number;
+  unison?: Unison;
 }
 
 const BED_BASE: BedSpec = {
