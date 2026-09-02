@@ -17,6 +17,10 @@ export interface Material {
 
 export type SoundTag = 'wood' | 'rail' | 'rubber' | 'metal' | 'plastic' | 'bumper' | 'key' | 'glass' | 'silent';
 
+/** Every tag, as a list, so the sound bank can be checked for covering them all. */
+export const SOUND_TAGS: readonly SoundTag[] =
+  ['wood', 'rail', 'rubber', 'metal', 'plastic', 'bumper', 'key', 'glass', 'silent'];
+
 export const MATERIALS = {
   wall:    { restitution: 0.42, friction: 0.045, kick: 0,    sound: 'wood'    },
   rail:    { restitution: 0.52, friction: 0.030, kick: 0,    sound: 'rail'    },

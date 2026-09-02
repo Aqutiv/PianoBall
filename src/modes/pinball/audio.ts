@@ -43,6 +43,9 @@ export class PinballAudio {
    * is the game's to publish on, and this is not the game.
    */
   onGroove: ((hit: GrooveHit) => void) | null = null;
+  /** The last key struck: how hard, and where. The plunger fires from the serve it aimed. */
+  private lastForce = 0.5;
+  private lastPan = 0;
 
   constructor(
     private readonly engine: AudioEngine,
@@ -66,6 +69,12 @@ export class PinballAudio {
     return clamp((x / this.game.def.width - 0.5) * 1.5, -1, 1);
   }
 
+  /** How far up the table, 0 at the keys and 1 at the far wall. */
+  private depth(y: number): number {
+    const near = this.game.def.keybed?.baseY ?? 0;
+    return clamp01((y - near) / Math.max(1, this.game.def.height - near));
+  }
+
   /** Off-scale notes are nudged into the table's key when assist is on. */
   tune(note: number): number {
     const m = this.game.music;
@@ -79,6 +88,8 @@ export class PinballAudio {
 
     offs.push(bus.on('key', ({ key, note, force }) => {
       engine.noteOn(this.tune(note), force, this.pan(key.geom.cx));
+      this.lastForce = force;
+      this.lastPan = this.pan(key.geom.cx);
       // Groove is judged on the press, not on the ball's arrival. When a ball
       // landing on an element was what got judged, the thing being scored was
       // something the player could not aim at — a near-random gate that reset
@@ -95,13 +106,27 @@ export class PinballAudio {
       engine.noteOff(this.tune(note));
     }));
 
-    // The launch itself gets an accent, so a good hit is audible as well as visible.
+    // The throw itself is the flipper's solenoid, harder the harder the key
+    // was hit, so a good hit is audible as well as visible.
     offs.push(bus.on('launch', (ev) => {
-      engine.ping(220 + ev.velocity * 520, 0.1 + ev.velocity * 0.16, this.pan(ev.x), 0.16);
+      engine.mech('flipper', 0.5 + ev.velocity * 0.5, this.pan(ev.x));
     }));
 
-    offs.push(bus.on('impact', ({ sound, energy, note, x }) => {
-      engine.impact(sound, energy, this.pan(x), note);
+    // The ball meeting the table: the surface rung at its own modes, from
+    // wherever on the table it happened, as square or as glancing as it was.
+    offs.push(bus.on('impact', ({ sound, energy, slide, kind, note, x, y }) => {
+      const pan = this.pan(x);
+      if (kind === 'ball') {
+        engine.mech('ballclick', clamp01(energy / 900), pan);
+        return;
+      }
+      const glance = energy / Math.max(1e-6, Math.hypot(energy, slide));
+      engine.hit(sound, energy, { pan, depth: this.depth(y), glance, note });
+    }));
+
+    // The serve: the spring let go, from the key that aimed it.
+    offs.push(bus.on('state', ({ from, to }) => {
+      if (from === 'serve' && to === 'play') engine.mech('plunger', 0.4 + this.lastForce * 0.6, this.lastPan);
     }));
 
     // Each family of element is its own instrument; see `strikes.ts`. What
@@ -120,14 +145,16 @@ export class PinballAudio {
         const voice = s.drum.voices[pan < 0 || s.drum.voices.length < 2 ? 0 : 1];
         engine.drum(voice, Math.min(1, base * 1.6 * s.drum.gain));
       }
+      // The machine under the music: a coil, a target falling, a switch.
+      if (s.mech) engine.mech(s.mech.name, Math.min(1, base * 1.4 * s.mech.gain), pan);
       if (s.roll) {
         // A roll's length follows the spin the hit has just put on the
-        // element, dying away hit by hit; placed ahead on the audio clock.
+        // element, dying away tick by tick; placed ahead on the audio clock.
         const n = Math.min(s.roll.max, Math.round(el.spinRate * s.roll.perSpin));
         const gain = Math.min(1, base * 1.2 * s.roll.gain);
         for (let i = 1; i <= n; i++) {
           const at = engine.now + i * s.roll.gap;
-          this.hold(engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), at), at + 0.5);
+          this.hold(engine.mech(s.roll.mech, gain * (1 - i / (n + 1)), pan, at), at + 0.5);
         }
       }
     }));
@@ -146,8 +173,10 @@ export class PinballAudio {
       if (name) engine.swell(true, 0.5, 0.16);
     }));
 
-    offs.push(bus.on('drain', ({ saved }) => {
+    offs.push(bus.on('drain', ({ saved, x }) => {
       engine.swell(false, saved ? 0.7 : 1.3, saved ? 0.22 : 0.32);
+      // The ball into the trough, or the saver throwing it back.
+      engine.mech(saved ? 'kickback' : 'trough', 0.9, this.pan(x));
       this.bed.groove.reset();
     }));
 

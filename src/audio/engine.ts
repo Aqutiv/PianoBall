@@ -10,6 +10,10 @@ import {
 import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
 import { Lru, renderString, velocityBucket, type Bucket, type StringSpec } from './strings';
 import {
+  MECHS, SURFACES, ShotBudget, modeQ, type Click, type MechName, type Sweep, type Thump,
+} from './surfaces';
+import type { SoundTag } from '../physics/colliders';
+import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
   type BedSpec, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
 } from './voices';
@@ -52,27 +56,6 @@ export const DEFAULT_AUDIO: AudioSettings = {
 
 const AUDIO_STORAGE_KEY = 'audio';
 const LEGACY_ASSIST_STORAGE_KEY = 'audioAssist';
-
-/** Character of an impact, chosen by the surface the ball struck. */
-interface ImpactProfile {
-  freq: number;
-  q: number;
-  decay: number;
-  tone: number;
-  gain: number;
-}
-
-const IMPACTS: Record<string, ImpactProfile> = {
-  wood:    { freq: 340,  q: 2.4, decay: 0.10, tone: 0.15, gain: 0.55 },
-  rail:    { freq: 900,  q: 4.5, decay: 0.09, tone: 0.30, gain: 0.5  },
-  metal:   { freq: 2100, q: 9,   decay: 0.28, tone: 0.62, gain: 0.42 },
-  rubber:  { freq: 210,  q: 1.6, decay: 0.13, tone: 0.05, gain: 0.7  },
-  plastic: { freq: 1300, q: 5,   decay: 0.08, tone: 0.35, gain: 0.5  },
-  bumper:  { freq: 620,  q: 3.2, decay: 0.22, tone: 0.5,  gain: 0.75 },
-  key:     { freq: 480,  q: 2.2, decay: 0.11, tone: 0.25, gain: 0.5  },
-  glass:   { freq: 2800, q: 12,  decay: 0.34, tone: 0.7,  gain: 0.34 },
-  silent:  { freq: 400,  q: 1,   decay: 0.01, tone: 0,    gain: 0    },
-};
 
 const MAX_VOICES = 48;
 
@@ -155,6 +138,48 @@ interface StringAt {
   note: number;
   bucket: Bucket;
 }
+
+/** Where a hit is placed and how it landed. All optional: a bare hit is square, near and centred. */
+interface HitOptions {
+  pan?: number;
+  /** How far up the table, 0 at the keys and 1 at the far wall. */
+  depth?: number;
+  /** How square the hit was: 1 head-on, 0 a graze. */
+  glance?: number;
+  /** The struck element's note, for surfaces that ring at it. */
+  note?: number | null;
+  at?: number;
+}
+
+/** Closing speed that counts as a full-strength hit, in table units per second. */
+const IMPACT_FULL = 1500;
+/** How much quieter the softest hit that still sounds is than the hardest. */
+const HIT_RANGE_DB = 24;
+/** Sends for the table's sounds: mostly the box, a little of the hall. The ball is inside the machine. */
+const HIT_HALL = 0.12;
+const HIT_CAB = 0.55;
+const MECH_HALL = 0.1;
+const MECH_CAB = 0.5;
+/** How long a mechanism holds its place in the budget. */
+const MECH_SECONDS = 0.5;
+/** Table one-shots allowed at once, and on a machine that has been found wanting. */
+const MAX_SHOTS = 14;
+const MAX_SHOTS_LITE = 8;
+
+/** Fade a one-shot out in a few milliseconds when the budget takes its place back. */
+function cutShort(out: GainNode, now: number): void {
+  out.gain.cancelScheduledValues(now);
+  out.gain.setValueAtTime(out.gain.value, now);
+  out.gain.linearRampToValueAtTime(0, now + 0.01);
+}
+
+/**
+ * How much harder a narrow resonator has to be driven. A narrow band takes
+ * little of a burst's energy and rings quietly for it; the square root is
+ * the middle ground between an impulse's response and a steady one's, and
+ * the cap keeps a glass mode from being a whistle.
+ */
+const ringGain = (q: number) => Math.min(12, Math.sqrt(Math.max(1, q)));
 
 /** Most rendered strings kept, and their weight: half a megabyte a second at 48 kHz. */
 const STRING_ENTRIES = 120;
@@ -320,6 +345,8 @@ export class AudioEngine {
   private waves = new Map<string, PeriodicWave>();
   /** Rendered strings, by voice, note and pluck. */
   private strings = new Lru<AudioBuffer>(STRING_ENTRIES, STRING_BYTES);
+  /** The table's one-shots sounding now, so a multiball never turns to noise. */
+  private shots = new ShotBudget(MAX_SHOTS);
   /** Which warm-up is current; an older one finding this changed stops. */
   private warming = 0;
   private sustained = new Set<number>();
@@ -770,6 +797,7 @@ export class AudioEngine {
   setLite(on: boolean): void {
     if (this.lite === on) return;
     this.lite = on;
+    this.shots.max = on ? MAX_SHOTS_LITE : MAX_SHOTS;
     if (!this.ready || !this.ctx) return;
     this.hallConv.buffer = this.room(on ? HALL_LITE : HALL);
     this.clip.oversample = on ? 'none' : '2x';
@@ -1345,46 +1373,160 @@ export class AudioEngine {
     return { cancel: () => pannerNode.disconnect() };
   }
 
-  /** Ball meeting a surface. Loudness and brightness follow the impact energy. */
-  impact(tag: string, energy: number, pan = 0, note: number | null = null): void {
-    if (!this.running || !this.ctx) return;
-    const profile = IMPACTS[tag] ?? IMPACTS.wood;
-    if (profile.gain <= 0) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
-    const e = clamp01(energy / 1500);
-    const level = profile.gain * (0.1 + e * 0.9) * 0.6;
-    if (level < 0.004) return;
+  // ------------------------------------------------------------ the table ---
 
+  /**
+   * The ball meeting a surface: the surface's own modes, rung.
+   *
+   * A short burst of noise — shorter and brighter the harder the hit — is put
+   * through a bank of resonators at the surface's modes, each ringing for its
+   * own time (see `surfaces.ts`). Rubber thumps, wood knocks, a post rings.
+   * `glance` is how square the hit was, one being head-on; `depth` how far up
+   * the table, one being the far wall, and a far hit is quieter and duller.
+   * Metal and glass also ring at the element's note when it has one, so even
+   * the incidental sounds carry the table's tuning.
+   */
+  hit(tag: SoundTag, energy: number, opts: HitOptions = {}): void {
+    if (!this.running || !this.ctx) return;
+    const s = SURFACES[tag];
+    if (!s || s.gain <= 0) return;
+    const ctx = this.ctx;
+    const t = Math.max(ctx.currentTime, opts.at ?? 0);
+    const e = clamp01(energy / IMPACT_FULL);
+    const square = clamp01(opts.glance ?? 1);
+    const depth = clamp01(opts.depth ?? 0);
+    const level = s.gain * Math.pow(10, ((e - 1) * HIT_RANGE_DB) / 20) * (0.6 + 0.4 * square) * (1 - 0.35 * depth);
+    if (level < 0.003) return;
+    const ring = s.modes.reduce((m, [, , t60]) => Math.max(m, t60), 0);
+    const out = ctx.createGain();
+    const prio = tag === 'bumper' || tag === 'key' ? 2 : 1;
+    if (!this.shots.admit(t, prio, t + ring + 0.05, () => cutShort(out, ctx.currentTime))) return;
+
+    // The excitation: a few milliseconds of noise, dulled by a soft hit and
+    // sharpened by a glancing one.
+    const burst = (s.burst / 1000) * (1.4 - 0.8 * e);
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
-    src.playbackRate.value = 0.8 + Math.random() * 0.45;
+    const exc = ctx.createBiquadFilter();
+    exc.type = 'lowpass';
+    exc.frequency.value = Math.min(18000, (s.bright + (s.velBright - s.bright) * e) * (1 + 0.5 * (1 - square)));
+    const drive = ctx.createGain();
+    drive.gain.setValueAtTime(level, t);
+    drive.gain.exponentialRampToValueAtTime(0.0001, t + burst);
+    src.connect(exc).connect(drive);
+
+    // The modes: one resonator each, a harder hit pushing the bank up a little.
+    const sum = ctx.createGain();
+    const base = s.base * (0.95 + 0.1 * e);
+    for (const [ratio, gain, t60] of s.modes) {
+      const f = Math.min(18000, base * ratio);
+      const q = modeQ(f, t60);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = f;
+      bp.Q.value = q;
+      const g = ctx.createGain();
+      g.gain.value = gain * ringGain(q);
+      drive.connect(bp).connect(g).connect(sum);
+    }
+    // Distance: the far end of the table is duller as well as quieter.
+    const dark = ctx.createBiquadFilter();
+    dark.type = 'lowpass';
+    dark.frequency.value = 12000 * Math.pow(2, -depth);
+    sum.connect(dark).connect(out);
+    if (s.thump) this.thump(out, s.thump, level, t);
+    this.place(out, opts.pan ?? 0, HIT_HALL, HIT_CAB);
+    src.start(t, Math.random() * 0.9, burst + 0.02);
+
+    if (opts.note != null && s.tuned) this.ping(noteToFreq(opts.note), level * 0.4, opts.pan ?? 0, ring);
+  }
+
+  /**
+   * The machine itself: a flipper's solenoid, the plunger's spring, a target
+   * dropping, a switch closing under a rollover. Each is a few of the same
+   * primitives — a pitch-dropping thump, a click of noise, a sweep, a surface
+   * rung — put together in `surfaces.ts`. Schedulable like a drum, because a
+   * spinner's ticks are placed ahead as it slows, and cancellable like one.
+   */
+  mech(name: MechName, gain = 1, pan = 0, at = 0): Scheduled {
+    if (!this.running || !this.ctx) return NOTHING;
+    const m = MECHS[name];
+    const ctx = this.ctx;
+    const t = Math.max(ctx.currentTime, at || ctx.currentTime);
+    const level = clamp01(gain);
+    if (level < 0.01) return NOTHING;
+    const out = ctx.createGain();
+    if (!this.shots.admit(t, 3, t + MECH_SECONDS, () => cutShort(out, ctx.currentTime))) return NOTHING;
+    if (m.thump) this.thump(out, m.thump, level, t + (m.thump.delay ?? 0));
+    if (m.click) this.burst(out, m.click, level, t + (m.click.delay ?? 0));
+    if (m.rattle) this.burst(out, m.rattle, level, t + (m.rattle.delay ?? 0));
+    if (m.sweep) this.sweep(out, m.sweep, level, t);
+    this.place(out, pan, MECH_HALL, MECH_CAB);
+    if (m.surface) this.hit(m.surface.tag, m.surface.energy * IMPACT_FULL * level, { pan, at: t });
+    return { cancel: () => out.disconnect() };
+  }
+
+  /** A one-shot's way out: through a panner to the effects bus and the two rooms. */
+  private place(out: AudioNode, pan: number, hall: number, cab: number): void {
+    const ctx = this.ctx!;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = clamp(pan, -1, 1);
+    out.connect(panner);
+    panner.connect(this.fxBus);
+    const rev = ctx.createGain();
+    rev.gain.value = hall;
+    panner.connect(rev).connect(this.hallSend);
+    const box = ctx.createGain();
+    box.gain.value = cab;
+    panner.connect(box).connect(this.cabSend);
+  }
+
+  /** A sine falling onto its pitch: the body of a thump, the recipe a kick drum uses. */
+  private thump(into: AudioNode, th: Thump, level: number, t: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(th.freq * th.drop, t);
+    osc.frequency.exponentialRampToValueAtTime(th.freq, t + th.decay * 0.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, level * th.gain), t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + th.decay);
+    osc.connect(g).connect(into);
+    osc.start(t);
+    osc.stop(t + th.decay + 0.05);
+  }
+
+  /** A slice of noise through a bandpass: a click, a rattle, a knock. */
+  private burst(into: AudioNode, c: Click, level: number, t: number): void {
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(profile.freq * (0.85 + e * 0.7), t);
-    bp.Q.value = profile.q;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 120;
+    bp.frequency.value = c.freq;
+    bp.Q.value = c.q;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(level, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + profile.decay * (0.6 + e * 0.8));
-    const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1);
-    src.connect(bp).connect(hp).connect(g).connect(pannerNode);
-    pannerNode.connect(this.fxBus);
-    // Mostly the box, a little of the hall: the ball is inside the machine.
-    const rev = ctx.createGain(); rev.gain.value = 0.12;
-    pannerNode.connect(rev).connect(this.hallSend);
-    const box = ctx.createGain(); box.gain.value = 0.55;
-    pannerNode.connect(box).connect(this.cabSend);
-    src.start(t, Math.random() * 0.9, 0.4);
+    g.gain.setValueAtTime(Math.max(0.0001, level * c.gain), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + c.decay);
+    src.connect(bp).connect(g).connect(into);
+    src.start(t, Math.random() * 0.9, c.decay + 0.02);
+  }
 
-    // Metallic surfaces also ring at a pitch, so even incidental sounds carry
-    // the table's tuning.
-    if (note !== null && profile.tone > 0.4) {
-      this.ping(noteToFreq(note), level * 0.5, pan, profile.decay * 2.5);
-    }
+  /** A sine sliding between two pitches and dying: a spring letting go. */
+  private sweep(into: AudioNode, sw: Sweep, level: number, t: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(sw.from, t);
+    osc.frequency.exponentialRampToValueAtTime(sw.to, t + sw.time);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, level * sw.gain), t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + sw.decay);
+    osc.connect(g).connect(into);
+    osc.start(t);
+    osc.stop(t + sw.decay + 0.05);
   }
 
   /**

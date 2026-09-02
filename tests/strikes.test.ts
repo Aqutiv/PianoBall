@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { STRIKES, strikeFor } from '../src/modes/pinball/strikes';
 import { DRUM_SPECS, type DrumVoice } from '../src/audio/drums';
+import { MECHS, type MechName } from '../src/audio/surfaces';
+import type { SoundTag } from '../src/physics/colliders';
 import { Game } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
@@ -9,13 +11,14 @@ import { ChordBed } from '../src/audio/bed';
 import { PinballAudio } from '../src/modes/pinball/audio';
 
 describe('the table as a band', () => {
-  it('gives every scoring family a voice, and names only drums the bank has', () => {
+  it('gives every scoring family a voice, and names only drums and mechanisms the banks have', () => {
     for (const kind of ['bumper', 'sling', 'target', 'rollover', 'spinner']) {
       expect(STRIKES[kind], kind).toBeDefined();
     }
     for (const [name, s] of Object.entries(STRIKES)) {
       for (const v of s.drum?.voices ?? []) expect(DRUM_SPECS[v], `${name}/${v}`).toBeDefined();
-      if (s.roll) expect(DRUM_SPECS[s.roll.voice], name).toBeDefined();
+      if (s.roll) expect(MECHS[s.roll.mech], name).toBeDefined();
+      if (s.mech) expect(MECHS[s.mech.name], name).toBeDefined();
       if (s.mallet) {
         expect(s.mallet.bright, name).toBeGreaterThanOrEqual(0);
         expect(s.mallet.bright, name).toBeLessThanOrEqual(1);
@@ -36,42 +39,55 @@ describe('the table as a band', () => {
  * What reaches the engine when the ball hits something. Counted rather than
  * heard: the engine here is a recorder, so what is asserted is the routing.
  */
-describe('striking the table', () => {
-  interface Mallet { note: number; gain: number; bright: number }
-  interface Drum { voice: DrumVoice; gain: number; at: number }
+interface Mallet { note: number; gain: number; bright: number }
+interface Drum { voice: DrumVoice; gain: number; at: number }
+interface Mech { name: MechName; gain: number; pan: number; at: number }
+interface Hit { tag: SoundTag; energy: number; pan?: number; depth?: number; glance?: number; note?: number | null }
 
-  function rig() {
-    const mallets: Mallet[] = [];
-    const drums: Drum[] = [];
-    /** How many one-shots were taken back, by voice. */
-    const cancelled = { mallet: 0, drum: 0 };
-    const engine = {
-      running: true,
-      now: 10,
-      settings: { bed: true, assist: false },
-      mallet: (note: number, gain: number, _pan: number, bright: number) => {
-        mallets.push({ note, gain, bright });
-        return { cancel: () => { cancelled.mallet++; } };
-      },
-      drum: (voice: DrumVoice, gain: number, at = 0) => {
-        drums.push({ voice, gain, at });
-        return { cancel: () => { cancelled.drum++; } };
-      },
-      pad: () => {}, setBedAudible: () => {},
-      noteOn: () => {}, noteOff: () => {}, ping: () => {}, impact: () => {}, swell: () => {},
-    };
-    const music = new MusicState({ ...AURORA.music });
-    const game = new Game(new InputHub(), AURORA, music);
-    const bed = new ChordBed(engine as never, music);
-    const audio = new PinballAudio(engine as never, bed, game);
-    audio.attach();
-    const hit = (id: string, energised = false, impact = 800, spinRate = 0) => {
-      const el = game.table.byId.get(id)!;
-      el.spinRate = spinRate;
-      game.bus.emit('element', { el, energised, impact, x: el.x, y: el.y });
-    };
-    return { mallets, drums, hit, game, audio, engine, cancelled };
-  }
+/** A game wired to an engine that only records what it is asked to play. */
+function rig() {
+  const mallets: Mallet[] = [];
+  const drums: Drum[] = [];
+  const mechs: Mech[] = [];
+  const hits: Hit[] = [];
+  /** How many one-shots were taken back, by voice. */
+  const cancelled = { mallet: 0, drum: 0, mech: 0 };
+  const engine = {
+    running: true,
+    now: 10,
+    settings: { bed: true, assist: false },
+    mallet: (note: number, gain: number, _pan: number, bright: number) => {
+      mallets.push({ note, gain, bright });
+      return { cancel: () => { cancelled.mallet++; } };
+    },
+    drum: (voice: DrumVoice, gain: number, at = 0) => {
+      drums.push({ voice, gain, at });
+      return { cancel: () => { cancelled.drum++; } };
+    },
+    mech: (name: MechName, gain: number, pan = 0, at = 0) => {
+      mechs.push({ name, gain, pan, at });
+      return { cancel: () => { cancelled.mech++; } };
+    },
+    hit: (tag: SoundTag, energy: number, opts: Omit<Hit, 'tag' | 'energy'> = {}) => {
+      hits.push({ tag, energy, ...opts });
+    },
+    pad: () => {}, setBedAudible: () => {},
+    noteOn: () => {}, noteOff: () => {}, ping: () => {}, swell: () => {},
+  };
+  const music = new MusicState({ ...AURORA.music });
+  const game = new Game(new InputHub(), AURORA, music);
+  const bed = new ChordBed(engine as never, music);
+  const audio = new PinballAudio(engine as never, bed, game);
+  audio.attach();
+  const hit = (id: string, energised = false, impact = 800, spinRate = 0) => {
+    const el = game.table.byId.get(id)!;
+    el.spinRate = spinRate;
+    game.bus.emit('element', { el, energised, impact, x: el.x, y: el.y });
+  };
+  return { mallets, drums, mechs, hits, hit, game, audio, engine, cancelled };
+}
+
+describe('striking the table', () => {
 
   it('keeps the bumpers as they were', () => {
     const { mallets, drums, hit } = rig();
@@ -106,10 +122,10 @@ describe('striking the table', () => {
     expect(mallets[1].bright).toBeGreaterThan(mallets[0].bright);
   });
 
-  it('rolls the hat behind a spinner, longer the harder it spins', () => {
-    const { drums, hit } = rig();
+  it('ticks the spinner behind its strike, longer the harder it spins', () => {
+    const { drums, mechs, hit } = rig();
     hit('spinner', false, 800, 20);
-    const roll = drums.filter((d) => d.voice === 'hat');
+    const roll = mechs.filter((m) => m.name === 'spinner');
     expect(roll.length).toBeGreaterThan(2);
     for (let i = 1; i < roll.length; i++) {
       expect(roll[i].at).toBeGreaterThan(roll[i - 1].at);
@@ -117,16 +133,30 @@ describe('striking the table', () => {
     }
     expect(drums.some((d) => d.voice === 'shaker')).toBe(true);
 
-    drums.length = 0;
+    mechs.length = 0;
     hit('spinner', false, 800, 4);
-    expect(drums.filter((d) => d.voice === 'hat').length).toBeLessThan(roll.length);
+    expect(mechs.filter((m) => m.name === 'spinner').length).toBeLessThan(roll.length);
+  });
+
+  it('fires the machine under the music', () => {
+    const { mechs, hit } = rig();
+    hit('bumper-a');
+    hit('sling-l');
+    hit('drop-0');
+    hit('roll-0');
+    expect(mechs.map((m) => m.name)).toEqual(['solenoid', 'solenoid', 'drop', 'switch']);
+    for (const m of mechs) {
+      expect(m.gain).toBeGreaterThan(0);
+      expect(m.gain).toBeLessThanOrEqual(1);
+    }
   });
 
   it('leaves a post silent', () => {
-    const { mallets, drums, hit } = rig();
+    const { mallets, drums, mechs, hit } = rig();
     hit('post-ul');
     expect(mallets).toHaveLength(0);
     expect(drums).toHaveLength(0);
+    expect(mechs).toHaveLength(0);
   });
 
   /**
@@ -135,12 +165,12 @@ describe('striking the table', () => {
    * scheduled hits back itself, or a flourish lands over the next mode.
    */
   it('takes back a roll still in the future when the mode is left', () => {
-    const { drums, hit, audio, cancelled } = rig();
+    const { mechs, hit, audio, cancelled } = rig();
     hit('spinner', false, 800, 20);
-    const roll = drums.filter((d) => d.voice === 'hat').length;
+    const roll = mechs.filter((m) => m.name === 'spinner').length;
     expect(roll).toBeGreaterThan(0);
     audio.detach();
-    expect(cancelled.drum).toBe(roll);
+    expect(cancelled.mech).toBe(roll);
   });
 
   it('takes back an objective flourish the same way', () => {
@@ -159,5 +189,63 @@ describe('striking the table', () => {
     game.bus.emit('objective', { id: 'arc', label: 'ARC' });
     audio.detach();
     expect(cancelled.mallet).toBe(5);
+  });
+});
+
+/** The ball meeting the machine, rather than the music. */
+describe('the ball on the table', () => {
+  const contact = (over: Partial<{
+    sound: SoundTag; energy: number; slide: number; kind: 'surface' | 'paddle' | 'ball';
+    note: number | null; x: number; y: number;
+  }> = {}) => ({
+    sound: 'wood' as SoundTag, energy: 900, slide: 0, kind: 'surface' as const,
+    note: null, x: 512, y: 700, nx: 0, ny: 1, ball: 1, ...over,
+  });
+
+  it('rings the surface where and how the ball met it', () => {
+    const { hits, game } = rig();
+    game.bus.emit('impact', contact({ sound: 'rubber', x: 100, y: game.def.keybed!.baseY }));
+    game.bus.emit('impact', contact({ sound: 'metal', x: game.def.width - 100, y: game.def.height, note: 69 }));
+    expect(hits.map((h) => h.tag)).toEqual(['rubber', 'metal']);
+    expect(hits[0].pan).toBeLessThan(0);
+    expect(hits[1].pan).toBeGreaterThan(0);
+    expect(hits[0].depth).toBeCloseTo(0, 6);
+    expect(hits[1].depth).toBeCloseTo(1, 6);
+    expect(hits[1].note).toBe(69);
+    expect(hits[0].glance).toBeCloseTo(1, 6);
+  });
+
+  it('tells a graze from a square hit by the slide', () => {
+    const { hits, game } = rig();
+    game.bus.emit('impact', contact({ energy: 300, slide: 900 }));
+    game.bus.emit('impact', contact({ energy: 900, slide: 0 }));
+    expect(hits[0].glance!).toBeLessThan(0.4);
+    expect(hits[1].glance!).toBeCloseTo(1, 6);
+  });
+
+  it('clicks two balls together, and rings a key the ball lands on', () => {
+    const { hits, mechs, game } = rig();
+    game.bus.emit('impact', contact({ kind: 'ball', sound: 'metal' }));
+    game.bus.emit('impact', contact({ kind: 'paddle', sound: 'key' }));
+    expect(mechs.map((m) => m.name)).toEqual(['ballclick']);
+    expect(hits.map((h) => h.tag)).toEqual(['key']);
+  });
+
+  it('fires the flipper on a throw, harder for a harder key', () => {
+    const { mechs, game } = rig();
+    const ev = { key: game.keybed.keys[0], velocity: 0.2, speed: 100, x: 300, y: 200, dirX: 0, dirY: 1, offset: 0 };
+    game.bus.emit('launch', ev as never);
+    game.bus.emit('launch', { ...ev, velocity: 1 } as never);
+    expect(mechs.map((m) => m.name)).toEqual(['flipper', 'flipper']);
+    expect(mechs[1].gain).toBeGreaterThan(mechs[0].gain);
+  });
+
+  it('lets the plunger go on the serve, and drops the ball into the trough at the end', () => {
+    const { mechs, game } = rig();
+    game.bus.emit('state', { from: 'serve', to: 'play' });
+    game.bus.emit('state', { from: 'play', to: 'drained' });
+    game.bus.emit('drain', { x: 512, y: 30, ballId: 1, saved: false });
+    game.bus.emit('drain', { x: 512, y: 30, ballId: 2, saved: true });
+    expect(mechs.map((m) => m.name)).toEqual(['plunger', 'trough', 'kickback']);
   });
 });
