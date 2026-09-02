@@ -150,19 +150,19 @@ export const DRUM_SPECS: Record<DrumVoice, DrumSpec> = {
   // The cymbals are metal (see `DrumMetal`) with a little noise left under
   // them: a hat closed and open, a ride, and a crash for the multiball.
   hat: spec({
-    metal: { freq: 40, ratios: METAL_RATIOS, bp: 10000, bpQ: 1.2, hp: 7000, decay: 0.05, gain: 0.5, velBright: 0.4 },
+    metal: { freq: 205, ratios: METAL_RATIOS, bp: 10000, bpQ: 1.2, hp: 7000, decay: 0.05, gain: 2.8, velBright: 0.4 },
     noiseFreq: 9000, noiseQ: 0.9, noiseHp: 6500, noiseDecay: 0.045, noiseGain: 0.25,
     velDecay: 0.5,
     gain: 0.5, pan: 0.18, reverb: 0.08,
   }),
   openhat: spec({
-    metal: { freq: 40, ratios: METAL_RATIOS, bp: 9000, bpQ: 1, hp: 6500, decay: 0.35, gain: 0.45, velBright: 0.4 },
+    metal: { freq: 205, ratios: METAL_RATIOS, bp: 9000, bpQ: 1, hp: 6500, decay: 0.35, gain: 2.4, velBright: 0.4 },
     noiseFreq: 8600, noiseQ: 0.8, noiseHp: 6000, noiseDecay: 0.32, noiseGain: 0.2,
     velDecay: 0.5,
     gain: 0.48, pan: 0.18, reverb: 0.18,
   }),
   ride: spec({
-    metal: { freq: 90, ratios: METAL_RATIOS, bp: 6000, bpQ: 0.8, hp: 3500, decay: 0.7, gain: 0.35, velBright: 0.3 },
+    metal: { freq: 150, ratios: METAL_RATIOS, bp: 6000, bpQ: 0.8, hp: 3500, decay: 0.7, gain: 1.6, velBright: 0.3 },
     tone: [[522, 0.16, 1, 'square'], [794, 0.11, 0.8, 'square']],
     toneDecay: 0.5, toneBp: 3600, toneBpQ: 1.2,
     noiseFreq: 7200, noiseQ: 0.7, noiseHp: 4500, noiseDecay: 0.55, noiseGain: 0.2,
@@ -170,7 +170,7 @@ export const DRUM_SPECS: Record<DrumVoice, DrumSpec> = {
     gain: 0.5, pan: 0.26, reverb: 0.24,
   }),
   crash: spec({
-    metal: { freq: 55, ratios: METAL_RATIOS, bp: 7000, bpQ: 0.5, hp: 3000, decay: 1.4, gain: 0.45, velBright: 0.3 },
+    metal: { freq: 120, ratios: METAL_RATIOS, bp: 7000, bpQ: 0.5, hp: 3000, decay: 1.4, gain: 1.8, velBright: 0.3 },
     noiseFreq: 8000, noiseQ: 0.6, noiseHp: 4000, noiseDecay: 1.1, noiseGain: 0.4,
     velDecay: 0.3,
     gain: 0.55, pan: -0.2, reverb: 0.3,
