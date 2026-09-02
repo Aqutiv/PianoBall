@@ -19,15 +19,18 @@
 
 import type { KeyTrack } from './shaping';
 import type { SpectrumRef } from './spectra';
+import type { StringSpec } from './strings';
 
 // ------------------------------------------------------------ played keys ---
 
 /**
- * What a layer's oscillator is made of: one of the browser's four waves, or a
+ * What a layer's oscillator is made of: one of the browser's four waves, a
  * `spectrum` — a table of partials from `spectra.ts`, which is how a layer
- * gets to be a piano string or a vowel rather than a saw.
+ * gets to be a piano string or a vowel rather than a saw — or a `string`,
+ * rendered by `strings.ts` from the voice's `string` spec and played back as
+ * a buffer, which is how a layer gets to be plucked.
  */
-export type LayerType = OscillatorType | 'spectrum';
+export type LayerType = OscillatorType | 'spectrum' | 'string';
 
 /** One oscillator of a key voice. */
 export interface VoiceLayer {
@@ -155,6 +158,8 @@ export interface VoiceSpec {
   /** How much of the note is sent through the soundboard, 0..1. */
   body?: number;
   lfo?: VoiceLfo;
+  /** The string every `string` layer of this voice is rendered from. */
+  string?: StringSpec;
 }
 
 const KEY_BASE: VoiceSpec = {
@@ -273,22 +278,24 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   {
     id: 'clavinet', name: 'Clavinet', family: 'Keys',
     // Short, tight and dry: the one voice in the bank that wants no room. A
-    // plucked string under a pickup, so it is bright by partials rather than
-    // by filter, with the slap of the yarn damper when the key comes up.
+    // real plucked string under a pickup — rendered, plucked near its end so
+    // it is all bite — with a pulse for the pickup's own edge and the slap
+    // of the yarn damper when the key comes up.
     spec: key({
       layers: [
-        { type: 'spectrum', spectrum: { gen: 'saw', params: [0.7] }, ratio: 1, level: 0.45 },
+        { type: 'string', ratio: 1, level: 0.7 },
         {
           type: 'spectrum', spectrum: { gen: 'pulse', params: [0.1] }, ratio: 1,
-          level: 0.12, velLevel: 0.2, velCurve: 1.5, decay: 0.15,
+          level: 0.08, velLevel: 0.18, velCurve: 1.5, decay: 0.12,
         },
       ],
-      noise: { freq: 3000, pitchTrack: 10, q: 1.5, decay: 0.008, gain: 0.08, velCurve: 1 },
+      string: { decay: 0.9, keyTrack: -0.5, damp: 0.2, stretch: 0.5, pick: 0.1, bright: 4000, velBright: 12000 },
+      noise: { freq: 3000, pitchTrack: 10, q: 1.5, decay: 0.008, gain: 0.06, velCurve: 1 },
       damper: { freq: 900, q: 1.2, decay: 0.03, gain: 0.05 },
       filter: { base: 2.5, track: 14, q: 6, qVel: 3, settle: 1.4, settleVel: 2, settleTime: 0.12 },
-      env: { attack: 0.002, decay: 0.11, sustain: 0.06, release: 0.1 },
+      env: { attack: 0.002, decay: 0.3, sustain: 0.06, release: 0.1 },
       velDb: 24, attackVel: 0.2,
-      keyTrack: { decay: -0.5, bright: 0.3 },
+      keyTrack: { bright: 0.3 },
       reverb: 0.06, delay: 0.04,
     }),
   },
@@ -617,18 +624,19 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   },
   {
     id: 'harp', name: 'Harp', family: 'Mallets',
-    // A gut string plucked: bright at the fingertip, dying from the top down,
-    // shorter and brighter up the frame.
+    // A gut string, rendered and plucked a fifth of the way along: bright at
+    // the fingertip, dying from the top down, shorter and brighter up the
+    // frame. The envelope only has to let it ring; the string knows how.
     spec: key({
       layers: [
-        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.3] }, ratio: 1, level: 0.5, decay: 1.2 },
-        { type: 'triangle', ratio: 2, level: 0.14, decay: 0.5 },
+        { type: 'string', ratio: 1, level: 0.9 },
       ],
-      noise: { freq: 2000, pitchTrack: 6, q: 1.5, decay: 0.01, gain: 0.06 },
-      filter: { base: 3, track: 8, q: 1.6, qVel: 2, settle: 1.2, settleVel: 2, settleTime: 0.4 },
-      env: { attack: 0.003, decay: 0.9, sustain: 0.03, release: 0.5 },
+      string: { decay: 2.4, keyTrack: -0.5, damp: 0.35, stretch: 0.5, pick: 0.2, bright: 2500, velBright: 9000 },
+      noise: { freq: 2000, pitchTrack: 6, q: 1.5, decay: 0.01, gain: 0.05 },
+      filter: { base: 3, track: 8, q: 1.2, qVel: 1.5, settle: 2, settleVel: 2, settleTime: 0.4 },
+      env: { attack: 0.002, decay: 2.5, sustain: 0.02, release: 0.5 },
       velDb: 26,
-      keyTrack: { decay: -0.5, bright: 0.2 },
+      keyTrack: { bright: 0.2 },
       reverb: 0.38, delay: 0.14,
     }),
   },
@@ -762,6 +770,8 @@ export interface BedSpec {
    * a plucked thing wants none of it, or the pluck smears.
    */
   ensemble?: number;
+  /** The string every `string` layer of this bed is rendered from. */
+  string?: StringSpec;
 }
 
 const BED_BASE: BedSpec = {
@@ -883,29 +893,26 @@ export const BED_VOICES: readonly BedDef[] = [
   // plucked names — a nylon guitar that swelled in over a third of the bar.
   {
     id: 'bed-harp', name: 'Harp', family: 'Plucked',
-    // Bright at the edge and ringing a long time, on a nearly harmonic stack.
+    // The same rendered string as the harp in the lead bank: bright at the
+    // edge and ringing a long time.
     spec: bed({
       layers: [
-        { type: 'triangle', ratio: 1, level: 1 },
-        { type: 'sine', ratio: 2, level: 0.5 },
-        { type: 'sine', ratio: 4, level: 0.24 },
-        { type: 'sine', ratio: 6, level: 0.12 },
+        { type: 'string', ratio: 1, level: 2.0 },
       ],
+      string: { decay: 2.4, keyTrack: -0.5, damp: 0.35, stretch: 0.5, pick: 0.2, bright: 2000, velBright: 6000 },
       filter: { start: 700, startStruck: 1600, peak: 1900, peakStruck: 2800, end: 480, q: 1.1 },
       pluck: 2.4,
     }),
   },
   {
     id: 'nylon-guitar', name: 'Nylon Guitar', family: 'Plucked',
-    // A gut string is a strong fundamental with a couple of quiet harmonics
-    // over it, and nothing else. The saw and its five cents of detune that
-    // used to sit here were a chorus, which is what made it read as a pad.
+    // A nylon string rendered: plucked over the sound hole, damped more than
+    // gut so it is round rather than bright, and gone in under two seconds.
     spec: bed({
       layers: [
-        { type: 'triangle', ratio: 1, level: 1.15 },
-        { type: 'sine', ratio: 2, level: 0.5 },
-        { type: 'sine', ratio: 3, level: 0.26 },
+        { type: 'string', ratio: 1, level: 2.1 },
       ],
+      string: { decay: 1.7, keyTrack: -0.45, damp: 0.5, stretch: 0.5, pick: 0.28, bright: 1500, velBright: 4500 },
       filter: { start: 460, startStruck: 1150, peak: 1400, peakStruck: 1900, end: 340, q: 1 },
       pluck: 1.7,
     }),

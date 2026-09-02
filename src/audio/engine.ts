@@ -8,6 +8,7 @@ import {
   type Humanized, type KeyFactors,
 } from './shaping';
 import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
+import { Lru, renderString, velocityBucket, type Bucket, type StringSpec } from './strings';
 import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
   type BedSpec, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
@@ -139,8 +140,29 @@ const DELAY_MAX = 2;
 
 const dottedEighth = (bpm: number) => clamp((60 / bpm) * 0.75, 0.02, DELAY_MAX);
 
-/** A source with a pitch to bend: an oscillator today, a rendered string later. */
-type Pitched = OscillatorNode;
+/**
+ * A source with a pitch to bend: an oscillator, or a rendered string. Both
+ * carry `detune` in cents, which is what lets one bend reach either.
+ */
+type Pitched = OscillatorNode | AudioBufferSourceNode;
+
+const isOscillator = (s: Pitched): s is OscillatorNode => 'frequency' in s;
+
+/** Which rendered string a layer plays: the voice it belongs to, and the note and pluck. */
+interface StringAt {
+  id: string;
+  spec: StringSpec;
+  note: number;
+  bucket: Bucket;
+}
+
+/** Most rendered strings kept, and their weight: half a megabyte a second at 48 kHz. */
+const STRING_ENTRIES = 120;
+const STRING_BYTES = 24 * 1024 * 1024;
+/** Notes a string voice is rendered for on the way in, and how many per idle turn. */
+const WARM_FROM = 48;
+const WARM_TO = 84;
+const WARM_CHUNK = 8;
 
 interface KeyVoice {
   note: number;
@@ -296,6 +318,10 @@ export class AudioEngine {
   private active: KeyVoice[] = [];
   /** Every periodic wave built so far, by spectrum and register. */
   private waves = new Map<string, PeriodicWave>();
+  /** Rendered strings, by voice, note and pluck. */
+  private strings = new Lru<AudioBuffer>(STRING_ENTRIES, STRING_BYTES);
+  /** Which warm-up is current; an older one finding this changed stops. */
+  private warming = 0;
   private sustained = new Set<number>();
   private sustainOn = false;
 
@@ -628,6 +654,7 @@ export class AudioEngine {
     this.leadId = voice.id;
     this.leadSpec = voice.spec;
     this.warm(voice.spec);
+    if (voice.spec.string) this.warmStrings(voice.id, voice.spec.string);
   }
 
   setBedVoice(id: string): void {
@@ -800,6 +827,7 @@ export class AudioEngine {
     const register = registerOf(note);
     const stretch = stretchCents(spec.stretch, note);
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+    const str = spec.string && { id: this.leadId, spec: spec.string, note, bucket: velocityBucket(v) };
 
     // Harder notes go wetter, whatever the instrument's own send level is.
     const moves = spec.lfo?.target === 'tremolo' || spec.lfo?.target === 'rotary';
@@ -808,7 +836,7 @@ export class AudioEngine {
     }, this.musicBus, moves);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
-      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch));
+      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch, str));
     }
     // Breath, or the knock of the key itself: a slice of the shared buffer,
     // the same layer the drums are mostly made of.
@@ -851,6 +879,7 @@ export class AudioEngine {
     const cut = spec.filter;
     const h = humanize(Math.random, HUMANIZE * BED_HUMANIZE);
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+    const str = spec.string && { id: this.keyBedId, spec: spec.string, note, bucket: velocityBucket(v) };
 
     // A pad lives further back in the room than a struck note does.
     const chain = this.makeChain(pan, LEAD_WIDTH, {
@@ -858,7 +887,7 @@ export class AudioEngine {
     }, this.musicBus);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
-      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0));
+      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0, str));
     }
     this.attachExpression(sources, chain, undefined, t);
 
@@ -944,6 +973,7 @@ export class AudioEngine {
   private addLayer(
     into: AudioNode, layer: VoiceLayer, freq: number, v: number, t: number,
     k: KeyFactors, h: Humanized, register: Register, detunes: readonly number[], stretch: number,
+    str?: StringAt,
   ): Pitched[] {
     const ctx = this.ctx!;
     const out: Pitched[] = [];
@@ -953,13 +983,24 @@ export class AudioEngine {
     const attack = layer.attack ?? 0;
     const hold = layer.hold ?? 0;
     for (const d of detunes) {
-      const osc = ctx.createOscillator();
-      if (layer.type === 'spectrum') osc.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register));
-      else osc.type = layer.type;
-      osc.frequency.setValueAtTime(freq * layer.ratio, t);
+      let osc: Pitched;
+      if (layer.type === 'string' && str) {
+        // Rendered at the note itself; a layer set above it plays the same
+        // render faster, which is near enough for an octave.
+        const src = ctx.createBufferSource();
+        src.buffer = this.stringBuffer(str);
+        if (layer.ratio !== 1) src.playbackRate.value = layer.ratio;
+        osc = src;
+      } else {
+        const o = ctx.createOscillator();
+        if (layer.type === 'spectrum') o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register));
+        else if (layer.type !== 'string') o.type = layer.type;
+        o.frequency.setValueAtTime(freq * layer.ratio, t);
+        osc = o;
+      }
       osc.detune.setValueAtTime((layer.detune ?? 0) + d + h.detune + stretch, t);
 
-      if (layer.fm) {
+      if (layer.fm && isOscillator(osc)) {
         // Bright at the strike and gone a moment later, which is what turns a
         // sine into a tine. `ping` has always done this; here it is a field.
         const mod = ctx.createOscillator();
@@ -1127,6 +1168,47 @@ export class AudioEngine {
       if (layer.type !== 'spectrum') continue;
       for (const r of REGISTERS) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r);
     }
+  }
+
+  /**
+   * The rendered string a layer asks for, from the cache or from scratch.
+   *
+   * A miss costs about a millisecond, which the note path can afford once;
+   * the same note rendered again comes out the same, because its noise is
+   * seeded by the note, so the cache forgetting an entry is not a change of
+   * sound. Pads are placed ahead of time and never notice a miss at all.
+   */
+  private stringBuffer(at: StringAt): AudioBuffer {
+    const key = `${at.id}:${at.note}:${at.bucket}`;
+    let buf = this.strings.get(key);
+    if (!buf) {
+      const ctx = this.ctx!;
+      const data = renderString(at.spec, at.note, at.bucket, ctx.sampleRate, makeRng(at.note * 8 + at.bucket));
+      buf = ctx.createBuffer(1, data.length, ctx.sampleRate);
+      buf.copyToChannel(data, 0);
+      this.strings.set(key, buf, data.length * 4);
+    }
+    return buf;
+  }
+
+  /**
+   * Render the middle of the keyboard for a string voice on the way in, a
+   * few notes per idle turn, so the first phrase played on it hits nothing
+   * but the cache. A newer voice arriving stops an older warm-up.
+   */
+  private warmStrings(id: string, spec: StringSpec): void {
+    if (!this.ready) return;
+    const token = ++this.warming;
+    const todo: StringAt[] = [];
+    for (let note = WARM_FROM; note <= WARM_TO; note++) {
+      for (const bucket of [2, 3] as const) todo.push({ id, spec, note, bucket });
+    }
+    const step = () => {
+      if (token !== this.warming || !this.ready) return;
+      for (const at of todo.splice(0, WARM_CHUNK)) this.stringBuffer(at);
+      if (todo.length) setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
   }
 
   noteOff(note: number, immediate = false): void {
@@ -1481,6 +1563,8 @@ export class AudioEngine {
     for (let i = 0; i < notes.length; i++) {
       const freq = noteToFreq(notes[i]);
       const h = humanize(Math.random, HUMANIZE * BED_HUMANIZE);
+      // A bed has no velocity; its strings are plucked at one middling strength.
+      const str = spec.string && { id: this.bedId, spec: spec.string, note: notes[i], bucket: 2 as const };
       const f = ctx.createBiquadFilter();
       f.type = 'lowpass';
       f.frequency.setValueAtTime(struck ? cut.startStruck : cut.start, t);
@@ -1507,7 +1591,7 @@ export class AudioEngine {
       f.connect(g).connect(pannerNode);
       pannerNode.connect(this.padGen);
       for (const layer of spec.layers) {
-        for (const s of this.addLayer(f, layer, freq, 0.5, t, NO_TRACK, h, registerOf(notes[i]), detunes, 0)) {
+        for (const s of this.addLayer(f, layer, freq, 0.5, t, NO_TRACK, h, registerOf(notes[i]), detunes, 0, str)) {
           s.stop(t + seconds + 0.1);
         }
       }

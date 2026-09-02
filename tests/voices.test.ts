@@ -6,7 +6,7 @@ import {
 } from '../src/audio/voices';
 import { SPECTRA } from '../src/audio/spectra';
 
-const LAYER_TYPES = ['sine', 'square', 'sawtooth', 'triangle', 'spectrum'];
+const LAYER_TYPES = ['sine', 'square', 'sawtooth', 'triangle', 'spectrum', 'string'];
 
 /** Oscillators a voice will put in the graph for one note, operators and unison included. */
 const sourcesOf = (layers: readonly { level: number; fm?: unknown }[], unison?: { voices: number }) =>
@@ -64,6 +64,8 @@ describe('the instrument bank', () => {
         } else {
           expect(l.spectrum, `${v.id} names a spectrum on a ${l.type}`).toBeUndefined();
         }
+        // A string layer is rendered from the voice's string, so there has to be one.
+        if (l.type === 'string') expect(v.spec.string, `${v.id} has a string layer and no string`).toBeDefined();
         expect(l.ratio, `${v.id} ratio`).toBeGreaterThan(0);
         expect(l.level, `${v.id} level`).toBeGreaterThan(0);
         expect(Math.abs(l.detune ?? 0), `${v.id} detune`).toBeLessThanOrEqual(100);
@@ -123,6 +125,17 @@ describe('the instrument bank', () => {
       }
     }
     for (const v of BED_VOICES) within(v.id, 'unison cents', v.spec.unison?.cents, 0.5, 20);
+    for (const v of [...LEAD_VOICES, ...BED_VOICES]) {
+      const s = v.spec.string;
+      if (!s) continue;
+      within(v.id, 'string decay', s.decay, 0.2, 4);
+      within(v.id, 'string keyTrack', s.keyTrack, -1.5, 0);
+      within(v.id, 'string damp', s.damp, 0, 0.9);
+      within(v.id, 'string stretch', s.stretch, 0.1, 0.9);
+      within(v.id, 'string pick', s.pick, 0.05, 0.5);
+      within(v.id, 'string bright', s.bright, 200, 20000);
+      within(v.id, 'string velBright', s.velBright, s.bright, 20000);
+    }
   });
 
   it('lets organs and synths hold their pitch while everything else drifts', () => {
@@ -190,6 +203,8 @@ describe('the instrument bank', () => {
         expect(v.spec.pluck, `${v.id} pluck`).toBeGreaterThan(0.2);
         expect(v.spec.pluck, `${v.id} rings longer than a bar`).toBeLessThanOrEqual(4);
       }
+      // A rendered string in the bed is a plucked thing by definition.
+      if (v.spec.string) expect(v.family, `${v.id} has a string`).toBe('Plucked');
     }
   });
 
