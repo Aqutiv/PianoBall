@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIBRARY, TUNE_ORDER, findTune } from '../src/modes/playtune/library';
 import { FUR_ELISE } from '../src/modes/playtune/library/classics';
 import type { Tune } from '../src/modes/playtune/chart';
@@ -729,9 +729,25 @@ describe('the transport', () => {
   });
 });
 
+/** Enough of `Storage` for the progress store to actually round-trip. */
+class MemoryStorage implements Storage {
+  private values = new Map<string, string>();
+
+  get length(): number { return this.values.size; }
+  clear(): void { this.values.clear(); }
+  getItem(key: string): string | null { return this.values.get(key) ?? null; }
+  key(index: number): string | null { return [...this.values.keys()][index] ?? null; }
+  removeItem(key: string): void { this.values.delete(key); }
+  setItem(key: string, value: string): void { this.values.set(key, value); }
+}
+
 describe('progression', () => {
   const order = ['a', 'b', 'c'];
   const KEY = 'playtune';
+
+  // Real storage, because half of what this chain promises is about what
+  // survives being written down and read back.
+  beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
 
   it('starts with only the first tune open', () => {
     const p = resetProgress(KEY, order);
@@ -763,6 +779,70 @@ describe('progression', () => {
     expect(p.best.a.plays).toBe(2);
   });
 
+  it('remembers a pass that earned no letter', () => {
+    // Every pass mark in the library sits at or below C, so clearing a tune
+    // without a grade is the ordinary case rather than an edge one.
+    const p = resetProgress(KEY, order);
+    recordRun(KEY, p, 'a', order, { accuracy: 0.6, score: 10, grade: null, passed: true });
+    expect(p.best.a.passed).toBe(true);
+    recordRun(KEY, p, 'a', order, { accuracy: 0.2, score: 1, grade: null, passed: false });
+    expect(p.best.a.passed).toBe(true);
+    expect(loadProgress(KEY, order).best.a.passed).toBe(true);
+  });
+
+  /**
+   * A mode is built once and keeps its Progress for the whole session, so a
+   * second window of the app holds a snapshot from before whatever the first
+   * has done since. Finishing any run there used to write that snapshot over
+   * storage, and replaying an early tune is where it hurt most: the oldest
+   * view, with the least left to earn.
+   */
+  it('cannot take back progress made since its view was taken', () => {
+    const stale = resetProgress(KEY, order);
+    // Another window passes 'a' and then 'b', opening 'c'.
+    const fresh = loadProgress(KEY, order);
+    recordRun(KEY, fresh, 'a', order, { accuracy: 0.9, score: 900, grade: 'A', passed: true });
+    recordRun(KEY, fresh, 'b', order, { accuracy: 0.99, score: 800, grade: 'S', passed: true });
+
+    // The stale window replays the first tune and fails it.
+    recordRun(KEY, stale, 'a', order, { accuracy: 0.1, score: 5, grade: null, passed: false });
+
+    const after = loadProgress(KEY, order);
+    expect(after.unlocked).toEqual(['a', 'b', 'c']);
+    expect(after.best.a.accuracy).toBe(0.9);
+    expect(after.best.a.score).toBe(900);
+    expect(after.best.a.grade).toBe('A');
+    expect(after.best.b.grade).toBe('S');
+    // And the window that wrote it is looking at the whole of it, not its own
+    // half — the song list draws from this object.
+    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
+    expect(stale.best.a.grade).toBe('A');
+  });
+
+  /**
+   * The one thing the merge must not do. A reset is asked for twice and means
+   * what it says, so a window still holding the pre-reset chain has to give it
+   * up rather than write it back over the wipe.
+   */
+  it('does not put back a chain the player deliberately wiped', () => {
+    const stale = resetProgress(KEY, order);
+    recordRun(KEY, stale, 'a', order, { accuracy: 0.9, score: 900, grade: 'A', passed: true });
+    recordRun(KEY, stale, 'b', order, { accuracy: 0.9, score: 800, grade: 'A', passed: true });
+    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
+
+    // Another window resets the chain while this one still holds all of it.
+    resetProgress(KEY, order);
+
+    recordRun(KEY, stale, 'a', order, { accuracy: 0.3, score: 5, grade: null, passed: false });
+
+    const after = loadProgress(KEY, order);
+    expect(after.unlocked).toEqual(['a']);
+    expect(after.best.b).toBeUndefined();
+    // The run that was being written still counts, on the fresh chain.
+    expect(after.best.a).toMatchObject({ accuracy: 0.3, score: 5, plays: 1, passed: false });
+    expect(stale.unlocked).toEqual(['a']);
+  });
+
   it('names what unlocks a locked tune', () => {
     expect(unlockedBy(order, 'b')).toBe('a');
     expect(unlockedBy(order, 'a')).toBeNull();
@@ -777,7 +857,7 @@ describe('progression', () => {
   it('drops ids that are no longer in the library', () => {
     const p = resetProgress(KEY, order);
     p.unlocked.push('gone');
-    p.best.gone = { accuracy: 1, score: 1, grade: 'S', plays: 1 };
+    p.best.gone = { accuracy: 1, score: 1, grade: 'S', plays: 1, passed: true };
     // Round-trip through storage the way a later release would.
     recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 1, grade: 'A', passed: true });
     const reloaded = loadProgress(KEY, order);

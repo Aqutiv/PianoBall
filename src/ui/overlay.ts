@@ -272,7 +272,10 @@ export class Overlay {
         : !fits
           ? '<span class="song-locked">Needs more keys than your controller has</span>'
           : best
-            ? `<span class="song-best">${best.grade ?? '—'} · ${Math.round(best.accuracy * 100)}%</span>`
+            // A pass with no letter is the ordinary case now that every pass
+            // mark sits at or below C, and a dash there reads as "nothing
+            // recorded" on a tune the player has actually cleared.
+            ? `<span class="song-best">${best.grade ?? (best.passed ? 'passed' : '—')} · ${Math.round(best.accuracy * 100)}%</span>`
             : '<span class="song-best song-new">new</span>';
 
       return `
@@ -286,7 +289,9 @@ export class Overlay {
         </button>`;
     }).join('');
 
-    const done = mode.tunes.filter((t) => progress.best[t.id]?.grade).length;
+    // The record's own flag, not a letter: the pass marks all sit at or below
+    // C, so counting graded tunes under-reports what has actually been passed.
+    const done = mode.tunes.filter((t) => progress.best[t.id]?.passed).length;
     const tab = (id: RoleId, label: string) =>
       `<button class="role${role.id === id ? ' on' : ''}" data-role="${id}">${label}</button>`;
     this.body.innerHTML = `

@@ -40,7 +40,7 @@ export const CHORD_GROUND: Tune = {
   // note on the strong beats, and nothing else.
   accompaniment: 'march',
   borrows: LEADING,
-  pass: 0.6,
+  pass: 0.55,
   melody: line([
     [E4, 2], [G4, 2],
     [G4, 4],
@@ -77,7 +77,7 @@ export const CHORD_THREE: Tune = {
   scaleId: 'mixolydian',
   accompaniment: 'march',
   borrows: LEADING,
-  pass: 0.62,
+  pass: 0.57,
   melody: line([
     [G4, 2], [E4, 2],
     [F4, 2], [A4, 2],
@@ -124,7 +124,7 @@ export const CHORD_MARCH: Tune = {
   scaleId: 'mixolydian',
   accompaniment: 'march',
   borrows: LEADING,
-  pass: 0.62,
+  pass: 0.57,
   melody: line([
     [C4, 2], [E4, 2],
     [F4, 2], [A4, 2],

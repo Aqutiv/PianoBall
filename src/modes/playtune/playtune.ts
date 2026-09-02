@@ -155,6 +155,11 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // title, and on the very first entry the HUD has not been built yet.
     this.panel.mount();
     this.applySettings();
+    // Storage is the authority, and it can have moved while the player was in
+    // another mode or another window of the app. Reading it here is safe in the
+    // one direction that matters: `recordRun` only ever adds to what is stored,
+    // so what comes back is never less than what this instance was holding.
+    this.progress = loadProgress(this.role.storageKey, this.role.order);
     this.panel.setTune(this.tune);
     this.track(input.on((e) => this.onInput(e)));
   }
@@ -365,8 +370,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const held = judge.holdAccuracy;
     const letter = grade(accuracy);
     const card = this.role.card(tune);
+    const passed = accuracy >= card.pass;
     const outcome = recordRun(this.role.storageKey, this.progress, tune.id, this.role.order, {
-      accuracy, score: this.scoring.score, grade: letter, passed: accuracy >= card.pass,
+      accuracy, score: this.scoring.score, grade: letter, passed,
     });
 
     const next = outcome.unlocked ? findTune(outcome.unlocked) : null;
@@ -381,7 +387,11 @@ export class PlayTuneMode extends ModeBase implements GameMode {
         ...(judge.tally.wrong ? [{ label: 'Wrong keys', value: String(judge.tally.wrong) }] : []),
         { label: 'Best run', value: `${Math.round(outcome.best.accuracy * 100)}%${outcome.improved ? ' — new best' : ''}` },
         ...(next ? [{ label: 'Unlocked', value: next.title }] : []),
-        ...(letter ? [] : [{ label: 'To pass', value: `${Math.round(card.pass * 100)}% accuracy` }]),
+        // On whether the run passed, not on whether it earned a letter: the
+        // pass marks all sit at or below C, so a run can clear the tune and
+        // still have no grade — and being told what to reach after you have
+        // reached it reads as a fail.
+        ...(passed ? [] : [{ label: 'To pass', value: `${Math.round(card.pass * 100)}% accuracy` }]),
       ],
     });
     this.ctx.openScreen('result');
