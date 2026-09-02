@@ -70,6 +70,21 @@ const IMPACTS: Record<string, ImpactProfile> = {
 const MAX_VOICES = 48;
 
 /**
+ * A one-shot placed on the audio clock, which can still be taken back.
+ *
+ * A sound scheduled ahead belongs to the graph the moment it is asked for,
+ * and outlives whatever asked for it: a mode that leaves within a flourish
+ * would otherwise hear its last notes land over the next one. Cancelling
+ * cuts the sound loose from the buses, whether it has started yet or not.
+ */
+export interface Scheduled {
+  cancel(): void;
+}
+
+/** What a one-shot that never reached the graph hands back. */
+const NOTHING: Scheduled = { cancel() {} };
+
+/**
  * Shape of a key played as the bed, in seconds.
  *
  * The attack is the number that matters and it is a compromise: a pad that
@@ -732,11 +747,17 @@ export class AudioEngine {
    * A tuned strike: what a scoring element sounds like when the ball hits it.
    * Mallet body plus a short noise transient, which is what makes it read as
    * something being struck rather than a note being played.
+   *
+   * `at` is an audio-clock time, like `drum`'s and `pad`'s: the table plays a
+   * run of these — an objective's flourish, the bonus count at the end of a
+   * ball — and a run has to be placed ahead rather than fired from a timer.
+   * What is placed ahead can be taken back through the handle returned, which
+   * is what lets a mode leave without its last flourish following it out.
    */
-  mallet(note: number, gain = 0.5, pan = 0, bright = 0.5): void {
-    if (!this.running || !this.ctx) return;
+  mallet(note: number, gain = 0.5, pan = 0, bright = 0.5, at = 0): Scheduled {
+    if (!this.running || !this.ctx) return NOTHING;
     const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     const freq = noteToFreq(note);
     const decay = 0.42 + bright * 0.5;
 
@@ -775,6 +796,9 @@ export class AudioEngine {
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     src.connect(bp).connect(ng).connect(out);
     src.start(t, Math.random() * 0.8, 0.06);
+    // Everything above reaches the buses through the panner, so cutting it
+    // loose silences the strike whether it has started yet or not.
+    return { cancel: () => pannerNode.disconnect() };
   }
 
   /** Ball meeting a surface. Loudness and brightness follow the impact energy. */
@@ -819,17 +843,17 @@ export class AudioEngine {
   /**
    * A drum hit, from the voice bank in `drums.ts`.
    *
-   * `at` is an audio-clock time, like `pad`'s — the two schedulable voices in
-   * the engine. Everything else here plays the instant it is called, because
-   * everything else is a reaction to something the player just did; a drum
-   * machine is the opposite, and has to place a hit on a step that has not
-   * arrived yet.
+   * `at` is an audio-clock time, like `pad`'s and `mallet`'s — the three
+   * schedulable voices in the engine. Everything else here plays the instant
+   * it is called, because everything else is a reaction to something the
+   * player just did; a drum machine is the opposite, and has to place a hit
+   * on a step that has not arrived yet.
    */
-  drum(voice: DrumVoice, gain = 1, at = 0): void {
-    if (!this.running || !this.ctx) return;
+  drum(voice: DrumVoice, gain = 1, at = 0): Scheduled {
+    if (!this.running || !this.ctx) return NOTHING;
     const spec = DRUM_SPECS[voice];
     const level = spec.gain * clamp01(gain);
-    if (level < 0.004) return;
+    if (level < 0.004) return NOTHING;
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
 
@@ -839,6 +863,7 @@ export class AudioEngine {
     const rev = ctx.createGain();
     rev.gain.value = spec.reverb;
     out.connect(rev).connect(this.reverbSend);
+    const handle: Scheduled = { cancel: () => out.disconnect() };
 
     if (spec.noiseFreq > 0) {
       // A handclap is several bursts a few milliseconds apart; every other
@@ -866,7 +891,7 @@ export class AudioEngine {
       }
     }
 
-    if (spec.tone.length === 0) return;
+    if (spec.tone.length === 0) return handle;
     let toneIn: AudioNode = out;
     if (spec.toneBp > 0) {
       const bp = ctx.createBiquadFilter();
@@ -894,6 +919,7 @@ export class AudioEngine {
       osc.start(t);
       osc.stop(t + decay + 0.05);
     }
+    return handle;
   }
 
   /** Short FM ping used for chrome and wire. */

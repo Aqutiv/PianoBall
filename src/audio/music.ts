@@ -489,6 +489,47 @@ export function identifyChord(notes: readonly number[]): string | null {
   return NAMES[best.root] + suffixFor(best.shape, best.tensions);
 }
 
+// ---------------------------------------------------------------------------
+// Intervals
+
+export type IntervalClass = 'perfect' | 'consonant' | 'mild' | 'dissonant';
+
+export interface Interval {
+  /** Pitch-class distance upward from the first note, 0..11. */
+  semitones: number;
+  name: string;
+  cls: IntervalClass;
+}
+
+/** Names by pitch-class distance upward from the first note. */
+const INTERVAL_NAMES = [
+  'UNISON', 'MINOR SECOND', 'MAJOR SECOND', 'MINOR THIRD', 'MAJOR THIRD', 'PERFECT FOURTH',
+  'TRITONE', 'PERFECT FIFTH', 'MINOR SIXTH', 'MAJOR SIXTH', 'MINOR SEVENTH', 'MAJOR SEVENTH',
+] as const;
+
+/**
+ * Classes by the distance folded to 0..6, so that an interval and its
+ * inversion agree: a fourth is as perfect as the fifth it turns over into, a
+ * sixth as sweet as a third, a seventh as rough as a second.
+ */
+const INTERVAL_CLASS: readonly IntervalClass[] = [
+  'perfect', 'dissonant', 'mild', 'consonant', 'consonant', 'perfect', 'dissonant',
+];
+
+/**
+ * The interval two notes make, by pitch class.
+ *
+ * Octave and register are dropped on purpose. What the table wants to know is
+ * whether the ball's note and the element's note sound well together, and
+ * that is a property of the two pitch classes; a ball charged with a low D
+ * striking a high A is a fifth all the same.
+ */
+export function classifyInterval(from: number, to: number): Interval {
+  const d = pitchClass(to - from);
+  const name = d === 0 && to !== from ? 'OCTAVE' : INTERVAL_NAMES[d];
+  return { semitones: d, name, cls: INTERVAL_CLASS[Math.min(d, 12 - d)] };
+}
+
 /**
  * The beat grid.
  *
@@ -516,6 +557,20 @@ export class Groove {
     const step = this.stepSeconds;
     const phase = time / step;
     return (phase - Math.round(phase)) * step;
+  }
+
+  /**
+   * Which beat of the bar `time` is in, and how far through it, 0..1.
+   *
+   * The same origin as `offsetAt`: audio time zero, which is where the bed
+   * snaps its bar lines to and where the rhythm box counts its steps from. So
+   * the beat this names is the beat the drums are on, and the downbeat it
+   * names is the bed's.
+   */
+  phaseAt(time: number, beatsPerBar = 4): { beat: number; phase: number } {
+    const beats = time / this.beatSeconds;
+    const whole = Math.floor(beats);
+    return { beat: ((whole % beatsPerBar) + beatsPerBar) % beatsPerBar, phase: beats - whole };
   }
 
   /** Judge a hit. Returns true when it landed on the grid. */

@@ -11,6 +11,7 @@ import { MusicState } from '../audio/musicState';
 import { resetFreestyleSettings } from '../modes/freestyle/settings';
 import { resetRhythmSettings } from '../modes/freestyle/rhythmSettings';
 import { resetPlayTuneSettings } from '../modes/playtune/settings';
+import { resetPinballSettings } from '../modes/pinball/settings';
 import { AURORA } from '../game/table/tables/aurora';
 import { Hud } from '../ui/hud';
 import { Overlay, type Screen } from '../ui/overlay';
@@ -168,7 +169,18 @@ export class Shell {
     this.restartMode();
   }
 
+  /**
+   * A fresh run of the mode on screen.
+   *
+   * Reached from behind the pause panel and from the home screen as well as
+   * from the game-over card, and the first two have suspended the mode. A new
+   * game is the player asking to play, so the suspension lifts here; each mode's
+   * `newGame` is responsible for being playable after it, since `resume` is
+   * not called on this path — PlayTune's would restart the tune that was
+   * interrupted, which is the opposite of what was asked.
+   */
   restartMode(): void {
+    this.suspended = false;
     const mode = this.active as GameMode & { newGame?: () => void };
     mode?.newGame?.();
   }
@@ -230,14 +242,24 @@ export class Shell {
     resetFreestyleSettings();
     resetRhythmSettings();
     resetPlayTuneSettings();
+    resetPinballSettings();
     resetThemeSettings();
     this.setTheme(currentTheme());
     this.stage.resetSettings();
     this.remapKeys();
-    // Nothing a mode owns is re-read until the mode is entered again, so the
-    // one that is running has to be told the preferences moved under it.
-    (this.active as (GameMode & { applySettings?: () => void }) | null)?.applySettings?.();
+    this.applyModeSettings();
     this.refreshStatus(this.input.midi.status);
+  }
+
+  /**
+   * Tell the running mode its preferences moved.
+   *
+   * Nothing a mode owns is re-read until the mode is entered again, so the
+   * one that is running has to be told — after a reset, and after any single
+   * toggle whose effect the player expects to hear straight away.
+   */
+  applyModeSettings(): void {
+    (this.active as (GameMode & { applySettings?: () => void }) | null)?.applySettings?.();
   }
 
   /**

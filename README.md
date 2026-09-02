@@ -106,6 +106,31 @@ a good run is also a piece of music.
   note from the table's scale. Hitting one sounds it. *Playing* that note
   energises it: it glows, kicks harder and scores double, and it stays lit for
   as long as you hold the note down.
+- **The ball carries your note.** A key charges the ball it throws with the note
+  it sounded, and the ball wears that colour until the next key takes it. Every
+  tuned element it strikes then sounds the two notes together and scores the
+  interval: fifths, fourths, thirds and sixths pay well and are named on the
+  playfield; seconds and sevenths count for a little and say nothing. Which key
+  you throw from starts to matter musically as well as ballistically.
+- **The table is a band.** The slings are the kick and the tom, the spinners a
+  shaker with a hat rolling behind them for as long as they spin, the lanes
+  under the dome bells, the targets plucks, and the bumpers the mallet they
+  have always been.
+- **The bed plays along.** The chord bed under the table follows the rally. A
+  ball waiting at the serve gets the sustained chord it always had; a combo
+  moves it to a pulse, a longer one to broken chords with a bass line, and
+  multiball to a full arpeggio, with the rhythm box coming in a kick at a time
+  underneath. It changes only on a bar line, winds down rather than cutting out
+  when a rally lapses, and stops with the ball. *Settings → Pinball → Drums
+  under a rally* keeps the drums out for whoever wants the chords without a
+  band.
+- **The beat is on the table.** A ring around the bumpers and a strip along the
+  keybed breathe with the bed's beat, harder on the downbeat, and a key played
+  on the beat throws a ring off the key. Groove was always worth points; now
+  you can see what it is judged against.
+- **Losing a ball plays it back.** The pause before the next ball is a bonus
+  count, and the ticks are the notes that ball struck, played back as a phrase
+  at the pace of the rally, each one worth the ball's best combo.
 - **Multipliers reward musicianship.** Groove (playing on the beat), Resonance
   (hitting energised elements), Combo and Multiball all stack. A combo survives
   the ball coming back to the keybed and lapses only when play goes quiet, so

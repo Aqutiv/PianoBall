@@ -51,6 +51,8 @@ export class Scoring {
   /** Consecutive scoring hits without the ball returning to the keybed. */
   combo = 0;
   comboBest = 0;
+  /** The best combo of the ball in play, which is what its bonus is worth. */
+  ballComboBest = 0;
   /** Earned by landing hits on the beat. */
   groove = 1;
   /** Earned by hitting elements while their note is held. */
@@ -105,6 +107,7 @@ export class Scoring {
     this.combo++;
     this.lastChainAt = this.time;
     if (this.combo > this.comboBest) this.comboBest = this.combo;
+    if (this.combo > this.ballComboBest) this.ballComboBest = this.combo;
   }
 
   /** The ball is gone, or the run has restarted: the combo ends there. */
@@ -117,6 +120,7 @@ export class Scoring {
   startBall(): void {
     this.ballScore = 0;
     this.combo = 0;
+    this.ballComboBest = 0;
     this.resonance = 1;
   }
 
@@ -125,6 +129,7 @@ export class Scoring {
     this.ballScore = 0;
     this.combo = 0;
     this.comboBest = 0;
+    this.ballComboBest = 0;
     this.groove = 1;
     this.resonance = 1;
     this.multiball = 1;

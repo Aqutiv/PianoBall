@@ -1,8 +1,15 @@
-import type { AudioEngine } from '../../audio/engine';
+import type { AudioEngine, Scheduled } from '../../audio/engine';
 import type { ChordBed } from '../../audio/bed';
 import { snapToScale, degreeToNote } from '../../audio/music';
 import type { Game } from '../../game/game';
-import { clamp } from '../../core/math';
+import type { Intensity } from '../../game/intensity';
+import type { KeyState } from '../../game/keybed';
+import { RhythmBox } from '../../audio/rhythmBox';
+import { findPattern } from '../../audio/patterns';
+import { clamp, clamp01 } from '../../core/math';
+import { LADDER } from './ladder';
+import { pinballSettings } from './settings';
+import { strikeFor } from './strikes';
 
 /**
  * Turns what happens on the table into music.
@@ -10,24 +17,57 @@ import { clamp } from '../../core/math';
  * Everything the game emits is already tuned — elements carry a note, the
  * keybed carries the player's own playing — so this layer mostly decides
  * loudness, panning and timbre. The chord bed underneath is shared with every
- * other mode and lives elsewhere.
+ * other mode and lives elsewhere; the rhythm box is this mode's own, and
+ * follows the rally rather than the mode, the way Freestyle's follows the run.
  */
+/** A key press that landed on the beat. */
+export interface GrooveHit {
+  key: KeyState;
+  note: number;
+  streak: number;
+}
+
 export class PinballAudio {
   private offs: (() => void)[] = [];
-  private timers: number[] = [];
+  private readonly box: RhythmBox;
+  /**
+   * One-shots placed ahead on the clock — a flourish, a roll — with when each
+   * will have finished. Leaving the mode takes back whatever is still to come,
+   * the way clearing the timers used to; a sound already handed to the graph
+   * is otherwise nobody's to stop.
+   */
+  private readonly ahead: { until: number; cancel(): void }[] = [];
+  /**
+   * Told of every press that lands on the beat. The mode shows the beat and
+   * this layer judges it; a callback rather than a bus event because the bus
+   * is the game's to publish on, and this is not the game.
+   */
+  onGroove: ((hit: GrooveHit) => void) | null = null;
 
   constructor(
     private readonly engine: AudioEngine,
     private readonly bed: ChordBed,
     private readonly game: Game,
-  ) {}
+  ) {
+    const first = LADDER.find((r) => r.drums)?.drums ?? '';
+    this.box = new RhythmBox(engine, () => game.music.bpm, findPattern(first));
+  }
+
+  /** Whether the rhythm box is running. The teardown tests read this. */
+  get drumming(): boolean { return this.box.playing; }
+
+  /** Nothing should keep drumming behind a menu. */
+  pause(): void { this.box.stop(); }
+
+  /** Back to whatever rung the table is on, drums included. */
+  resume(): void { this.apply(this.game.intensity); }
 
   private pan(x: number): number {
     return clamp((x / this.game.def.width - 0.5) * 1.5, -1, 1);
   }
 
   /** Off-scale notes are nudged into the table's key when assist is on. */
-  private tune(note: number): number {
+  tune(note: number): number {
     const m = this.game.music;
     return this.engine.settings.assist ? snapToScale(note, m.root, m.scale) : note;
   }
@@ -46,7 +86,9 @@ export class PinballAudio {
       // thing a player can actually do.
       if (!engine.running) return;
       const groove = this.bed.groove;
-      this.game.scoring.setGroove(groove.judge(engine.now) ? groove.multiplier : 1);
+      const on = groove.judge(engine.now);
+      this.game.scoring.setGroove(on ? groove.multiplier : 1);
+      if (on) this.onGroove?.({ key, note, streak: groove.streak });
     }));
 
     offs.push(bus.on('keyup', ({ note }) => {
@@ -62,10 +104,41 @@ export class PinballAudio {
       engine.impact(sound, energy, this.pan(x), note);
     }));
 
+    // Each family of element is its own instrument; see `strikes.ts`. What
+    // the impact and the energising buy is the same for all of them: louder,
+    // and for a pitched body brighter, so a held note still lights up the
+    // sound of the thing it is aimed at.
     offs.push(bus.on('element', ({ el, energised, impact, x }) => {
-      if (el.note === null) return;
-      const gain = clamp(0.18 + impact / 2600, 0.12, 0.62) * (energised ? 1.5 : 1);
-      engine.mallet(el.note, gain, this.pan(x), energised ? 0.85 : 0.45);
+      const s = strikeFor(el);
+      if (!s) return;
+      const base = clamp(0.18 + impact / 2600, 0.12, 0.62) * (energised ? 1.5 : 1);
+      const pan = this.pan(x);
+      if (s.mallet && el.note !== null) {
+        engine.mallet(el.note, base * s.mallet.gain, pan, clamp01(s.mallet.bright + (energised ? 0.4 : 0)));
+      }
+      if (s.drum) {
+        const voice = s.drum.voices[pan < 0 || s.drum.voices.length < 2 ? 0 : 1];
+        engine.drum(voice, Math.min(1, base * 1.6 * s.drum.gain));
+      }
+      if (s.roll) {
+        // A roll's length follows the spin the hit has just put on the
+        // element, dying away hit by hit; placed ahead on the audio clock.
+        const n = Math.min(s.roll.max, Math.round(el.spinRate * s.roll.perSpin));
+        const gain = Math.min(1, base * 1.2 * s.roll.gain);
+        for (let i = 1; i <= n; i++) {
+          const at = engine.now + i * s.roll.gap;
+          this.hold(engine.drum(s.roll.voice, gain * (1 - i / (n + 1)), at), at + 0.5);
+        }
+      }
+    }));
+
+    // The ball carries the note of the key that threw it, and every element
+    // it strikes sounds the interval. The element's own body is already
+    // played above; this is the dyad's second voice, underneath it, a little
+    // louder when the interval is one worth hearing.
+    offs.push(bus.on('interval', ({ ball, x, cls }) => {
+      const gain = cls === 'perfect' || cls === 'consonant' ? 0.22 : 0.14;
+      engine.mallet(ball, gain, this.pan(x), 0.5);
     }));
 
     // A recognised chord gets a lift; a random cluster does not.
@@ -91,23 +164,73 @@ export class PinballAudio {
     }));
 
     offs.push(bus.on('serve', () => { this.bed.groove.reset(); }));
+
+    // The bonus count is the rally played back, a tick a note, rising and
+    // brightening towards the end the way a machine's count gathers pace.
+    offs.push(bus.on('bonus', ({ note, index, count, x }) => {
+      const f = index / Math.max(1, count - 1);
+      engine.mallet(note, 0.24 + 0.18 * f, this.pan(x), 0.55 + 0.4 * f);
+    }));
+
+    // The accompaniment follows the rally. Applied on the way in as well, so a
+    // mode re-entered mid-run is not left on whatever rung it was detached at.
+    offs.push(bus.on('intensity', ({ level }) => this.apply(level)));
+    this.apply(this.game.intensity);
   }
 
   detach(): void {
     for (const off of this.offs) off();
     this.offs.length = 0;
+    this.onGroove = null;
+    this.box.stop();
     // Leaving mid-flourish must not keep playing it into the next mode.
-    for (const t of this.timers) clearTimeout(t);
-    this.timers.length = 0;
+    for (const h of this.ahead) h.cancel();
+    this.ahead.length = 0;
+    // The bed is shared. The other modes expect to find it plain.
+    this.apply(0);
   }
 
-  /** Rising run through the table's scale. Used for objectives and multiball. */
+  /** Remember a one-shot placed ahead, dropping the ones already over. */
+  private hold(handle: Scheduled, until: number): void {
+    const now = this.engine.now;
+    let keep = 0;
+    for (const h of this.ahead) if (h.until > now) this.ahead[keep++] = h;
+    this.ahead.length = keep;
+    this.ahead.push({ until, cancel: () => handle.cancel() });
+  }
+
+  /**
+   * Put the bed and the drums on the rung the table is on.
+   *
+   * The bed takes it at the next bar. The drums fade rather than switch: a
+   * rally that lapses is heard to wind down, not to be cut off, and one that
+   * picks up again inside the fade simply climbs back.
+   */
+  private apply(level: Intensity): void {
+    const rung = LADDER[level];
+    this.bed.setLoopPattern(rung.pattern, rung.parts);
+    if (rung.drums && pinballSettings().drums) {
+      this.box.setPattern(findPattern(rung.drums));
+      this.box.start();
+      this.box.fadeTo(rung.level, 0.6);
+    } else {
+      this.box.fadeOut(0.35);
+    }
+  }
+
+  /**
+   * Rising run through the table's scale. Used for objectives and multiball.
+   * Placed on the audio clock rather than on timers, so it lands where it
+   * was asked for; held on to, so leaving can still take it back.
+   */
   private arpeggio(count: number, spacing: number, gain: number): void {
     const m = this.game.music;
+    const now = this.engine.now;
     for (let i = 0; i < count; i++) {
-      this.timers.push(window.setTimeout(() => {
-        this.engine.mallet(degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8);
-      }, i * spacing * 1000));
+      const at = now + i * spacing;
+      this.hold(this.engine.mallet(
+        degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8, at,
+      ), at + 1);
     }
   }
 }

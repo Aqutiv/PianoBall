@@ -28,6 +28,9 @@ export const COMP_PATTERNS: CompPattern[] =
  */
 export type CompPart = 'chord' | 'bass' | 'wash';
 
+/** Every part of an accompaniment, which is what a bed normally sounds. */
+export const ALL_PARTS: readonly CompPart[] = ['chord', 'bass', 'wash'];
+
 export interface CompEvent {
   /** Beats after the chord's own start. */
   offset: number;

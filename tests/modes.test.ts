@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '../src/game/game';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { InputHub } from '../src/midi/inputHub';
@@ -10,6 +10,7 @@ import { ModeBase, type ModeContext } from '../src/app/mode';
 import { PlayTuneMode } from '../src/modes/playtune/playtune';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../src/audio/voices';
 import { resetPlayTuneSettings } from '../src/modes/playtune/settings';
+import { resetPinballSettings, setPinballSettings } from '../src/modes/pinball/settings';
 import type { Stage } from '../src/render/stage';
 import type { Hud } from '../src/ui/hud';
 
@@ -64,6 +65,59 @@ describe('mode teardown', () => {
     game.bus.emit('drain', { x: 0, y: 0, ballId: 1, saved: false });
 
     expect(bed.groove.streak).toBe(4);
+  });
+});
+
+/**
+ * The table's drums follow the rally, not the mode: they have to be silent at
+ * the serve, behind a menu and after the mode has left, and to come back at
+ * whatever rung the table is actually on rather than the one it was paused at.
+ */
+describe('pinball drums', () => {
+  beforeEach(() => { vi.useFakeTimers(); resetPinballSettings(); });
+  afterEach(() => { vi.useRealTimers(); resetPinballSettings(); });
+
+  function director() {
+    const input = new InputHub();
+    const engine = new AudioEngine();
+    const music = new MusicState({ ...AURORA.music });
+    const bed = new ChordBed(engine, music);
+    const game = new Game(input, AURORA, music);
+    return { audio: new PinballAudio(engine, bed, game), game };
+  }
+
+  it('drums only while there is a rally to drum under', () => {
+    const { audio, game } = director();
+    audio.attach();
+    expect(audio.drumming).toBe(false);
+    game.bus.emit('intensity', { level: 2, from: 0 });
+    expect(audio.drumming).toBe(true);
+    audio.detach();
+    expect(audio.drumming).toBe(false);
+    expect(vi.getTimerCount(), 'nothing left ticking').toBe(0);
+  });
+
+  it('stops behind a menu and comes back at the rung the table is on', () => {
+    const { audio, game } = director();
+    audio.attach();
+    game.bus.emit('intensity', { level: 3, from: 0 });
+    audio.pause();
+    expect(audio.drumming).toBe(false);
+    audio.resume();
+    expect(audio.drumming, 'the game itself is still on the bottom rung').toBe(false);
+    game.intensity = 3;
+    audio.resume();
+    expect(audio.drumming).toBe(true);
+    audio.detach();
+  });
+
+  it('stays silent when the player has switched it off', () => {
+    setPinballSettings({ drums: false });
+    const { audio, game } = director();
+    audio.attach();
+    game.bus.emit('intensity', { level: 3, from: 0 });
+    expect(audio.drumming).toBe(false);
+    audio.detach();
   });
 });
 
