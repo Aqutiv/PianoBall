@@ -819,6 +819,30 @@ describe('progression', () => {
     expect(stale.best.a.grade).toBe('A');
   });
 
+  /**
+   * The one thing the merge must not do. A reset is asked for twice and means
+   * what it says, so a window still holding the pre-reset chain has to give it
+   * up rather than write it back over the wipe.
+   */
+  it('does not put back a chain the player deliberately wiped', () => {
+    const stale = resetProgress(KEY, order);
+    recordRun(KEY, stale, 'a', order, { accuracy: 0.9, score: 900, grade: 'A', passed: true });
+    recordRun(KEY, stale, 'b', order, { accuracy: 0.9, score: 800, grade: 'A', passed: true });
+    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
+
+    // Another window resets the chain while this one still holds all of it.
+    resetProgress(KEY, order);
+
+    recordRun(KEY, stale, 'a', order, { accuracy: 0.3, score: 5, grade: null, passed: false });
+
+    const after = loadProgress(KEY, order);
+    expect(after.unlocked).toEqual(['a']);
+    expect(after.best.b).toBeUndefined();
+    // The run that was being written still counts, on the fresh chain.
+    expect(after.best.a).toMatchObject({ accuracy: 0.3, score: 5, plays: 1, passed: false });
+    expect(stale.unlocked).toEqual(['a']);
+  });
+
   it('names what unlocks a locked tune', () => {
     expect(unlockedBy(order, 'b')).toBe('a');
     expect(unlockedBy(order, 'a')).toBeNull();

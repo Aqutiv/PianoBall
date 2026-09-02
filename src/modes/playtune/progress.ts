@@ -23,6 +23,20 @@ export interface TuneRecord {
 export interface Progress {
   unlocked: string[];
   best: Record<string, TuneRecord>;
+  /**
+   * How many times this chain has been deliberately wiped.
+   *
+   * The one thing a merge cannot work out on its own is the difference between
+   * a record another window has not seen yet and a record the player asked to
+   * be rid of: both look like "storage is missing something I hold". The count
+   * only ever goes up, so a view whose own is behind knows it is looking at a
+   * chain that has been reset since — and that a reset, confirmed twice on the
+   * settings panel, outranks whatever it was still carrying.
+   *
+   * Absent from anything written before it existed, which reads as 0: no reset
+   * has happened, so nothing is being overruled.
+   */
+  epoch: number;
 }
 
 export interface RunResult {
@@ -50,7 +64,7 @@ export interface RunOutcome {
  * worse.
  */
 export function loadProgress(key: string, order: readonly string[]): Progress {
-  const raw = load<Progress>(key, { unlocked: [], best: {} });
+  const raw = load<Progress>(key, { unlocked: [], best: {}, epoch: 0 });
   const known = new Set(order);
   const unlocked = Array.isArray(raw.unlocked)
     ? raw.unlocked.filter((id) => known.has(id))
@@ -77,7 +91,7 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
         : (next ? open.has(next) : false) || grade !== null,
     };
   }
-  return { unlocked, best };
+  return { unlocked, best, epoch: Number(raw.epoch) || 0 };
 }
 
 export function saveProgress(key: string, progress: Progress): void {
@@ -132,6 +146,16 @@ function absorbProgress(progress: Progress, other: Progress): Progress {
     const merged = bestOf(progress.best[id], rec);
     if (merged) progress.best[id] = merged;
   }
+  progress.epoch = Math.max(progress.epoch, other.epoch);
+  return progress;
+}
+
+/** Become `other` outright, in place and for the same reason `absorb` is. */
+function adoptProgress(progress: Progress, other: Progress): Progress {
+  progress.unlocked.splice(0, progress.unlocked.length, ...other.unlocked);
+  for (const id of Object.keys(progress.best)) delete progress.best[id];
+  Object.assign(progress.best, other.best);
+  progress.epoch = other.epoch;
   return progress;
 }
 
@@ -148,6 +172,11 @@ function absorbProgress(progress: Progress, other: Progress): Progress {
  * since, and finishing any run there would otherwise put storage back to it.
  * Replaying an early tune is exactly when that bites, because the snapshot is
  * oldest where the player has least left to earn.
+ *
+ * The exception is a chain that has been reset since the snapshot was taken,
+ * which the epoch is there to spot. A merge would quietly put back what the
+ * player asked twice to be rid of, so the stored side wins outright instead —
+ * the run being written still counts, on the fresh chain.
  */
 export function recordRun(
   key: string,
@@ -156,7 +185,9 @@ export function recordRun(
   order: readonly string[],
   result: RunResult,
 ): RunOutcome {
-  absorbProgress(progress, loadProgress(key, order));
+  const stored = loadProgress(key, order);
+  if (stored.epoch > progress.epoch) adoptProgress(progress, stored);
+  else absorbProgress(progress, stored);
 
   const prev = progress.best[id];
   const improved = !prev || result.accuracy > prev.accuracy;
@@ -182,9 +213,19 @@ export function recordRun(
   return { unlocked, improved, best };
 }
 
-/** Wipe every unlock and record. The settings panel confirms before calling. */
+/**
+ * Wipe every unlock and record. The settings panel confirms before calling.
+ *
+ * The epoch goes up rather than back to zero, which is what tells any other
+ * window of the app still holding a pre-reset view that its records are gone
+ * on purpose rather than merely not written down yet.
+ */
 export function resetProgress(key: string, order: readonly string[]): Progress {
-  const fresh: Progress = { unlocked: order.length ? [order[0]] : [], best: {} };
+  const fresh: Progress = {
+    unlocked: order.length ? [order[0]] : [],
+    best: {},
+    epoch: loadProgress(key, order).epoch + 1,
+  };
   saveProgress(key, fresh);
   return fresh;
 }
