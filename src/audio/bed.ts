@@ -2,7 +2,27 @@ import type { AudioEngine } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
 import { Groove, chordNotes, degreeToNote, voiceLead } from './music';
-import { compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern } from './comp';
+import {
+  compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
+} from './comp';
+
+/**
+ * The hand on the bed, in the units a hand moves by: seconds and fractions.
+ * The bed turns them into beats for each chord it writes, so the same feel
+ * is the same feel at any tempo. Null is a sequencer, which is what the
+ * tests want.
+ */
+export interface Feel {
+  rng: () => number;
+  /** Seconds either side of the written moment a struck note may land. */
+  jitter: number;
+  /** Fraction either side of the written gain. */
+  gain: number;
+  /** Seconds between the notes of a rolled chord. */
+  roll: number;
+  /** Multiplier on whatever lands on the bar line. */
+  accent: number;
+}
 
 /** A chord placed at a beat, for a bed driven by a written piece. */
 export interface TrackChord {
@@ -54,6 +74,8 @@ export class ChordBed {
   readonly groove: Groove;
   /** Index into the current chord progression. */
   chordIndex = 0;
+  /** Who is playing the chords. Set by the shell; left null, the bed is exact. */
+  feel: Feel | null = null;
   /**
    * Bars each chord is held for. Two at 96 bpm is five seconds — the bed keeps
    * moving without turning into a backing track that competes with the player.
@@ -342,7 +364,8 @@ export class ChordBed {
       // for the whole of it, so the comping inside a chord costs no more
       // scheduler wakes than the single pad it replaces.
       const phase = c.beat - this.barOrigin;
-      for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase)) {
+      const opts = { human: this.human(beat) };
+      for (const ev of compEvents(this.pattern, voiced, root, c.len, clock.beatsPerBar, phase, opts)) {
         // A role may keep only part of the accompaniment: PlayTune's chord role
         // leaves the bed the bass and takes the chords for the player.
         if (!this.parts.includes(ev.part)) continue;
@@ -398,9 +421,17 @@ export class ChordBed {
     const voiced = voiceLead(this.lastVoicing, notes);
     this.lastVoicing = voiced;
     const beat = bar / 4;
-    for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0)) {
+    const opts = { human: this.human(beat) };
+    for (const ev of compEvents(this.loopPattern, voiced, root, 4, 4, 0, opts)) {
       if (!this.loopParts.includes(ev.part)) continue;
       this.pending.push({ at: this.nextBar + ev.offset * beat, ev });
     }
+  }
+
+  /** The feel, in beats of this length. */
+  private human(beatSeconds: number): Humanize | undefined {
+    const f = this.feel;
+    if (!f) return undefined;
+    return { rng: f.rng, jitter: f.jitter / beatSeconds, gain: f.gain, roll: f.roll / beatSeconds, accent: f.accent };
   }
 }

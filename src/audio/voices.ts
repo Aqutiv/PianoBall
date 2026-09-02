@@ -581,6 +581,12 @@ export interface BedSpec {
   pluck?: number;
   gain: number;
   unison?: Unison;
+  /**
+   * How much of the bed goes through the engine's ensemble chorus, 0..1.
+   * A section of strings is many players a hair apart, and this is the hair;
+   * a plucked thing wants none of it, or the pluck smears.
+   */
+  ensemble?: number;
 }
 
 const BED_BASE: BedSpec = {
@@ -602,12 +608,14 @@ export const BED_VOICES: readonly BedDef[] = [
   // ---------------------------------------------------------------- pads ---
   {
     id: 'warm', name: 'Warm Pad', family: 'Pads',
-    // The bed the app has always had: two saws six cents apart. Pinned by test.
+    // The bed the app has always had: two saws six cents apart. Pinned by
+    // test. The ensemble is what has changed under it, not the saws.
     spec: bed({
       layers: [
         { type: 'sawtooth', ratio: 1, level: 1, detune: -6 },
         { type: 'sawtooth', ratio: 1, level: 1, detune: 6 },
       ],
+      ensemble: 0.6,
     }),
   },
   {
@@ -619,6 +627,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sawtooth', ratio: 2, level: 0.25, detune: 4 },
       ],
       filter: { start: 380, startStruck: 850, peak: 1500, peakStruck: 2100, end: 460, q: 1.2 },
+      ensemble: 0.8,
     }),
   },
   {
@@ -630,6 +639,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 2, level: 0.22 },
       ],
       filter: { start: 320, startStruck: 700, peak: 900, peakStruck: 1300, end: 380, q: 1.1 },
+      ensemble: 0.7,
     }),
   },
   {
@@ -641,6 +651,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 4.1, level: 0.2 },
       ],
       filter: { start: 600, startStruck: 1200, peak: 2400, peakStruck: 3200, end: 700, q: 0.9 },
+      ensemble: 0.5,
     }),
   },
   {
@@ -652,6 +663,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'square', ratio: 1, level: 0.2 },
       ],
       filter: { start: 300, startStruck: 800, peak: 1900, peakStruck: 2600, end: 420, q: 2.2 },
+      ensemble: 0.6,
     }),
   },
 
@@ -746,6 +758,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 0.5, level: 0.3 },
       ],
       filter: { start: 380, startStruck: 800, peak: 1100, peakStruck: 1600, end: 420, q: 1.5 },
+      ensemble: 0.5,
     }),
   },
   {
@@ -757,6 +770,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sawtooth', ratio: 1, level: 0.7, detune: 12 },
       ],
       filter: { start: 300, startStruck: 750, peak: 1400, peakStruck: 1900, end: 400, q: 1.8 },
+      ensemble: 0.7,
     }),
   },
   {
@@ -768,6 +782,7 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 0.5, level: 0.4 },
       ],
       filter: { start: 800, startStruck: 1400, peak: 1800, peakStruck: 2200, end: 800, q: 0.5 },
+      ensemble: 0.3,
     }),
   },
 ];

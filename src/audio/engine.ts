@@ -237,9 +237,13 @@ export class AudioEngine {
    */
   private padGen!: GainNode;
   private fxBus!: GainNode;
-  /** The bed's own path in front of `padBus`: carved, then dipped under the player. */
+  /** The bed's own path in front of `padBus`: carved, widened, then dipped under the player. */
   private padCarve!: BiquadFilterNode;
   private padDuck!: GainNode;
+  private ensembleWet!: GainNode;
+  private ensembleDry!: GainNode;
+  /** Slow oscillators shared by everything that moves at the same rate. */
+  private lfos = new Map<number, OscillatorNode>();
   /** Two rooms: the hall the music plays in, and the cabinet the ball rolls in. */
   private hallSend!: GainNode;
   private hallWet!: GainNode;
@@ -445,7 +449,34 @@ export class AudioEngine {
     this.padDuck.gain.value = 1;
     this.padBus = ctx.createGain();
     this.padBus.gain.value = 1;
-    this.padCarve.connect(padShelf).connect(this.padDuck).connect(this.padBus).connect(this.musicBus);
+    this.padCarve.connect(padShelf);
+    this.padDuck.connect(this.padBus).connect(this.musicBus);
+
+    // The ensemble. Two short delays a few milliseconds apart, each swept by
+    // its own slow oscillator and sent to one ear, alongside the dry path:
+    // the string machine's chorus, which is what turns two saws into a
+    // section. Between the carve and the duck, so the hall is sent the
+    // widened bed and the duck dips all of it. How much of it is heard is
+    // the bed voice's to say, through `ensemble`.
+    const mono = ctx.createGain();
+    mono.channelCount = 1;
+    mono.channelCountMode = 'explicit';
+    const merge = ctx.createChannelMerger(2);
+    for (const [ear, base, rate] of [[0, 0.012, 0.7], [1, 0.017, 0.53]] as const) {
+      const line = ctx.createDelay(0.05);
+      line.delayTime.value = base;
+      const sweep = ctx.createGain();
+      sweep.gain.value = 0.0022;
+      this.lfoAt(rate).connect(sweep).connect(line.delayTime);
+      mono.connect(line).connect(merge, 0, ear);
+    }
+    this.ensembleWet = ctx.createGain();
+    this.ensembleWet.gain.value = 0;
+    this.ensembleDry = ctx.createGain();
+    this.ensembleDry.gain.value = 1;
+    padShelf.connect(mono);
+    merge.connect(this.ensembleWet).connect(this.padDuck);
+    padShelf.connect(this.ensembleDry).connect(this.padDuck);
     const padReverb = ctx.createGain();
     padReverb.gain.value = 0.6;
     this.padBus.connect(padReverb).connect(this.hallSend);
@@ -477,6 +508,39 @@ export class AudioEngine {
     this.warm(this.leadSpec);
     this.warm(this.bedSpec);
     this.warm(this.keyBedSpec);
+    this.setEnsemble(this.bedSpec.ensemble ?? 0);
+  }
+
+  /**
+   * A slow oscillator at this rate, shared by everything that asks for it.
+   *
+   * Motion is cheap to give a voice when the oscillator already exists — a
+   * depth tap is one gain node — where an oscillator per note would be a
+   * source per note on top of the ones that make the sound. Keyed to a
+   * hundredth of a hertz, so two voices that move at nearly the same rate
+   * move together.
+   */
+  private lfoAt(rate: number): OscillatorNode {
+    const key = Math.round(rate * 100);
+    let lfo = this.lfos.get(key);
+    if (!lfo) {
+      lfo = this.ctx!.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = key / 100;
+      lfo.start();
+      this.lfos.set(key, lfo);
+    }
+    return lfo;
+  }
+
+  /** How much of the bed goes through the ensemble. Ramped: a bed changes mid-chord. */
+  private setEnsemble(mix: number): void {
+    if (!this.ready || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const m = clamp01(mix);
+    this.ensembleWet.gain.setTargetAtTime(m, t, 0.1);
+    // The dry path gives a little way as the wet comes up, or a wide bed is a louder bed.
+    this.ensembleDry.gain.setTargetAtTime(1 - m * 0.5, t, 0.1);
   }
 
   setSettings(patch: Partial<AudioSettings>): void {
@@ -554,6 +618,7 @@ export class AudioEngine {
     this.bedId = voice.id;
     this.bedSpec = voice.spec;
     this.warm(voice.spec);
+    this.setEnsemble(voice.spec.ensemble ?? 0);
   }
 
   /**

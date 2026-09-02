@@ -6,6 +6,7 @@ import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSet
 import { InputHub } from '../midi/inputHub';
 import { AudioEngine } from '../audio/engine';
 import { ChordBed } from '../audio/bed';
+import { makeRng } from '../audio/shaping';
 import { wireGlobalControls } from '../audio/controls';
 import { MusicState } from '../audio/musicState';
 import { resetFreestyleSettings } from '../modes/freestyle/settings';
@@ -74,6 +75,10 @@ export class Shell {
 
     this.music = new MusicState({ ...AURORA.music });
     this.bed = new ChordBed(this.audio, this.music);
+    // The bed is played by a hand, not a sequencer: a few milliseconds of
+    // drift, a tenth of a gain, chords rolled from the bottom and a lean on
+    // the bar line. Seeded from the clock, so no two sessions comp alike.
+    this.bed.feel = { rng: makeRng(Date.now() >>> 0), jitter: 0.01, gain: 0.1, roll: 0.018, accent: 1.08 };
     this.hud = new Hud(hudRoot);
 
     this.ctx = {
