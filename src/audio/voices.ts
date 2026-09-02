@@ -478,49 +478,85 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
   // their own rates so the strike is bright and the tail under it is not.
   {
     id: 'music-box', name: 'Music Box', family: 'Mallets',
+    // A comb's tooth plucked: a strong fundamental and two partials that
+    // are not quite harmonic, shorter up the comb. There is no damper on a
+    // music box, so nothing happens when the key comes up.
     spec: key({
       layers: [
         { type: 'sine', ratio: 1, level: 0.5, decay: 1.1 },
         { type: 'sine', ratio: 3.01, level: 0.16, decay: 0.5 },
         { type: 'sine', ratio: 5.03, level: 0.07, decay: 0.28 },
       ],
-      noise: { freq: 4000, q: 3, decay: 0.008, gain: 0.08 },
+      noise: { freq: 4000, pitchTrack: 9, q: 3, decay: 0.008, gain: 0.08 },
       filter: { base: 7, track: 8, q: 1, qVel: 1, settle: 5, settleVel: 2, settleTime: 0.5 },
       env: { attack: 0.002, decay: 1, sustain: 0.02, release: 0.5 },
+      velDb: 18,
+      keyTrack: { decay: -0.5 },
       reverb: 0.4, delay: 0.14,
     }),
   },
   {
     id: 'marimba', name: 'Marimba', family: 'Mallets',
-    // The partial four times above the note is what makes a bar sound wooden.
+    // A rosewood bar is tuned so its partials fall at four and ten times the
+    // note, which is what makes it sound wooden; the higher bars ring
+    // shorter, and the mallet's knock follows the pitch.
     spec: key({
       layers: [
         { type: 'sine', ratio: 1, level: 0.56, decay: 0.5 },
-        { type: 'sine', ratio: 4, level: 0.14, decay: 0.12 },
-        { type: 'sine', ratio: 10, level: 0.05, decay: 0.05 },
+        { type: 'sine', ratio: 4, level: 0.16, decay: 0.14 },
+        { type: 'sine', ratio: 9.9, level: 0.05, decay: 0.06 },
       ],
-      noise: { freq: 1600, q: 2, decay: 0.01, gain: 0.1 },
+      noise: { freq: 1600, pitchTrack: 5, q: 2, decay: 0.012, gain: 0.1, velCurve: 1 },
       filter: { base: 5, track: 8, q: 1.2, qVel: 1, settle: 3, settleVel: 2, settleTime: 0.3 },
       env: { attack: 0.002, decay: 0.45, sustain: 0.02, release: 0.22 },
+      velDb: 24,
+      keyTrack: { decay: -0.6 },
       reverb: 0.26, delay: 0.08,
     }),
   },
   {
     id: 'vibraphone', name: 'Vibraphone', family: 'Mallets',
+    // Aluminium bars at one, four and ten, ringing for seconds, under the
+    // fans that spin over the resonators: that is the vibrato, and it is in
+    // the level rather than the pitch. The pedal damps the bars.
     spec: key({
       layers: [
         { type: 'sine', ratio: 1, level: 0.56, decay: 2.2 },
         { type: 'sine', ratio: 4, level: 0.12, decay: 0.9 },
-        { type: 'sine', ratio: 9.2, level: 0.04, decay: 0.3 },
+        { type: 'sine', ratio: 10, level: 0.04, decay: 0.3 },
       ],
+      noise: { freq: 2500, pitchTrack: 6, q: 2, decay: 0.008, gain: 0.05 },
+      damper: { freq: 400, q: 0.8, decay: 0.05, gain: 0.03 },
       filter: { base: 5, track: 6, q: 1, qVel: 1, settle: 4, settleVel: 2, settleTime: 0.6 },
       env: { attack: 0.003, decay: 1.8, sustain: 0.05, release: 1.1 },
+      velDb: 26,
+      keyTrack: { decay: -0.45 },
+      lfo: { rate: 4.2, depth: 0.5, target: 'tremolo' },
       reverb: 0.45, delay: 0.14,
     }),
   },
   {
+    id: 'glockenspiel', name: 'Glockenspiel', family: 'Mallets',
+    // Steel bars, small and bright: partials at 2.71 and 5.15, a hard knock,
+    // and the top of the range too high for anything to close.
+    spec: key({
+      layers: [
+        { type: 'sine', ratio: 1, level: 0.5, decay: 1.6 },
+        { type: 'sine', ratio: 2.71, level: 0.14, decay: 0.7 },
+        { type: 'sine', ratio: 5.15, level: 0.06, decay: 0.3 },
+      ],
+      noise: { freq: 4000, pitchTrack: 8, q: 2, decay: 0.006, gain: 0.08 },
+      filter: { base: 8, track: 6, q: 1, qVel: 1, settle: 7, settleVel: 2, settleTime: 0.5 },
+      env: { attack: 0.002, decay: 1.4, sustain: 0.03, release: 0.6 },
+      velDb: 26,
+      keyTrack: { decay: -0.4 },
+      reverb: 0.4, delay: 0.12,
+    }),
+  },
+  {
     id: 'tubular-bell', name: 'Tubular Bell', family: 'Mallets',
-    // Partials at no whole-number ratio at all, which is what a bell is.
+    // Partials at no whole-number ratio at all, which is what a bell is, and
+    // a clang of the hammer on the tube's rim before any of them.
     spec: key({
       layers: [
         { type: 'sine', ratio: 1, level: 0.4, decay: 3 },
@@ -528,20 +564,28 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
         { type: 'sine', ratio: 5.4, level: 0.09, decay: 1.2 },
         { type: 'sine', ratio: 8.9, level: 0.05, decay: 0.6 },
       ],
+      noise: { freq: 3500, pitchTrack: 7, q: 1.5, decay: 0.02, gain: 0.1 },
       filter: { base: 7, track: 8, q: 1, qVel: 1, settle: 6, settleVel: 2, settleTime: 1 },
       env: { attack: 0.003, decay: 2.5, sustain: 0.04, release: 1.6 },
+      velDb: 28,
+      keyTrack: { decay: -0.4 },
       reverb: 0.6, delay: 0.16,
     }),
   },
   {
     id: 'harp', name: 'Harp', family: 'Mallets',
+    // A gut string plucked: bright at the fingertip, dying from the top down,
+    // shorter and brighter up the frame.
     spec: key({
       layers: [
-        { type: 'sawtooth', ratio: 1, level: 0.5, decay: 1.2 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.3] }, ratio: 1, level: 0.5, decay: 1.2 },
         { type: 'triangle', ratio: 2, level: 0.14, decay: 0.5 },
       ],
+      noise: { freq: 2000, pitchTrack: 6, q: 1.5, decay: 0.01, gain: 0.06 },
       filter: { base: 3, track: 8, q: 1.6, qVel: 2, settle: 1.2, settleVel: 2, settleTime: 0.4 },
       env: { attack: 0.003, decay: 0.9, sustain: 0.03, release: 0.5 },
+      velDb: 26,
+      keyTrack: { decay: -0.5, bright: 0.2 },
       reverb: 0.38, delay: 0.14,
     }),
   },
