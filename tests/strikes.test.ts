@@ -385,15 +385,34 @@ describe('the ball rolling', () => {
     expect(rolls[0].updates).toHaveLength(1);
   });
 
-  it('stops every roll on pause and on the way out', () => {
+  it('stops every roll on pause, and opens none behind the panel', () => {
     const { rolls, game, audio } = rig();
     game.spawnBall(400, 700, 500, 0);
     audio.frame();
     audio.pause();
     expect(rolls[0].stopped).toBe(true);
+
+    // The frames keep coming while the panel is up — the board stays on
+    // screen behind it — and a frozen ball's speed never changes, so a roll
+    // opened here would hold one unwavering pitch until the panel came down.
+    audio.frame();
+    audio.frame();
+    expect(rolls).toHaveLength(1);
+
+    // And the table rolls again on the way back.
+    audio.resume();
     audio.frame();
     expect(rolls).toHaveLength(2);
+    expect(rolls[1].stopped).toBe(false);
+  });
+
+  it('stops every roll on the way out', () => {
+    const { rolls, game, audio } = rig();
+    game.spawnBall(400, 700, 500, 0);
+    audio.frame();
+
     audio.detach();
-    expect(rolls[1].stopped).toBe(true);
+
+    expect(rolls[0].stopped).toBe(true);
   });
 });

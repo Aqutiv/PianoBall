@@ -164,7 +164,15 @@ export class FreestyleMode extends ModeBase implements GameMode {
   /** Nothing should keep drumming behind the pause panel. */
   pause(): void { this.box.stop(); }
 
-  resume(): void { this.applyRhythm(); }
+  /**
+   * Back from a panel that may have moved something this HUD is showing — the
+   * bed's level and the size of the room are in Settings as well as up here —
+   * so the controls are re-read rather than left on what they said going in.
+   */
+  resume(): void {
+    this.applyRhythm();
+    this.panel.sync();
+  }
 
   /**
    * Freestyle has no run to restart, but picking it from the menu is the same
@@ -175,6 +183,9 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.ctx.music.roll();
     this.field.reset();
     this.applyRhythm();
+    // Picked from the menu, which is reached through Settings: the panel was
+    // never suspended on that path, so nothing has re-read the controls yet.
+    this.panel.sync();
   }
 
   step(dt: number): void {

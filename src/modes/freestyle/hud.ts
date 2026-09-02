@@ -27,7 +27,9 @@ export class FreestyleHud {
   private nowEl!: HTMLElement;
   private bedEl!: HTMLButtonElement;
   private voiceEl!: HTMLSelectElement;
+  private voiceLevelEl!: HTMLInputElement;
   private bedVoiceEl!: HTMLSelectElement;
+  private bedLevelEl!: HTMLInputElement;
   private reverbEl!: HTMLInputElement;
   private wheelsEl!: HTMLElement;
   private rhythmEl!: HTMLButtonElement;
@@ -58,25 +60,33 @@ export class FreestyleHud {
     const r = rhythmSettings();
     const s = freestyleSettings();
 
+    // The left is what the player is playing: the chord under their hands, and
+    // the instrument making it. Everything that plays *with* them — the key
+    // they are all in, the rhythm, the bed — is on the right.
     this.hud.left.innerHTML = `
       <div class="score-block">
         <div class="chord" id="fs-chord">&nbsp;</div>
-        <div class="hud-controls">
-          <select id="fs-key" aria-label="Key">${keys}</select>
-          <select id="fs-scale" aria-label="Scale">${scales}</select>
-          <button id="fs-roll" title="Draw a scale at random">&#9860;</button>
-        </div>
-        <div class="hud-controls">
-          <select class="hud-select" id="fs-voice" aria-label="Instrument">
-            ${this.grouped(LEAD_VOICES, LEAD_FAMILIES, s.voiceId)}
-          </select>
-        </div>
-        <div class="score-sub" id="fs-now"></div>
+      </div>
+      <div class="hud-card">
+        <div class="card-title">Instrument</div>
+        <select class="hud-select" id="fs-voice" aria-label="Instrument">
+          ${this.grouped(LEAD_VOICES, LEAD_FAMILIES, s.voiceId)}
+        </select>
+        ${this.knob('fs-voice-level', 'level', 0, 100, this.leadLevel())}
       </div>
     `;
     this.hud.right.innerHTML = `
-      <div class="rhythm">
-        <div class="rhythm-head">
+      <div class="hud-card">
+        <div class="card-head">
+          <span class="card-title">Scale</span>
+          <select class="hud-select" id="fs-key" aria-label="Key">${keys}</select>
+          <button id="fs-roll" title="Draw a scale at random">&#9860;</button>
+        </div>
+        <select class="hud-select" id="fs-scale" aria-label="Scale">${scales}</select>
+        <div class="score-sub" id="fs-now"></div>
+      </div>
+      <div class="hud-card">
+        <div class="card-head">
           <button class="hud-toggle" id="fs-rhythm">Rhythm</button>
           <span class="rhythm-bpm"><b id="fs-bpm">${this.music.bpm}</b> bpm</span>
         </div>
@@ -88,11 +98,12 @@ export class FreestyleHud {
         ${this.knob('fs-level', 'level', 0, 100, Math.round(r.level * 100))}
         <div class="steps" id="fs-steps"></div>
       </div>
-      <div class="bed">
+      <div class="hud-card">
         <button class="hud-toggle" id="fs-bed">Backing bed</button>
         <select class="hud-select" id="fs-bed-voice" aria-label="Backing bed sound">
           ${this.grouped(BED_VOICES, BED_FAMILIES, s.bedVoiceId)}
         </select>
+        ${this.knob('fs-bed-level', 'level', 0, 100, this.bedLevel())}
       </div>
       <div class="wheel"><b>room</b><input type="range" id="fs-reverb" min="0" max="1" step="0.01"></div>
       <div class="wheels" id="fs-wheels"></div>
@@ -107,7 +118,9 @@ export class FreestyleHud {
     this.nowEl = q('#fs-now');
     this.bedEl = q<HTMLButtonElement>('#fs-bed');
     this.voiceEl = q<HTMLSelectElement>('#fs-voice');
+    this.voiceLevelEl = q<HTMLInputElement>('#fs-voice-level');
     this.bedVoiceEl = q<HTMLSelectElement>('#fs-bed-voice');
+    this.bedLevelEl = q<HTMLInputElement>('#fs-bed-level');
     this.reverbEl = q<HTMLInputElement>('#fs-reverb');
     this.wheelsEl = q('#fs-wheels');
     this.rhythmEl = q<HTMLButtonElement>('#fs-rhythm');
@@ -169,6 +182,15 @@ export class FreestyleHud {
       this.box.level = v / 100;
       setRhythmSettings({ level: this.box.level });
     });
+    // The same settings the panel's own faders write, not second copies of
+    // them: whichever was touched last is where the sound is, wherever you
+    // look next.
+    this.bindKnob(this.voiceLevelEl, 0, 100, (v) => {
+      this.engine.setSettings({ leadLevel: v / 100 });
+    });
+    this.bindKnob(this.bedLevelEl, 0, 100, (v) => {
+      this.engine.setSettings({ bedLevel: v / 100 });
+    });
 
     this.buildSteps();
     this.sync();
@@ -186,6 +208,10 @@ export class FreestyleHud {
     this.nowEl.style.opacity = random ? '1' : '0.5';
     this.reverbEl.value = String(this.engine.settings.reverb);
     this.paintReverb();
+    this.voiceLevelEl.value = String(this.leadLevel());
+    this.paintKnob(this.voiceLevelEl, 0, 100);
+    this.bedLevelEl.value = String(this.bedLevel());
+    this.paintKnob(this.bedLevelEl, 0, 100);
     // A tune can retune the app from under the panel, and "reset everything"
     // can clear the rhythm from under it, so the controls follow the state
     // rather than only the other way round.
@@ -224,6 +250,15 @@ export class FreestyleHud {
   }
 
   // ------------------------------------------------------------ plumbing ---
+
+  /** The engine's faders as this HUD's knobs count, 0..100. */
+  private leadLevel(): number {
+    return Math.round(this.engine.settings.leadLevel * 100);
+  }
+
+  private bedLevel(): number {
+    return Math.round(this.engine.settings.bedLevel * 100);
+  }
 
   private paintReverb(): void {
     this.reverbEl.style.setProperty('--fill', `${Number(this.reverbEl.value) * 100}%`);

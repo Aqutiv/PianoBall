@@ -212,6 +212,18 @@ export class ShotBudget {
     return true;
   }
 
+  /**
+   * Cut every shot, whether it is sounding now or was placed ahead.
+   *
+   * A one-shot is fire-and-forget: the table hands the engine a bonus count a
+   * second into the future and keeps no hold on it. This is the only way back
+   * to silence for what has already been written onto the clock.
+   */
+  cutAll(): void {
+    for (const s of this.shots) s.cut();
+    this.shots.length = 0;
+  }
+
   private prune(now: number): void {
     let keep = 0;
     for (const s of this.shots) if (s.until > now) this.shots[keep++] = s;

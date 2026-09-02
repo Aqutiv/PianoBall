@@ -263,6 +263,10 @@ html, body {
 .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 13px; }
 .row + .row { border-top: 1px solid rgba(255,255,255,0.05); }
 .row label { color: #c3cdec; }
+/* A switch and its level as one control: whether the bed plays, and how loud.
+   inline-flex rather than the row's own flex, so the two stay together on the
+   right-hand side instead of being pushed apart by the label. */
+.row .pair { display: inline-flex; align-items: center; gap: 10px; }
 
 button, select {
   font-family: inherit;
@@ -460,6 +464,8 @@ kbd {
 }
 
 .hud-left { display: flex; flex-direction: column; gap: 2px; }
+/* The chord above it is a readout and sits close; a panel is a panel. */
+.hud-left .hud-card { margin-top: 4px; }
 
 /* -------------------------------------------------------- freestyle HUD --- */
 
@@ -491,10 +497,17 @@ kbd {
 
 /* ---------------------------------------------------- freestyle rhythm --- */
 
-/* A column of its own: the rest of .hud-right is right-aligned readouts, and
-   controls that flush right are much harder to aim at than ones that line up.
-   The bed is the same block with less in it, so it shares the rule. */
-.rhythm, .bed {
+/*
+ * A panel in the Freestyle HUD. Four of them: what you play, the scale you are
+ * playing in, and the two things that play along. One class rather than a list
+ * of names, so a new panel is a panel by being written as one — and so every
+ * theme below dresses all four with a single selector.
+ *
+ * A column of its own, too: the rest of .hud-right is right-aligned readouts,
+ * and controls that flush right are much harder to aim at than ones that line
+ * up.
+ */
+.hud-card {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
@@ -506,14 +519,28 @@ kbd {
   background: rgba(10, 16, 34, 0.42);
   border: 1px solid var(--stroke);
 }
-.rhythm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/*
+ * A card whose title is only a title.
+ *
+ * Same rank as the toggles that head the other two — same size, same tracking
+ * — but flat: a pill in this HUD is a switch, and neither the instrument nor
+ * the scale is something you can turn off.
+ */
+.card-title {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+/* A select in a head row sits beside the title rather than filling the card;
+   the scale below it is the one that wants the whole line, for its longest
+   names. */
+.card-head .hud-select { width: auto; }
 .rhythm-bpm { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.08em; }
 .rhythm-bpm b { color: var(--ink); font-weight: 600; }
 
-/* The instrument sits under key and scale rather than beside them: it is a
-   long list with long names, and a third control on that row would squeeze all
-   three. Full width on its own line reads as what it is. */
-.hud-controls .hud-select { flex: 1; }
 
 .hud-select {
   pointer-events: auto;
@@ -650,16 +677,8 @@ kbd {
 .tune-harmony .chord { font-size: clamp(20px, 3.2vh, 34px); }
 
 /* On-screen controls live inside the HUD, which is otherwise click-through. */
-.hud-controls { display: flex; gap: 6px; margin-top: 4px; pointer-events: auto; }
-.hud-controls select {
-  font-size: 11px;
-  padding: 3px 6px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--dim);
-}
-.hud-controls select:hover, .hud-controls select:focus { color: var(--ink); }
-.hud-controls button {
+/* The die, beside the title it redraws. */
+.card-head button {
   font-size: 13px;
   line-height: 1;
   padding: 3px 8px;
@@ -667,7 +686,7 @@ kbd {
   color: var(--dim);
   background: rgba(255, 255, 255, 0.06);
 }
-.hud-controls button:hover { color: var(--ink); }
+.card-head button:hover { color: var(--ink); }
 .wheel input[type="range"] { width: 90px; height: 12px; pointer-events: auto; }
 .wheel input[type="range"]::-webkit-slider-runnable-track { height: 4px; }
 .wheel input[type="range"]::-webkit-slider-thumb { width: 10px; height: 10px; margin-top: -3px; }
@@ -756,6 +775,7 @@ kbd {
 [data-theme="rush"] .score-sub,
 [data-theme="rush"] .meter,
 [data-theme="rush"] .wheel,
+[data-theme="rush"] .card-title,
 [data-theme="rush"] .hud-knob b { color: var(--accent); font-weight: 700; letter-spacing: 0.2em; }
 [data-theme="rush"] .status { text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
 
@@ -851,8 +871,7 @@ kbd {
   box-shadow: 0 0 34px rgba(255, 47, 160, 0.35);
 }
 [data-theme="rush"] .mode-name { text-transform: uppercase; letter-spacing: 0; }
-[data-theme="rush"] .rhythm,
-[data-theme="rush"] .bed {
+[data-theme="rush"] .hud-card {
   border-radius: 0;
   border: 0;
   border-left: 4px solid var(--danger);
@@ -901,6 +920,7 @@ kbd {
 [data-theme="velvet"] .score-sub,
 [data-theme="velvet"] .meter,
 [data-theme="velvet"] .wheel,
+[data-theme="velvet"] .card-title,
 [data-theme="velvet"] .hud-knob b,
 [data-theme="velvet"] .status { letter-spacing: 0.22em; font-weight: 500; }
 
@@ -984,8 +1004,7 @@ kbd {
 [data-theme="velvet"] .mode-card,
 [data-theme="velvet"] .theme-card,
 [data-theme="velvet"] .song-card,
-[data-theme="velvet"] .rhythm,
-[data-theme="velvet"] .bed {
+[data-theme="velvet"] .hud-card {
   border-radius: 2px;
   background: linear-gradient(#1d1622, #150f1a);
   border-color: rgba(217, 164, 65, 0.3);
@@ -1186,8 +1205,7 @@ kbd {
 }
 
 /* The HUD cards go cream too, so every control reads as one set of objects. */
-[data-theme="toybox"] .rhythm,
-[data-theme="toybox"] .bed {
+[data-theme="toybox"] .hud-card {
   width: 196px;
   background: var(--panel);
   color: var(--void);
@@ -1195,7 +1213,10 @@ kbd {
   border-radius: 18px;
   box-shadow: 0 6px 0 var(--stroke);
 }
+/* Cream cards need dark controls on them. The die was the one control that
+   never got this and was drawn in a pale ink on a pale ground. */
 [data-theme="toybox"] .hud-toggle,
+[data-theme="toybox"] .card-head button,
 [data-theme="toybox"] .hud-select {
   background: #ded0b6;
   color: var(--void);
@@ -1207,6 +1228,7 @@ kbd {
 [data-theme="toybox"] .hud-select { border-radius: 10px; }
 [data-theme="toybox"] .hud-toggle.on { background: var(--ok); }
 [data-theme="toybox"] .rhythm-bpm,
+[data-theme="toybox"] .card-title,
 [data-theme="toybox"] .hud-knob b { color: #5a4a95; }
 [data-theme="toybox"] .rhythm-bpm b { color: var(--void); }
 
@@ -1377,16 +1399,10 @@ kbd {
   .hud-left,
   .hud-right,
   .score-block,
-  .hud-controls { min-width: 0; }
-  .hud-controls select,
-  .hud-controls .hud-select {
-    min-width: 0;
-    flex: 1 1 0;
-    /* The name still has to be readable once it stops fitting. */
-    text-overflow: ellipsis;
-  }
+  /* The name still has to be readable once it stops fitting a narrow card. */
+  .hud-select { min-width: 0; text-overflow: ellipsis; }
 
-  .rhythm, .bed { width: 154px; }
+  .hud-card { width: 154px; }
   .meters, .wheels { width: 116px; }
   .tune-bar { width: min(190px, 44vw); }
   .hud-knob b, .wheel b { width: 28px; }
@@ -1394,8 +1410,7 @@ kbd {
   /* Every theme shares those widths here; the ones that widen the cards for
      heavier type give that back rather than each setting a narrow width of
      its own and drifting apart. */
-  [data-theme="toybox"] .rhythm,
-  [data-theme="toybox"] .bed { width: 154px; }
+  [data-theme="toybox"] .hud-card { width: 154px; }
   [data-theme="toybox"] .meters,
   [data-theme="toybox"] .wheels { width: 116px; }
 
@@ -1404,6 +1419,7 @@ kbd {
   [data-theme="rush"] .score-sub,
   [data-theme="rush"] .meter,
   [data-theme="rush"] .wheel,
+  [data-theme="rush"] .card-title,
   [data-theme="rush"] .hud-knob b { letter-spacing: 0.08em; }
 }
 

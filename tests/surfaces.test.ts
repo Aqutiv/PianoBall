@@ -126,6 +126,23 @@ describe('the one-shot budget', () => {
     expect(budget.size).toBe(1);
   });
 
+  it('cuts everything at once when a panel goes up over the game', () => {
+    const budget = new ShotBudget(3);
+    const ringing = shot(), ahead = shot();
+    // The second is a flourish placed a second into the future, which is the
+    // one a pause has no other way of taking back.
+    budget.admit(0, 1, 0.2, ringing.cut);
+    budget.admit(0, 2, 1.4, ahead.cut);
+
+    budget.cutAll();
+
+    expect(ringing.cuts).toBe(1);
+    expect(ahead.cuts).toBe(1);
+    expect(budget.size).toBe(0);
+    // And the budget is whole again for whatever plays next.
+    expect(budget.admit(0, 0, 1, shot().cut)).toBe(true);
+  });
+
   it('can be made smaller on the fly', () => {
     const budget = new ShotBudget(3);
     budget.admit(0, 1, 1, shot().cut);

@@ -188,6 +188,9 @@ export class Shell {
     this.suspended = false;
     const mode = this.active as GameMode & { newGame?: () => void };
     mode?.newGame?.();
+    // `resume` is not called on this path, so the bed a pause silenced has to
+    // be picked up here as well.
+    this.wakeBed();
   }
 
   goHome(): void {
@@ -203,11 +206,50 @@ export class Shell {
     this.active?.pause?.();
   }
 
-  /** Step out of play when focus is lost, rather than playing on unattended. */
+  /**
+   * Step out of play, behind the pause panel: Escape, or the window losing
+   * focus rather than playing on unattended.
+   *
+   * The one place the panel comes up, so both ways in leave the same silence
+   * behind them — which is the difference between this and `pauseActive` on
+   * its own. Going home is not a pause: the menu keeps the bed under it, the
+   * way it has one at boot.
+   */
   private suspend(): void {
     if (!this.playing || this.overlay.visible) return;
     this.pauseActive();
+    this.hush();
     this.overlay.show('paused');
+  }
+
+  /**
+   * Nothing sounds behind the pause panel.
+   *
+   * Each mode already stops what it knows it started — the drums, the rolling
+   * balls, a run — but what is sounding when the panel goes up belongs to the
+   * app rather than to any of them: a chord still held, the bed comping on its
+   * own timer, a flourish written onto the audio clock a second ahead. So they
+   * are put down in one place, rather than in three modes that each have to
+   * remember.
+   */
+  private hush(): void {
+    // Through the hub first, so the modes see the keys come up and their decks
+    // stop glowing; the engine's own sweep then catches whatever was sounding
+    // that no key is holding.
+    this.input.releaseAll();
+    this.audio.hush();
+    this.bed.stop();
+  }
+
+  /**
+   * Start the bed again after the panel silenced it.
+   *
+   * Not if the mode's own resume has already put one back: PlayTune's does,
+   * with a written track on it, and the scale's own loop starting over that
+   * would sound a chord the piece does not have.
+   */
+  private wakeBed(): void {
+    if (this.bed.enabled && !this.bed.running) this.bed.start();
   }
 
   resumeMode(): void {
@@ -230,6 +272,7 @@ export class Shell {
     if (!this.suspended) return;
     this.suspended = false;
     this.active?.resume?.();
+    this.wakeBed();
   }
 
   /**
@@ -491,7 +534,7 @@ export class Shell {
     } else if (screen === 'paused') {
       this.resumeMode();
     } else if (screen === null) {
-      if (this.playing) { this.pauseActive(); this.overlay.show('paused'); }
+      if (this.playing) this.suspend();
       else this.overlay.show('home');
     } else {
       this.overlay.show('home');
