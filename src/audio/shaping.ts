@@ -109,6 +109,32 @@ export function unisonDetunes(voices: number, cents: number): number[] {
   return [-cents, 0, cents];
 }
 
+/** Below this the pedal is up; from `PEDAL_DOWN` it holds outright. Between, it is half-pedalling. */
+export const PEDAL_UP = 0.25;
+export const PEDAL_DOWN = 0.75;
+/** Seconds a half-pedalled release stretches to at most, on top of the voice's own. */
+const HALF_PEDAL_STRETCH = 2.5;
+
+/**
+ * How long a note takes to go once the key is up, for a pedal this far down.
+ *
+ * Up, the note has its own release. Fully down, it does not go at all —
+ * infinity, which the caller reads as "hold". Between the two the dampers
+ * are only brushing the strings, and the note fades slowly rather than
+ * stopping: the further down, the slower.
+ */
+export function pedalRelease(base: number, pedal: number): number {
+  if (pedal >= PEDAL_DOWN) return Infinity;
+  if (pedal < PEDAL_UP) return base;
+  return base + ((pedal - PEDAL_UP) / (PEDAL_DOWN - PEDAL_UP)) * HALF_PEDAL_STRETCH;
+}
+
+/** How much of the soundboard is heard for a pedal this far down: a little always, all of it at the floor. */
+export function bodyMixFor(pedal: number): number {
+  const p = Math.max(0, Math.min(1, pedal));
+  return 0.35 + 0.65 * p;
+}
+
 /** The small ways one strike differs from the last. Multipliers, except the cents. */
 export interface Humanized {
   detune: number;

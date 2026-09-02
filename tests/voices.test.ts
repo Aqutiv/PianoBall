@@ -138,6 +138,16 @@ describe('the instrument bank', () => {
     }
   });
 
+  it('glides only where a line is played one note at a time, and briefly', () => {
+    for (const v of LEAD_VOICES) {
+      if (v.spec.glide === undefined) continue;
+      expect(['Synth', 'Air'].includes(v.family), `${v.id} glides but is ${v.family}`).toBe(true);
+      expect(v.spec.glide, v.id).toBeGreaterThan(0);
+      expect(v.spec.glide, v.id).toBeLessThanOrEqual(0.15);
+    }
+    expect(LEAD_VOICES.some((v) => v.spec.glide !== undefined)).toBe(true);
+  });
+
   it('lets organs and synths hold their pitch while everything else drifts', () => {
     for (const v of LEAD_VOICES) {
       const steady = v.family === 'Organ' || v.family === 'Synth';

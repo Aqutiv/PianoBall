@@ -18,7 +18,8 @@ export function wireGlobalControls(input: InputHub, engine: AudioEngine): () => 
   return input.on((e) => {
     if (e.type !== 'cc') return;
     if (e.controller === CC.CHANNEL_VOLUME) engine.setSettings({ master: e.value });
-    else if (e.controller === CC.SUSTAIN) engine.setSustain(e.value >= 0.5);
+    // The whole travel, not a switch: half-pedalling is a thing pianists do.
+    else if (e.controller === CC.SUSTAIN) engine.setSustain(e.value);
     else if (e.controller === CC.ALL_NOTES_OFF) engine.allNotesOff();
   });
 }

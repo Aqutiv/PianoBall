@@ -4,7 +4,8 @@ import { load, save } from '../core/storage';
 import { DRUM_SPECS, type DrumVoice } from './drums';
 import { CAB, HALL, HALL_LITE, boardImpulse, roomImpulse, type RoomSpec, type Samples } from './rooms';
 import {
-  NO_TRACK, humanize, keyFactors, makeRng, stretchCents, unisonDetunes, velocityPeak,
+  NO_TRACK, PEDAL_DOWN, PEDAL_UP, bodyMixFor, humanize, keyFactors, makeRng, pedalRelease,
+  stretchCents, unisonDetunes, velocityPeak,
   type Humanized, type KeyFactors,
 } from './shaping';
 import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
@@ -114,10 +115,6 @@ const DUCK_RETURN = 0.22;
 /** The rooms are rendered from noise; one fixed seed makes them the same rooms on every load. */
 const ROOM_SEED = 0x50a7;
 
-/** How much of the soundboard is heard under a note, and how much once the pedal is down. */
-const BODY_IDLE = 0.35;
-const BODY_PEDAL = 1;
-
 /** Longest delay the node can hold, which caps how slow a tempo it can follow. */
 const DELAY_MAX = 2;
 
@@ -159,6 +156,22 @@ const ROLL_GAIN = 0.12;
 /** Sliding speed at which a scrape is as loud as it gets, and how loud that is. */
 const SCRAPE_FULL = 1800;
 const SCRAPE_GAIN = 0.25;
+
+/** A note sliding up from the one before it: where from, and how long it takes. */
+interface Glide {
+  from: number;
+  seconds: number;
+}
+
+/**
+ * Seconds after a pedal-driven release within which the pedal going down
+ * again catches the note, and how long past its release a caught note may
+ * go on ringing. A scheduled stop cannot be withdrawn, so the second is a
+ * reprieve rather than a recapture; a real re-pedal catches strings that
+ * are still moving, and that is what these approximate.
+ */
+const RECATCH = 0.3;
+const RECATCH_REPRIEVE = 1.5;
 
 /** Where a hit is placed and how it landed. All optional: a bare hit is square, near and centred. */
 interface HitOptions {
@@ -371,7 +384,10 @@ export class AudioEngine {
   /** Which warm-up is current; an older one finding this changed stops. */
   private warming = 0;
   private sustained = new Set<number>();
-  private sustainOn = false;
+  /** How far down the pedal is, 0..1. */
+  private pedal = 0;
+  /** Notes let go by the pedal, which the pedal going down again can still catch. */
+  private fading: { voice: KeyVoice; at: number }[] = [];
 
   /**
    * Which instrument the keys and the bed are currently using.
@@ -501,7 +517,7 @@ export class AudioEngine {
     const board = ctx.createConvolver();
     board.buffer = this.plate();
     this.bodyWet = ctx.createGain();
-    this.bodyWet.gain.value = BODY_IDLE;
+    this.bodyWet.gain.value = bodyMixFor(this.pedal);
     board.connect(this.bodyWet).connect(this.musicBus);
     this.bodySend = ctx.createGain();
     this.bodySend.gain.value = 1;
@@ -877,6 +893,11 @@ export class AudioEngine {
     const stretch = stretchCents(spec.stretch, note);
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
     const str = spec.string && { id: this.leadId, spec: spec.string, note, bucket: velocityBucket(v) };
+    // A lead played legato slides up from the note still held, and lets that
+    // note go as it arrives: one note at a time, the way the line is played.
+    const held = spec.glide ? this.active.filter((voice) => !voice.releasing) : [];
+    const last = held[held.length - 1];
+    const glide = spec.glide && last ? { from: last.freq, seconds: spec.glide } : undefined;
 
     // Harder notes go wetter, whatever the instrument's own send level is.
     const moves = spec.lfo?.target === 'tremolo' || spec.lfo?.target === 'rotary';
@@ -885,7 +906,12 @@ export class AudioEngine {
     }, this.musicBus, moves);
     const sources: Pitched[] = [];
     for (const layer of spec.layers) {
-      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch, str));
+      sources.push(...this.addLayer(chain.filter, layer, freq, v, t, k, h, register, detunes, stretch, str, glide));
+    }
+    for (const voice of held) {
+      this.voices.delete(voice.note);
+      this.sustained.delete(voice.note);
+      this.release(voice, voice.release, false);
     }
     // Breath, or the knock of the key itself: a slice of the shared buffer,
     // the same layer the drums are mostly made of.
@@ -1022,7 +1048,7 @@ export class AudioEngine {
   private addLayer(
     into: AudioNode, layer: VoiceLayer, freq: number, v: number, t: number,
     k: KeyFactors, h: Humanized, register: Register, detunes: readonly number[], stretch: number,
-    str?: StringAt,
+    str?: StringAt, glide?: Glide,
   ): Pitched[] {
     const ctx = this.ctx!;
     const out: Pitched[] = [];
@@ -1044,7 +1070,12 @@ export class AudioEngine {
         const o = ctx.createOscillator();
         if (layer.type === 'spectrum') o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register));
         else if (layer.type !== 'string') o.type = layer.type;
-        o.frequency.setValueAtTime(freq * layer.ratio, t);
+        if (glide) {
+          o.frequency.setValueAtTime(glide.from * layer.ratio, t);
+          o.frequency.exponentialRampToValueAtTime(freq * layer.ratio, t + glide.seconds);
+        } else {
+          o.frequency.setValueAtTime(freq * layer.ratio, t);
+        }
         osc = o;
       }
       osc.detune.setValueAtTime((layer.detune ?? 0) + d + h.detune + stretch, t);
@@ -1052,9 +1083,16 @@ export class AudioEngine {
       if (layer.fm && isOscillator(osc)) {
         // Bright at the strike and gone a moment later, which is what turns a
         // sine into a tine. `ping` has always done this; here it is a field.
+        // An operator slides with its carrier, so the ratio the timbre is
+        // made of holds through the glide.
         const mod = ctx.createOscillator();
         mod.type = 'sine';
-        mod.frequency.value = freq * layer.fm.ratio;
+        if (glide) {
+          mod.frequency.setValueAtTime(glide.from * layer.fm.ratio, t);
+          mod.frequency.exponentialRampToValueAtTime(freq * layer.fm.ratio, t + glide.seconds);
+        } else {
+          mod.frequency.value = freq * layer.fm.ratio;
+        }
         const modGain = ctx.createGain();
         modGain.gain.setValueAtTime(freq * layer.fm.index, t);
         modGain.gain.exponentialRampToValueAtTime(1, t + layer.fm.decay);
@@ -1262,11 +1300,16 @@ export class AudioEngine {
 
   noteOff(note: number, immediate = false): void {
     if (!this.running || !this.ctx) return;
-    if (this.sustainOn && !immediate) { this.sustained.add(note); return; }
+    // Pedal down: the note is held, and released when the pedal comes up.
+    if (this.pedal >= PEDAL_DOWN && !immediate) { this.sustained.add(note); return; }
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
-    this.release(voice, immediate ? 0.02 : voice.release, !immediate);
     this.voices.delete(note);
+    if (immediate) { this.release(voice, 0.02, false); return; }
+    // Half down, the dampers only brush the strings and the note fades slowly.
+    const seconds = pedalRelease(voice.release, this.pedal);
+    this.release(voice, seconds, true, this.pedal >= PEDAL_UP ? RECATCH_REPRIEVE : 0);
+    if (this.pedal >= PEDAL_UP) this.fading.push({ voice, at: this.ctx.currentTime });
   }
 
   /**
@@ -1275,7 +1318,7 @@ export class AudioEngine {
    * another, or silenced with everything else on the way out of a mode, is
    * not a finger lifting, and forty-eight thuds at once would be absurd.
    */
-  private release(voice: KeyVoice, seconds: number, damp = true): void {
+  private release(voice: KeyVoice, seconds: number, damp = true, reprieve = 0): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     voice.releasing = true;
@@ -1288,7 +1331,7 @@ export class AudioEngine {
     voice.amp.gain.cancelScheduledValues(t);
     voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
-    const stop = t + seconds + 0.02;
+    const stop = t + seconds + 0.02 + reprieve;
     for (const s of voice.sources) s.stop(stop);
     // The expression sources are permanent and hold a reference to every param
     // they feed, so a voice that is not explicitly unhooked never goes away.
@@ -1306,15 +1349,65 @@ export class AudioEngine {
     if (idx >= 0) this.active.splice(idx, 1);
   }
 
-  setSustain(on: boolean): void {
-    this.sustainOn = on;
-    // The pedal lifts every damper, and the board answers with all its strings.
+  /**
+   * The pedal, anywhere in its travel. Down, every note is held and the
+   * board answers with all its strings; half down, a lifted key fades
+   * slowly rather than stopping; up, the notes it was holding are let go.
+   * Pressed again just after coming up, it catches what is still fading.
+   */
+  setSustain(amount: number | boolean): void {
+    const a = typeof amount === 'boolean' ? (amount ? 1 : 0) : clamp01(amount);
+    const before = this.pedal;
+    this.pedal = a;
     if (this.ready && this.ctx) {
-      this.bodyWet.gain.setTargetAtTime(on ? BODY_PEDAL : BODY_IDLE, this.ctx.currentTime, 0.05);
+      const t = this.ctx.currentTime;
+      this.bodyWet.gain.setTargetAtTime(bodyMixFor(a), t, 0.05);
+      if (a >= PEDAL_DOWN && before < PEDAL_DOWN) this.recatch(t);
     }
-    if (on) return;
-    for (const note of this.sustained) this.noteOff(note);
+    if (a >= PEDAL_DOWN) return;
+    // Coming up, or only half down: what the pedal was holding is let go,
+    // slowly if it is still half down.
+    const held = [...this.sustained];
     this.sustained.clear();
+    if (!this.running || !this.ctx) return;
+    for (const note of held) {
+      const voice = this.voices.get(note);
+      if (!voice || voice.releasing) continue;
+      this.voices.delete(note);
+      this.release(voice, pedalRelease(voice.release, a), true, RECATCH_REPRIEVE);
+      this.fading.push({ voice, at: this.ctx.currentTime });
+    }
+  }
+
+  /** How far down the pedal is. */
+  get sustain(): number { return this.pedal; }
+
+  /**
+   * The pedal going down again: every note let go within the last moment is
+   * held where it is, back under the pedal. Its sources still stop when
+   * their reprieve runs out, and its own motion is not rewired — a caught
+   * note is a note saved, not a note struck again.
+   */
+  private recatch(t: number): void {
+    const keep: typeof this.fading = [];
+    for (const f of this.fading) {
+      if (t - f.at > RECATCH) continue;
+      const voice = f.voice;
+      if (this.voices.has(voice.note)) continue;
+      voice.amp.gain.cancelScheduledValues(t);
+      voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
+      voice.releasing = false;
+      for (const s of voice.sources) {
+        this.bendSource.connect(s.detune);
+        this.lfoVibrato.connect(s.detune);
+      }
+      this.lfoColour.connect(voice.filter.frequency);
+      voice.taps = [];
+      this.voices.set(voice.note, voice);
+      this.active.push(voice);
+      this.sustained.add(voice.note);
+    }
+    this.fading = keep;
   }
 
   /** Oldest-first voice stealing, so a two-handed run never runs out. */
@@ -1329,6 +1422,7 @@ export class AudioEngine {
   allNotesOff(): void {
     for (const note of [...this.voices.keys()]) this.noteOff(note, true);
     this.sustained.clear();
+    this.fading.length = 0;
   }
 
   // ------------------------------------------------------- one-shot hits ---

@@ -160,6 +160,12 @@ export interface VoiceSpec {
   lfo?: VoiceLfo;
   /** The string every `string` layer of this voice is rendered from. */
   string?: StringSpec;
+  /**
+   * Seconds a new note takes to slide up from the one still held, for a
+   * lead played legato. The held note is let go as the new one arrives, so
+   * this is for a voice played one note at a time: a lead line, a flute.
+   */
+  glide?: number;
 }
 
 const KEY_BASE: VoiceSpec = {
@@ -482,6 +488,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       velDb: 20, attackVel: 0.4,
       keyTrack: { noise: -0.3 },
       lfo: { rate: 5.2, depth: 14, target: 'vibrato', delay: 0.45 },
+      glide: 0.04,
       reverb: 0.4, delay: 0.14,
     }),
   },
@@ -656,6 +663,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       env: { attack: 0.005, decay: 0.2, sustain: 0.7, release: 0.18 },
       velDb: 18,
       unison: { voices: 2, cents: 8 },
+      glide: 0.06,
       reverb: 0.2, delay: 0.14,
     }),
   },
@@ -670,6 +678,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       env: { attack: 0.004, decay: 0.18, sustain: 0.72, release: 0.16 },
       velDb: 18,
       unison: { voices: 2, cents: 6 },
+      glide: 0.05,
       reverb: 0.2, delay: 0.16,
     }),
   },
@@ -687,6 +696,7 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
       env: { attack: 0.01, decay: 0.3, sustain: 0.8, release: 0.4 },
       velDb: 16,
       unison: { voices: 3, cents: 6 },
+      glide: 0.08,
       gain: 0.85, reverb: 0.35, delay: 0.2,
     }),
   },

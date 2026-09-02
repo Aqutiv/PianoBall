@@ -24,6 +24,13 @@ describe('cutting the pads short', () => {
     expect(engine.ready).toBe(false);
     expect(() => engine.stopPads()).not.toThrow();
   });
+
+  it('takes the pedal in any position before the graph exists', () => {
+    const engine = new AudioEngine();
+    expect(() => engine.setSustain(true)).not.toThrow();
+    expect(() => engine.setSustain(0.5)).not.toThrow();
+    expect(() => engine.setSustain(0)).not.toThrow();
+  });
 });
 
 describe('MIDI audio controls', () => {

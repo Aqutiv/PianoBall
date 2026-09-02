@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EXACT, NO_TRACK, humanize, keyFactors, makeRng, stretchCents, unisonDetunes, velocityPeak,
+  EXACT, NO_TRACK, PEDAL_DOWN, PEDAL_UP, bodyMixFor, humanize, keyFactors, makeRng, pedalRelease,
+  stretchCents, unisonDetunes, velocityPeak,
 } from '../src/audio/shaping';
+
+describe('the pedal', () => {
+  it('leaves a release alone when up, stretches it half down, and holds when down', () => {
+    expect(pedalRelease(0.3, 0)).toBe(0.3);
+    expect(pedalRelease(0.3, PEDAL_UP - 0.01)).toBe(0.3);
+    expect(pedalRelease(0.3, PEDAL_DOWN)).toBe(Infinity);
+    expect(pedalRelease(0.3, 1)).toBe(Infinity);
+    let last = 0.3;
+    for (let p = PEDAL_UP; p < PEDAL_DOWN; p += 0.05) {
+      const r = pedalRelease(0.3, p);
+      expect(r).toBeGreaterThanOrEqual(last);
+      expect(Number.isFinite(r)).toBe(true);
+      last = r;
+    }
+    expect(last).toBeGreaterThan(1);
+  });
+
+  it('opens the board with the pedal, from a little to all of it', () => {
+    expect(bodyMixFor(0)).toBeCloseTo(0.35, 6);
+    expect(bodyMixFor(1)).toBeCloseTo(1, 6);
+    expect(bodyMixFor(0.5)).toBeGreaterThan(bodyMixFor(0.25));
+    expect(bodyMixFor(2)).toBeCloseTo(1, 6);
+  });
+});
 
 describe('velocity', () => {
   it('rises with the strike, on the old line and in decibels alike', () => {
