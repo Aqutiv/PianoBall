@@ -52,6 +52,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.box = new RhythmBox(ctx.audio, () => ctx.music.bpm, findPattern(r.patternId));
     this.box.swing = r.swing;
     this.box.level = r.level;
+    // A drummer, not a machine: a few milliseconds and a few percent either way.
+    this.box.human = { rng: Math.random, jitter: 0.006, gain: 0.08 };
     this.panel = new FreestyleHud(
       ctx.hud, ctx.music, ctx.audio, this.box, () => this.applyBed(),
     );

@@ -32,10 +32,25 @@ const LOOKAHEAD = 0.15;
  * is, and a tempo change re-phases both of them together rather than sliding
  * one against the other.
  */
+/**
+ * A drummer rather than a drum machine: every hit a few milliseconds either
+ * side of the grid and a little louder or softer than written. Null is the
+ * machine, which is what the timing tests want.
+ */
+export interface DrumFeel {
+  rng: () => number;
+  /** Seconds either side of the step a hit may land. */
+  jitter: number;
+  /** Fraction either side of the written level. */
+  gain: number;
+}
+
 export class RhythmBox {
   pattern: RhythmPattern;
   /** The player's swing trim, added to whatever the pattern is written with. */
   swing = 0;
+  /** Who is playing. Set by a mode; left null, the box is exact. */
+  human: DrumFeel | null = null;
 
   private readonly sink: DrumSink;
   private readonly bpm: () => number;
@@ -177,13 +192,17 @@ export class RhythmBox {
     const swing = p.swings ? clamp01(p.swing + this.swing) : 0;
     const at = index * step + (swing && i % 2 === 1 ? swing * step * 0.66 : 0);
     const level = this.levelAt(at);
+    const h = this.human;
 
     for (const voice of Object.keys(p.lanes) as DrumVoice[]) {
       const lane = p.lanes[voice];
       if (!lane) continue;
       const accent = STEP_LEVELS[lane[i]] ?? 0;
       if (accent <= 0) continue;
-      this.sink.drum(voice, accent * level, at);
+      // Each voice drifts on its own: a drummer's hands are not one hand.
+      const drift = h ? (h.rng() * 2 - 1) * h.jitter : 0;
+      const loud = h ? 1 + (h.rng() * 2 - 1) * h.gain : 1;
+      this.sink.drum(voice, accent * level * loud, Math.max(at + drift, index === 0 ? 0 : at - step * 0.45));
     }
   }
 }

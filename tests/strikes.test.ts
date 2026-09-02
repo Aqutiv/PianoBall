@@ -232,14 +232,19 @@ describe('the flourishes', () => {
     expect(notes[4]).toBeLessThan(notes[3]);
   });
 
-  it('climb twice as fast for a multiball', () => {
-    const { mallets, game, bed } = rig();
+  it('climb twice as fast for a multiball, and land on a crash', () => {
+    const { mallets, drums, game, bed, audio, cancelled } = rig();
     game.bus.emit('multiball', { count: 3 });
     expect(mallets).toHaveLength(6);
     for (let i = 1; i < mallets.length; i++) {
       expect(mallets[i].at - mallets[i - 1].at).toBeCloseTo(bed.groove.stepSeconds / 2, 9);
       expect(mallets[i].note).toBeGreaterThan(mallets[i - 1].note);
     }
+    const crash = drums.filter((d) => d.voice === 'crash');
+    expect(crash).toHaveLength(1);
+    expect(crash[0].at).toBeGreaterThan(mallets[mallets.length - 1].at);
+    audio.detach();
+    expect(cancelled.drum).toBe(1);
   });
 
   it('bring the harmony home on a drain', () => {

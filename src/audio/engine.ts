@@ -1637,10 +1637,15 @@ export class AudioEngine {
   drum(voice: DrumVoice, gain = 1, at = 0): Scheduled {
     if (!this.running || !this.ctx) return NOTHING;
     const spec = DRUM_SPECS[voice];
-    const level = spec.gain * clamp01(gain);
+    const v = clamp01(gain);
+    const level = spec.gain * v;
     if (level < 0.004) return NOTHING;
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
+    // A soft hit is a shorter, duller one: a ghost note is over almost before
+    // it has begun, and a hard one opens the head up.
+    const shorten = 1 - (spec.velDecay ?? 0) * (1 - v);
+    const brighten = Math.pow(2, (spec.velBright ?? 0) * (v - 0.5));
 
     const out = ctx.createStereoPanner();
     out.pan.value = clamp(spec.pan, -1, 1);
@@ -1659,13 +1664,13 @@ export class AudioEngine {
       for (let b = 0; b < spec.bursts; b++) {
         const start = t + b * spec.burstGap;
         // The last burst carries the tail; the flams before it are shorter.
-        const decay = b === spec.bursts - 1 ? spec.noiseDecay : spec.burstGap * 1.4;
+        const decay = (b === spec.bursts - 1 ? spec.noiseDecay : spec.burstGap * 1.4) * shorten;
         const src = ctx.createBufferSource();
         src.buffer = this.noise;
         src.playbackRate.value = 0.85 + Math.random() * 0.3;
         const bp = ctx.createBiquadFilter();
         bp.type = 'bandpass';
-        bp.frequency.value = spec.noiseFreq;
+        bp.frequency.value = Math.min(18000, spec.noiseFreq * brighten);
         bp.Q.value = spec.noiseQ;
         const hp = ctx.createBiquadFilter();
         hp.type = 'highpass';
@@ -1676,6 +1681,72 @@ export class AudioEngine {
         g.gain.exponentialRampToValueAtTime(0.0001, start + spec.noiseAttack + decay);
         src.connect(bp).connect(hp).connect(g).connect(out);
         src.start(start, Math.random() * 0.9, spec.noiseAttack + decay + 0.02);
+      }
+    }
+
+    if (spec.wires) {
+      // The snare's wires: their own noise, higher and looser, ringing on
+      // after the shell has stopped.
+      const w = spec.wires;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = Math.min(18000, w.freq * brighten);
+      bp.Q.value = w.q;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = w.hp;
+      const g = ctx.createGain();
+      const decay = w.decay * shorten;
+      g.gain.setValueAtTime(level * w.gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      src.connect(bp).connect(hp).connect(g).connect(out);
+      src.start(t, Math.random() * 0.9, decay + 0.02);
+    }
+
+    if (spec.click) {
+      // The beater on the head: a blip too short to have a pitch.
+      const c = spec.click;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = c.freq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(level * c.gain * (0.5 + v * 0.5), t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + c.decay);
+      osc.connect(g).connect(out);
+      osc.start(t);
+      osc.stop(t + c.decay + 0.02);
+    }
+
+    if (spec.metal) {
+      // A cymbal: square waves at ratios that share no harmonics, and only
+      // what passes a high band of them. Four of the six on a machine that
+      // has been found wanting.
+      const m = spec.metal;
+      const ratios = this.lite ? m.ratios.slice(0, 4) : m.ratios;
+      const sum = ctx.createGain();
+      sum.gain.value = 1 / ratios.length;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = Math.min(18000, m.bp * Math.pow(2, m.velBright * (v - 0.5)));
+      bp.Q.value = m.bpQ;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = m.hp;
+      const g = ctx.createGain();
+      const decay = m.decay * shorten;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(level * m.gain, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      sum.connect(bp).connect(hp).connect(g).connect(out);
+      for (const ratio of ratios) {
+        const osc = ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.value = m.freq * ratio;
+        osc.connect(sum);
+        osc.start(t);
+        osc.stop(t + decay + 0.05);
       }
     }
 
@@ -1698,7 +1769,7 @@ export class AudioEngine {
       if (spec.pitchDrop !== 1) {
         osc.frequency.exponentialRampToValueAtTime(freq, t + spec.pitchTime);
       }
-      const decay = spec.toneDecay * decayShare;
+      const decay = spec.toneDecay * decayShare * shorten;
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(level * share, t + 0.002);

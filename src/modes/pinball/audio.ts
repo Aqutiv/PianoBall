@@ -63,6 +63,8 @@ export class PinballAudio {
   ) {
     const first = LADDER.find((r) => r.drums)?.drums ?? '';
     this.box = new RhythmBox(engine, () => game.music.bpm, findPattern(first));
+    // A drummer, not a machine: a few milliseconds and a few percent either way.
+    this.box.human = { rng: Math.random, jitter: 0.006, gain: 0.08 };
   }
 
   /** Whether the rhythm box is running. The teardown tests read this. */
@@ -336,5 +338,10 @@ export class PinballAudio {
       const at = start + i * spacing;
       this.hold(this.engine.mallet(note, gain, (i / order.length - 0.5) * 1.2, 0.8, at), at + 1);
     });
+    // A multiball's run lands on a crash.
+    if (kind === 'multiball') {
+      const at = start + order.length * spacing;
+      this.hold(this.engine.drum('crash', 0.8, at), at + 2);
+    }
   }
 }
