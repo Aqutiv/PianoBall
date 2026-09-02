@@ -2,6 +2,8 @@ import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
 import { DRUM_SPECS, type DrumVoice } from './drums';
+import { CAB, HALL, HALL_LITE, roomImpulse, type RoomSpec } from './rooms';
+import { makeRng } from './shaping';
 import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice,
   type BedSpec, type VoiceSpec,
@@ -101,8 +103,28 @@ const BED_KEY_SETTLE = 1.6;
 /** Pads sit further back in the room than struck notes do. */
 const BED_KEY_REVERB = 0.42;
 
-/** Wet gain at a full reverb setting. Half of it is the original fixed value. */
+/** Hall wet gain at a full reverb setting. Half of it is the original fixed value. */
 const REVERB_MAX = 1.7;
+/** Cabinet wet gain at a full reverb setting: the table's box, under the same knob. */
+const CAB_MAX = 0.9;
+
+/**
+ * How far a played note is allowed towards either speaker.
+ *
+ * The keys span the whole width of the table, but a piano played across the
+ * room does not swing from ear to ear. The table's own sounds keep the full
+ * width, which is what puts the instrument in front of the machine.
+ */
+const LEAD_WIDTH = 0.6;
+const MALLET_WIDTH = 0.8;
+
+/** How far the bed dips under a struck note, how long it stays there, and how it comes back. */
+const DUCK_FLOOR = 0.8;
+const DUCK_HOLD = 0.06;
+const DUCK_RETURN = 0.22;
+
+/** The rooms are rendered from noise; one fixed seed makes them the same rooms on every load. */
+const ROOM_SEED = 0x50a7;
 
 /** Longest delay the node can hold, which caps how slow a tempo it can follow. */
 const DELAY_MAX = 2;
@@ -147,7 +169,8 @@ export class AudioEngine {
   onStateChange: (() => void) | null = null;
 
   private master!: GainNode;
-  private limiter!: DynamicsCompressorNode;
+  private glue!: DynamicsCompressorNode;
+  private clip!: WaveShaperNode;
   private musicBus!: GainNode;
   /**
    * Everything the chord bed makes, on its own fader.
@@ -167,9 +190,22 @@ export class AudioEngine {
    */
   private padGen!: GainNode;
   private fxBus!: GainNode;
-  private reverbSend!: GainNode;
-  private reverbWet!: GainNode;
+  /** The bed's own path in front of `padBus`: carved, then dipped under the player. */
+  private padCarve!: BiquadFilterNode;
+  private padDuck!: GainNode;
+  /** Two rooms: the hall the music plays in, and the cabinet the ball rolls in. */
+  private hallSend!: GainNode;
+  private hallWet!: GainNode;
+  private hallConv!: ConvolverNode;
+  private cabSend!: GainNode;
+  private cabWet!: GainNode;
   private delaySend!: GainNode;
+  /**
+   * Whether the machine has been found wanting. The shell sets this when it
+   * sheds the rendering's own effects; the sound sheds its most expensive
+   * ones in step, and takes them back the same way.
+   */
+  private lite = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4;
   /** Held so the repeats can be retuned when the tempo changes. */
   private delayNode!: DelayNode;
   private noise!: AudioBuffer;
@@ -256,17 +292,29 @@ export class AudioEngine {
   }
 
   private build(ctx: AudioContext): void {
-    this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -10;
-    this.limiter.knee.value = 8;
-    this.limiter.ratio.value = 9;
-    this.limiter.attack.value = 0.003;
-    this.limiter.release.value = 0.16;
-    this.limiter.connect(ctx.destination);
+    // The master chain. One compressor, and only one: Chromium's carries six
+    // milliseconds of look-ahead, which this chain already pays once, and a
+    // second would put another six between a key and its note. So it is tuned
+    // as glue rather than as a wall — slow, gentle, a few decibels at most —
+    // and the ceiling is a soft clipper instead, which costs nothing in time.
+    this.glue = ctx.createDynamicsCompressor();
+    this.glue.threshold.value = -16;
+    this.glue.knee.value = 10;
+    this.glue.ratio.value = 2.5;
+    this.glue.attack.value = 0.02;
+    this.glue.release.value = 0.25;
+    const air = ctx.createBiquadFilter();
+    air.type = 'highshelf';
+    air.frequency.value = 9000;
+    air.gain.value = 1.5;
+    this.clip = ctx.createWaveShaper();
+    this.clip.curve = softClip(2048);
+    this.clip.oversample = this.lite ? 'none' : '2x';
+    this.glue.connect(air).connect(this.clip).connect(ctx.destination);
 
     this.master = ctx.createGain();
     this.master.gain.value = this.settings.master;
-    this.master.connect(this.limiter);
+    this.master.connect(this.glue);
 
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.settings.music;
@@ -276,18 +324,28 @@ export class AudioEngine {
     this.fxBus.gain.value = this.settings.effects;
     this.fxBus.connect(this.master);
 
-    // Reverb from a procedurally generated impulse: noise shaped by an
-    // exponential decay, with the high end rolling off faster than the low.
-    const convolver = ctx.createConvolver();
-    convolver.buffer = makeImpulse(ctx, 2.1, 2.6);
-    // Half travel reproduces the fixed 0.85 the room used to have, so the
-    // default is where the sound has always been.
-    this.reverbWet = ctx.createGain();
-    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
-    convolver.connect(this.reverbWet).connect(this.master);
-    this.reverbSend = ctx.createGain();
-    this.reverbSend.gain.value = 1;
-    this.reverbSend.connect(convolver);
+    // Two rooms, both rendered rather than recorded (see `rooms.ts`). The
+    // music plays in a hall; the ball rolls inside a cabinet, whose whole tail
+    // is over in a third of a second. One knob opens both, and half travel
+    // reproduces the fixed 0.85 the old room had, so the default is where the
+    // sound has always been.
+    this.hallConv = ctx.createConvolver();
+    this.hallConv.buffer = this.room(this.lite ? HALL_LITE : HALL);
+    this.hallWet = ctx.createGain();
+    this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
+    this.hallConv.connect(this.hallWet).connect(this.master);
+    this.hallSend = ctx.createGain();
+    this.hallSend.gain.value = 1;
+    this.hallSend.connect(this.hallConv);
+
+    const cab = ctx.createConvolver();
+    cab.buffer = this.room(CAB);
+    this.cabWet = ctx.createGain();
+    this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
+    cab.connect(this.cabWet).connect(this.master);
+    this.cabSend = ctx.createGain();
+    this.cabSend.gain.value = 1;
+    this.cabSend.connect(cab);
 
     // Dotted-eighth delay, darkened on each pass so repeats sit behind the mix.
     const delay = ctx.createDelay(DELAY_MAX);
@@ -306,14 +364,28 @@ export class AudioEngine {
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
 
+    // The bed's path. Carved first — nothing under 100 Hz, and a shelf off
+    // the top — so it never sits on the same ground as the player's notes;
+    // dipped under each struck note after that; and only then the fader the
+    // bed is muted by, so the duck and the mute never fight over one gain.
+    this.padCarve = ctx.createBiquadFilter();
+    this.padCarve.type = 'highpass';
+    this.padCarve.frequency.value = 100;
+    this.padCarve.Q.value = 0.7;
+    const padShelf = ctx.createBiquadFilter();
+    padShelf.type = 'highshelf';
+    padShelf.frequency.value = 6000;
+    padShelf.gain.value = -3;
+    this.padDuck = ctx.createGain();
+    this.padDuck.gain.value = 1;
     this.padBus = ctx.createGain();
     this.padBus.gain.value = 1;
-    this.padBus.connect(this.musicBus);
+    this.padCarve.connect(padShelf).connect(this.padDuck).connect(this.padBus).connect(this.musicBus);
     const padReverb = ctx.createGain();
     padReverb.gain.value = 0.6;
-    this.padBus.connect(padReverb).connect(this.reverbSend);
+    this.padBus.connect(padReverb).connect(this.hallSend);
     this.padGen = ctx.createGain();
-    this.padGen.connect(this.padBus);
+    this.padGen.connect(this.padCarve);
 
     this.noise = makeNoise(ctx, 1.2);
 
@@ -342,7 +414,8 @@ export class AudioEngine {
     this.master.gain.value = this.settings.master;
     this.musicBus.gain.value = this.settings.music;
     this.fxBus.gain.value = this.settings.effects;
-    this.reverbWet.gain.value = REVERB_MAX * this.settings.reverb;
+    this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
+    this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
     if (patch.bendRange !== undefined) this.setBend(this.bendValue);
     if (patch.modTarget !== undefined) this.applyMod();
   }
@@ -476,12 +549,58 @@ export class AudioEngine {
     // The faded node is left to its sources, which stop themselves; what
     // matters is that nothing new is put through it.
     this.padGen = this.ctx.createGain();
-    this.padGen.connect(this.padBus);
+    this.padGen.connect(this.padCarve);
   }
 
   setBedAudible(on: boolean): void {
     if (!this.ready || !this.ctx) return;
     this.padBus.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.08);
+  }
+
+  /**
+   * Dip the bed under a note the player has just struck.
+   *
+   * A backing that stays at one level buries whatever is played over it, and
+   * a compressor with a side-chain — the way a mix would do this — is not a
+   * node the browser has. So the bed's own gain is nudged instead: a couple
+   * of decibels down in a few milliseconds, held for the attack, and back
+   * over a fifth of a second, which is under the ear's notice and enough to
+   * keep the player on top of the band.
+   */
+  private duck(t: number): void {
+    const g = this.padDuck.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(DUCK_FLOOR, t, 0.008);
+    g.setTargetAtTime(1, t + DUCK_HOLD, DUCK_RETURN);
+  }
+
+  /**
+   * Shed the sound's most expensive effects, or take them back.
+   *
+   * Follows the shell's adaptive quality: a machine that cannot keep the frame
+   * budget with bloom on is not one to hand a two-and-a-half second hall and
+   * an oversampled clipper. The hall is swapped for a shorter one in place —
+   * a convolver takes a new response at any time — and the clipper drops its
+   * oversampling.
+   */
+  setLite(on: boolean): void {
+    if (this.lite === on) return;
+    this.lite = on;
+    if (!this.ready || !this.ctx) return;
+    this.hallConv.buffer = this.room(on ? HALL_LITE : HALL);
+    this.clip.oversample = on ? 'none' : '2x';
+  }
+
+  get isLite(): boolean { return this.lite; }
+
+  /** A room, rendered at this context's sample rate, as a buffer the convolver takes. */
+  private room(spec: RoomSpec): AudioBuffer {
+    const ctx = this.ctx!;
+    const [l, r] = roomImpulse(spec, ctx.sampleRate, makeRng(ROOM_SEED));
+    const buf = ctx.createBuffer(2, l.length, ctx.sampleRate);
+    buf.copyToChannel(l, 0);
+    buf.copyToChannel(r, 1);
+    return buf;
   }
 
   get now(): number { return this.ctx ? this.ctx.currentTime : 0; }
@@ -580,15 +699,16 @@ export class AudioEngine {
     this.lfoColour.connect(filter.frequency);
 
     const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1);
+    pannerNode.pan.value = clamp(pan, -1, 1) * LEAD_WIDTH;
     filter.connect(amp).connect(pannerNode);
     pannerNode.connect(this.musicBus);
 
     // Harder notes go wetter, whatever the instrument's own send level is.
     const rev = ctx.createGain(); rev.gain.value = spec.reverb * (1 + v * 0.7);
     const dly = ctx.createGain(); dly.gain.value = spec.delay * (1 + v * 1.4);
-    pannerNode.connect(rev).connect(this.reverbSend);
+    pannerNode.connect(rev).connect(this.hallSend);
     pannerNode.connect(dly).connect(this.delaySend);
+    this.duck(t);
 
     const peak = (0.06 + v * 0.3) * spec.gain;
     amp.gain.setValueAtTime(0.0001, t);
@@ -656,12 +776,13 @@ export class AudioEngine {
     this.lfoColour.connect(filter.frequency);
 
     const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1);
+    pannerNode.pan.value = clamp(pan, -1, 1) * LEAD_WIDTH;
     filter.connect(amp).connect(pannerNode);
     pannerNode.connect(this.musicBus);
     // A pad lives further back in the room than a struck note does.
     const rev = ctx.createGain(); rev.gain.value = BED_KEY_REVERB * (1 + v * 0.5);
-    pannerNode.connect(rev).connect(this.reverbSend);
+    pannerNode.connect(rev).connect(this.hallSend);
+    this.duck(t);
 
     // Swelled, not struck — but only just. A real pad attack would put the
     // sound behind the beat it was played on, and this is a rhythm game: the
@@ -763,11 +884,14 @@ export class AudioEngine {
 
     const out = ctx.createGain();
     const pannerNode = ctx.createStereoPanner();
-    pannerNode.pan.value = clamp(pan, -1, 1);
+    pannerNode.pan.value = clamp(pan, -1, 1) * MALLET_WIDTH;
     out.connect(pannerNode);
     pannerNode.connect(this.musicBus);
     const rev = ctx.createGain(); rev.gain.value = 0.34;
-    pannerNode.connect(rev).connect(this.reverbSend);
+    pannerNode.connect(rev).connect(this.hallSend);
+    // A struck element is part of the machine as well as of the music.
+    const box = ctx.createGain(); box.gain.value = 0.18;
+    pannerNode.connect(box).connect(this.cabSend);
     const dly = ctx.createGain(); dly.gain.value = 0.2;
     pannerNode.connect(dly).connect(this.delaySend);
 
@@ -829,8 +953,11 @@ export class AudioEngine {
     pannerNode.pan.value = clamp(pan, -1, 1);
     src.connect(bp).connect(hp).connect(g).connect(pannerNode);
     pannerNode.connect(this.fxBus);
-    const rev = ctx.createGain(); rev.gain.value = 0.18 + profile.tone * 0.2;
-    pannerNode.connect(rev).connect(this.reverbSend);
+    // Mostly the box, a little of the hall: the ball is inside the machine.
+    const rev = ctx.createGain(); rev.gain.value = 0.12;
+    pannerNode.connect(rev).connect(this.hallSend);
+    const box = ctx.createGain(); box.gain.value = 0.55;
+    pannerNode.connect(box).connect(this.cabSend);
     src.start(t, Math.random() * 0.9, 0.4);
 
     // Metallic surfaces also ring at a pitch, so even incidental sounds carry
@@ -862,7 +989,10 @@ export class AudioEngine {
     out.connect(this.musicBus);
     const rev = ctx.createGain();
     rev.gain.value = spec.reverb;
-    out.connect(rev).connect(this.reverbSend);
+    out.connect(rev).connect(this.hallSend);
+    const box = ctx.createGain();
+    box.gain.value = 0.18;
+    out.connect(box).connect(this.cabSend);
     const handle: Scheduled = { cancel: () => out.disconnect() };
 
     if (spec.noiseFreq > 0) {
@@ -947,7 +1077,9 @@ export class AudioEngine {
     carrier.connect(g).connect(pannerNode);
     pannerNode.connect(this.fxBus);
     const rev = ctx.createGain(); rev.gain.value = 0.3;
-    pannerNode.connect(rev).connect(this.reverbSend);
+    pannerNode.connect(rev).connect(this.hallSend);
+    const box = ctx.createGain(); box.gain.value = 0.3;
+    pannerNode.connect(box).connect(this.cabSend);
     carrier.start(t); mod.start(t);
     carrier.stop(t + decay + 0.05); mod.stop(t + decay + 0.05);
   }
@@ -971,7 +1103,9 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
     src.connect(bp).connect(g).connect(this.fxBus);
     const rev = ctx.createGain(); rev.gain.value = 0.5;
-    g.connect(rev).connect(this.reverbSend);
+    g.connect(rev).connect(this.hallSend);
+    const box = ctx.createGain(); box.gain.value = 0.3;
+    g.connect(box).connect(this.cabSend);
     src.start(t);
     src.stop(t + seconds + 0.05);
   }
@@ -1041,20 +1175,15 @@ export class AudioEngine {
   }
 }
 
-/** Exponentially decaying noise: a convincing hall without shipping an IR file. */
-function makeImpulse(ctx: BaseAudioContext, seconds: number, decay: number): AudioBuffer {
-  const rate = ctx.sampleRate;
-  const len = Math.max(1, Math.floor(rate * seconds));
-  const buf = ctx.createBuffer(2, len, rate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) {
-      const t = i / len;
-      // A short build-up before the decay reads as a room rather than a gate.
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * Math.min(1, t * 240);
-    }
-  }
-  return buf;
+/**
+ * The ceiling: a hyperbolic tangent, unity through the middle and rounding
+ * off towards full scale. Everything the game makes sums into this, so the
+ * loudest multiball leans on it rather than on the converter's hard edge.
+ */
+function softClip(points: number): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(points);
+  for (let i = 0; i < points; i++) curve[i] = Math.tanh((i / (points - 1)) * 2 - 1);
+  return curve;
 }
 
 function makeNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
