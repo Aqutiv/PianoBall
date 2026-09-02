@@ -39,7 +39,7 @@ describe('the table as a band', () => {
  * What reaches the engine when the ball hits something. Counted rather than
  * heard: the engine here is a recorder, so what is asserted is the routing.
  */
-interface Mallet { note: number; gain: number; bright: number }
+interface Mallet { note: number; gain: number; bright: number; at: number }
 interface Drum { voice: DrumVoice; gain: number; at: number }
 interface Mech { name: MechName; gain: number; pan: number; at: number }
 interface Hit { tag: SoundTag; energy: number; pan?: number; depth?: number; glance?: number; note?: number | null }
@@ -75,8 +75,8 @@ function rig() {
       return roll;
     },
     scrape: (slide: number, pan: number, depth: number) => { scrapes.push({ slide, pan, depth }); },
-    mallet: (note: number, gain: number, _pan: number, bright: number) => {
-      mallets.push({ note, gain, bright });
+    mallet: (note: number, gain: number, _pan: number, bright: number, at = 0) => {
+      mallets.push({ note, gain, bright, at });
       return { cancel: () => { cancelled.mallet++; } };
     },
     drum: (voice: DrumVoice, gain: number, at = 0) => {
@@ -103,7 +103,7 @@ function rig() {
     el.spinRate = spinRate;
     game.bus.emit('element', { el, energised, impact, x: el.x, y: el.y });
   };
-  return { mallets, drums, mechs, hits, scrapes, rolls, hit, game, audio, engine, cancelled };
+  return { mallets, drums, mechs, hits, scrapes, rolls, hit, game, audio, engine, cancelled, bed };
 }
 
 describe('striking the table', () => {
@@ -208,6 +208,47 @@ describe('striking the table', () => {
     game.bus.emit('objective', { id: 'arc', label: 'ARC' });
     audio.detach();
     expect(cancelled.mallet).toBe(5);
+  });
+});
+
+describe('the flourishes', () => {
+  const pcs = (ns: readonly number[]) => new Set(ns.map((n) => ((n % 12) + 12) % 12));
+
+  it('run through the chord under them, on the grid, and turn back for an objective', () => {
+    const { mallets, game, bed, engine } = rig();
+    engine.now = 10.37;
+    game.bus.emit('objective', { id: 'arc', label: 'ARC' });
+    expect(mallets).toHaveLength(5);
+    for (const m of mallets) expect(pcs(bed.chordTones).has(((m.note % 12) + 12) % 12), `${m.note}`).toBe(true);
+    expect(mallets[0].at).toBeGreaterThan(engine.now);
+    expect(Math.abs(bed.groove.offsetAt(mallets[0].at))).toBeLessThan(1e-9);
+    for (let i = 1; i < mallets.length; i++) {
+      expect(mallets[i].at - mallets[i - 1].at).toBeCloseTo(bed.groove.stepSeconds, 9);
+    }
+    const notes = mallets.map((m) => m.note);
+    expect(notes[1]).toBeGreaterThan(notes[0]);
+    expect(notes[2]).toBeGreaterThan(notes[1]);
+    expect(notes[3]).toBeLessThan(notes[2]);
+    expect(notes[4]).toBeLessThan(notes[3]);
+  });
+
+  it('climb twice as fast for a multiball', () => {
+    const { mallets, game, bed } = rig();
+    game.bus.emit('multiball', { count: 3 });
+    expect(mallets).toHaveLength(6);
+    for (let i = 1; i < mallets.length; i++) {
+      expect(mallets[i].at - mallets[i - 1].at).toBeCloseTo(bed.groove.stepSeconds / 2, 9);
+      expect(mallets[i].note).toBeGreaterThan(mallets[i - 1].note);
+    }
+  });
+
+  it('bring the harmony home on a drain', () => {
+    const { game, bed } = rig();
+    const queued = (): number => (bed as never as { cadenceQueue: unknown[] }).cadenceQueue.length;
+    game.bus.emit('drain', { x: 512, y: 30, ballId: 1, saved: false });
+    expect(queued()).toBe(2);
+    game.bus.emit('drain', { x: 512, y: 30, ballId: 2, saved: true });
+    expect(queued()).toBe(2);
   });
 });
 

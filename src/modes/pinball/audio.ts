@@ -1,6 +1,6 @@
 import type { AudioEngine, RollHandle, Scheduled } from '../../audio/engine';
 import type { ChordBed } from '../../audio/bed';
-import { snapToScale, degreeToNote } from '../../audio/music';
+import { snapToScale } from '../../audio/music';
 import type { Game } from '../../game/game';
 import type { Intensity } from '../../game/intensity';
 import type { KeyState } from '../../game/keybed';
@@ -237,19 +237,23 @@ export class PinballAudio {
       engine.swell(false, saved ? 0.7 : 1.3, saved ? 0.22 : 0.32);
       // The ball into the trough, or the saver throwing it back.
       engine.mech(saved ? 'kickback' : 'trough', 0.9, this.pan(x));
+      // The harmony comes home under the loss — through the dominant when the
+      // ball is gone, and starting over; through the subdominant when it was
+      // saved, and carrying on.
+      this.bed.cadence(saved ? 'plagal' : 'authentic', saved ? 'resume' : 'restart');
       this.bed.groove.reset();
     }));
 
     offs.push(bus.on('multiball', () => {
       engine.swell(true, 1.4, 0.4);
-      this.arpeggio(6, 0.055, 0.3);
+      this.flourish('multiball');
     }));
 
     // Completing something pushes the progression on early, and the chord it
     // lands on still gets its full run of bars rather than a stub.
     offs.push(bus.on('objective', () => {
       this.bed.advance();
-      this.arpeggio(5, 0.07, 0.26);
+      this.flourish('objective');
     }));
 
     offs.push(bus.on('serve', () => { this.bed.groove.reset(); }));
@@ -310,18 +314,27 @@ export class PinballAudio {
   }
 
   /**
-   * Rising run through the table's scale. Used for objectives and multiball.
-   * Placed on the audio clock rather than on timers, so it lands where it
-   * was asked for; held on to, so leaving can still take it back.
+   * A run through the chord the bed is playing, starting on the next
+   * subdivision of the beat. Used for objectives and multiball.
+   *
+   * Through the chord rather than the scale, so it belongs to the harmony
+   * under it, and on the grid rather than the instant it was asked for, so
+   * it belongs to the beat. An objective's run goes up and turns back; a
+   * multiball's is twice as fast and only climbs. Placed on the audio clock
+   * and held on to, so leaving can still take it back.
    */
-  private arpeggio(count: number, spacing: number, gain: number): void {
-    const m = this.game.music;
-    const now = this.engine.now;
-    for (let i = 0; i < count; i++) {
-      const at = now + i * spacing;
-      this.hold(this.engine.mallet(
-        degreeToNote(i, m.root, m.scale) + 12, gain, (i / count - 0.5) * 1.2, 0.8, at,
-      ), at + 1);
-    }
+  private flourish(kind: 'objective' | 'multiball'): void {
+    const tones = this.bed.chordTones;
+    if (!tones.length) return;
+    const groove = this.bed.groove;
+    const order = kind === 'multiball' ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 1, 0];
+    const spacing = kind === 'multiball' ? groove.stepSeconds / 2 : groove.stepSeconds;
+    const gain = kind === 'multiball' ? 0.3 : 0.26;
+    const start = groove.nextStep(this.engine.now);
+    order.forEach((idx, i) => {
+      const note = tones[idx % tones.length] + 12 * Math.floor(idx / tones.length) + 12;
+      const at = start + i * spacing;
+      this.hold(this.engine.mallet(note, gain, (i / order.length - 0.5) * 1.2, 0.8, at), at + 1);
+    });
   }
 }

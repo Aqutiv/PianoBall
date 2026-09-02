@@ -15,13 +15,34 @@ export const SCALES = {
 
 export type ScaleName = keyof typeof SCALES;
 
+/** One chord of a loop: a degree of the mode's own scale, and a quality. */
+export interface Step {
+  degree: number;
+  quality: ChordQuality;
+}
+
+/** The two ways a loop can come home: through its dominant, or through its subdominant. */
+export interface Cadences {
+  authentic: Step[];
+  plagal: Step[];
+}
+
 /** A scale plus a chord loop written in that scale's own degrees. */
 export interface MusicMode {
   id: ScaleName;
   /** Bare mode name. The HUD prefixes the root: "D minor pentatonic". */
   label: string;
   scale: number[];
-  progression: { degree: number; quality: ChordQuality }[];
+  progression: Step[];
+  /**
+   * A second loop, played every other time round, so a long game does not
+   * go round the same eight chords for ever. Starts somewhere the first loop
+   * does not, and ends on the chord that leads back to the top.
+   */
+  variation?: Step[];
+  /** What the last bar of the last chord becomes: the chord that wants to go home. */
+  turnaround?: Step;
+  cadences?: Cadences;
 }
 
 /**
@@ -46,6 +67,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'min' },
       { degree: 4, quality: 'dom7' },
     ],
+    variation: [
+      { degree: 5, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 0, quality: 'maj' },
+      { degree: 4, quality: 'maj' },
+      { degree: 5, quality: 'min' },
+      { degree: 1, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'dom7' },
+    ],
+    turnaround: { degree: 4, quality: 'dom7' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'dom7' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'minorPentatonic',
@@ -61,6 +97,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'maj' },
       { degree: 3, quality: 'min' },
     ],
+    variation: [
+      { degree: 2, quality: 'sus4' },
+      { degree: 1, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'sus4' },
+      { degree: 3, quality: 'min7' },
+      { degree: 4, quality: 'maj' },
+      { degree: 3, quality: 'min' },
+    ],
+    turnaround: { degree: 3, quality: 'min' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'min' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 2, quality: 'sus4' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'majorPentatonic',
@@ -76,6 +127,21 @@ export const MODES: MusicMode[] = [
       { degree: 3, quality: 'maj' },
       { degree: 4, quality: 'min7' },
     ],
+    variation: [
+      { degree: 3, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 0, quality: 'maj' },
+      { degree: 1, quality: 'sus4' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 2, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+    ],
+    turnaround: { degree: 3, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 1, quality: 'sus4' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'dorian',
@@ -91,6 +157,21 @@ export const MODES: MusicMode[] = [
       { degree: 4, quality: 'min7' },
       { degree: 6, quality: 'maj' },
     ],
+    variation: [
+      { degree: 6, quality: 'maj' },
+      { degree: 2, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'min7' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+      { degree: 2, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+    ],
+    turnaround: { degree: 3, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min7' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'aeolian',
@@ -106,6 +187,21 @@ export const MODES: MusicMode[] = [
       { degree: 5, quality: 'maj' },
       { degree: 4, quality: 'min' },
     ],
+    variation: [
+      { degree: 2, quality: 'maj' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'min' },
+      { degree: 4, quality: 'min' },
+      { degree: 2, quality: 'maj' },
+      { degree: 5, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 6, quality: 'maj' },
+    ],
+    turnaround: { degree: 6, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 3, quality: 'min' }, { degree: 0, quality: 'min' }],
+    },
   },
   {
     id: 'lydian',
@@ -121,6 +217,21 @@ export const MODES: MusicMode[] = [
       { degree: 2, quality: 'min' },
       { degree: 0, quality: 'maj7' },
     ],
+    variation: [
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 0, quality: 'maj7' },
+      { degree: 1, quality: 'maj' },
+      { degree: 5, quality: 'min' },
+      { degree: 4, quality: 'maj' },
+      { degree: 2, quality: 'min' },
+      { degree: 1, quality: 'maj' },
+    ],
+    turnaround: { degree: 1, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'maj' }, { degree: 0, quality: 'maj7' }],
+      plagal: [{ degree: 1, quality: 'maj' }, { degree: 0, quality: 'maj7' }],
+    },
   },
   {
     id: 'mixolydian',
@@ -136,6 +247,21 @@ export const MODES: MusicMode[] = [
       { degree: 3, quality: 'maj' },
       { degree: 0, quality: 'dom7' },
     ],
+    variation: [
+      { degree: 3, quality: 'maj' },
+      { degree: 0, quality: 'dom7' },
+      { degree: 6, quality: 'maj' },
+      { degree: 3, quality: 'maj' },
+      { degree: 4, quality: 'min' },
+      { degree: 1, quality: 'min' },
+      { degree: 3, quality: 'maj' },
+      { degree: 6, quality: 'maj' },
+    ],
+    turnaround: { degree: 6, quality: 'maj' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'min' }, { degree: 0, quality: 'maj' }],
+      plagal: [{ degree: 3, quality: 'maj' }, { degree: 0, quality: 'maj' }],
+    },
   },
   {
     id: 'blues',
@@ -151,6 +277,21 @@ export const MODES: MusicMode[] = [
       { degree: 4, quality: 'dom7' },
       { degree: 0, quality: 'min7' },
     ],
+    variation: [
+      { degree: 2, quality: 'min7' },
+      { degree: 0, quality: 'min7' },
+      { degree: 5, quality: 'maj' },
+      { degree: 4, quality: 'dom7' },
+      { degree: 2, quality: 'min7' },
+      { degree: 0, quality: 'min7' },
+      { degree: 2, quality: 'dom7' },
+      { degree: 4, quality: 'dom7' },
+    ],
+    turnaround: { degree: 4, quality: 'dom7' },
+    cadences: {
+      authentic: [{ degree: 4, quality: 'dom7' }, { degree: 0, quality: 'min7' }],
+      plagal: [{ degree: 2, quality: 'min7' }, { degree: 0, quality: 'min7' }],
+    },
   },
   {
     id: 'kumoi',
@@ -166,6 +307,21 @@ export const MODES: MusicMode[] = [
       { degree: 1, quality: 'sus4' },
       { degree: 0, quality: 'min' },
     ],
+    variation: [
+      { degree: 3, quality: 'min7' },
+      { degree: 2, quality: 'maj' },
+      { degree: 0, quality: 'min' },
+      { degree: 4, quality: 'dim' },
+      { degree: 3, quality: 'min7' },
+      { degree: 1, quality: 'sus4' },
+      { degree: 2, quality: 'maj' },
+      { degree: 1, quality: 'sus4' },
+    ],
+    turnaround: { degree: 1, quality: 'sus4' },
+    cadences: {
+      authentic: [{ degree: 3, quality: 'min7' }, { degree: 0, quality: 'min' }],
+      plagal: [{ degree: 1, quality: 'sus4' }, { degree: 0, quality: 'min' }],
+    },
   },
 ];
 
@@ -181,7 +337,10 @@ export interface ActiveMusic {
   id: string;
   label: string;
   scale: number[];
-  progression: { degree: number; quality: ChordQuality }[];
+  progression: Step[];
+  variation?: Step[];
+  turnaround?: Step;
+  cadences?: Cadences;
 }
 
 const CHORD_INTERVALS: Record<ChordQuality, number[]> = {
@@ -710,6 +869,12 @@ export class Groove {
     const step = this.stepSeconds;
     const phase = time / step;
     return (phase - Math.round(phase)) * step;
+  }
+
+  /** The first subdivision strictly after `time`: where a flourish placed now should start. */
+  nextStep(time: number): number {
+    const step = this.stepSeconds;
+    return (Math.floor(time / step + 1e-6) + 1) * step;
   }
 
   /**

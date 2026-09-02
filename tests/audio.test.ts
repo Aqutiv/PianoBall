@@ -1,3 +1,4 @@
+import { chordNotes, degreeToNote } from '../src/audio/music';
 import { describe, expect, it } from 'vitest';
 import { AudioEngine } from '../src/audio/engine';
 import { wireGlobalControls } from '../src/audio/controls';
@@ -167,7 +168,7 @@ describe("the loop's pattern", () => {
     const tick = () => (bed as never as { schedule(): void }).schedule();
     /** Wind the clock a bar forward, a scheduler tick at a time. */
     const bar = () => { for (let t = 0; t < BAR; t += 0.04) { engine.now += 0.04; tick(); } };
-    return { pads, engine, bed, tick, bar };
+    return { pads, engine, bed, tick, bar, music };
   }
 
   // The harness rolls a scale at random, as the game does, so these assert
@@ -215,6 +216,52 @@ describe("the loop's pattern", () => {
     expect(step).toBeDefined();
     expect(next - step!.notes[0]).toBeGreaterThanOrEqual(1);
     expect(next - step!.notes[0]).toBeLessThanOrEqual(2);
+  });
+
+  it('turns around at the end of the loop and plays its second loop the second time round', () => {
+    const { bed, tick, bar, music } = harness();
+    const rootOf = (step: { degree: number }) => degreeToNote(step.degree, music.root, music.scale) - 12;
+    tick();
+    expect(bed.chordSpec.root).toBe(rootOf(music.progression[0]));
+    // Sixteen bars: eight chords of two. The last bar of the eighth turns around.
+    for (let i = 0; i < 15; i++) bar();
+    expect(bed.chordIndex).toBe(7);
+    expect(bed.chordSpec.root).toBe(rootOf(music.turnaround!));
+    // And the seventeenth is the top of the other loop.
+    bar();
+    expect(bed.chordIndex).toBe(0);
+    expect(bed.chordSpec.root).toBe(rootOf(music.variation![0]));
+    // Sixteen more, and it is the first loop again.
+    for (let i = 0; i < 16; i++) bar();
+    expect(bed.chordSpec.root).toBe(rootOf(music.progression[0]));
+  });
+
+  it('comes home through a cadence when asked, then starts over or carries on', () => {
+    for (const then of ['restart', 'resume'] as const) {
+      const { pads, bed, tick, bar, music } = harness();
+      const pcs = (ns: readonly number[]) => new Set(ns.map((n) => ((n % 12) + 12) % 12));
+      const chordOf = (step: { degree: number; quality: 'maj' | 'min' | 'min7' | 'maj7' | 'sus2' | 'sus4' | 'dom7' | 'dim' }) =>
+        pcs(chordNotes(degreeToNote(step.degree, music.root, music.scale), step.quality));
+      const lastChord = () => pcs(pads.filter((p) => p.notes.length > 1).pop()!.notes);
+      tick();
+      bar();
+      bar();
+      expect(bed.chordIndex).toBe(1);
+      bed.cadence('authentic', then);
+      const steps = music.cadences!.authentic;
+      bar();
+      expect(lastChord(), then).toEqual(chordOf(steps[0]));
+      bar();
+      expect(lastChord(), then).toEqual(chordOf(steps[steps.length - 1]));
+      bar();
+      if (then === 'restart') {
+        expect(bed.chordIndex).toBe(0);
+        expect(lastChord()).toEqual(chordOf(music.progression[0]));
+      } else {
+        expect(bed.chordIndex).toBe(1);
+        expect(lastChord()).toEqual(chordOf(music.progression[1]));
+      }
+    }
   });
 
   it('sounds as it always has until it is asked otherwise', () => {

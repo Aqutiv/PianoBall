@@ -275,16 +275,36 @@ describe('modes', () => {
     }
   });
 
-  it('resolves every chord of every progression', () => {
+  it('resolves every chord of every progression, second loop, turnaround and cadence', () => {
     for (const m of MODES) {
-      for (const step of m.progression) {
-        expect(step.degree).toBeGreaterThanOrEqual(0);
-        expect(step.degree).toBeLessThan(m.scale.length);
+      const all = [
+        ...m.progression, ...(m.variation ?? []),
+        ...(m.turnaround ? [m.turnaround] : []),
+        ...(m.cadences?.authentic ?? []), ...(m.cadences?.plagal ?? []),
+      ];
+      for (const step of all) {
+        expect(step.degree, m.id).toBeGreaterThanOrEqual(0);
+        expect(step.degree, m.id).toBeLessThan(m.scale.length);
         const root = degreeToNote(step.degree, D, m.scale);
         const chord = chordNotes(root, step.quality);
         expect(chord.length).toBeGreaterThanOrEqual(3);
         expect(chord[0]).toBe(root);
       }
+    }
+  });
+
+  it('gives every mode a second loop that starts elsewhere, a turnaround, and two ways home', () => {
+    for (const m of MODES) {
+      expect(m.variation?.length, m.id).toBeGreaterThanOrEqual(6);
+      expect(m.variation![0].degree, `${m.id} second loop starts where the first does`).not.toBe(m.progression[0].degree);
+      expect(m.turnaround, m.id).toBeDefined();
+      // Both cadences end on the tonic, and the second loop ends on the turnaround.
+      for (const kind of ['authentic', 'plagal'] as const) {
+        const steps = m.cadences![kind];
+        expect(steps.length, `${m.id} ${kind}`).toBeGreaterThanOrEqual(2);
+        expect(steps[steps.length - 1].degree, `${m.id} ${kind}`).toBe(0);
+      }
+      expect(m.variation![m.variation!.length - 1].degree, m.id).toBe(m.turnaround!.degree);
     }
   });
 
@@ -474,6 +494,21 @@ describe('voicings', () => {
     expect(spread).toHaveLength(5);
     expect(spread[1] - 48).toBe(10);
     expect(spread[spread.length - 1] - 48).toBe(19);
+  });
+});
+
+describe('the next step of the beat', () => {
+  it('is on the grid and strictly ahead, wherever the clock is', () => {
+    const groove = new Groove(120);
+    const step = groove.stepSeconds;
+    for (const t of [0, 0.001, step * 0.5, step - 1e-9, step, step + 1e-9, 7.3, 100 * step]) {
+      const next = groove.nextStep(t);
+      expect(next).toBeGreaterThan(t);
+      expect(next - t).toBeLessThanOrEqual(step + 1e-9);
+      expect(Math.abs(groove.offsetAt(next))).toBeLessThan(1e-9);
+    }
+    expect(groove.nextStep(0)).toBeCloseTo(step, 9);
+    expect(groove.nextStep(step)).toBeCloseTo(2 * step, 9);
   });
 });
 
