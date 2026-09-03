@@ -1,6 +1,7 @@
 import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
+import { holdAtTime } from './automation';
 import { DRUM_SPECS, type DrumVoice } from './drums';
 import { CAB, HALL, HALL_LITE, boardImpulse, roomImpulse, type RoomSpec, type Samples } from './rooms';
 import {
@@ -79,6 +80,8 @@ const AUDIO_STORAGE_KEY = 'audio';
 const LEGACY_ASSIST_STORAGE_KEY = 'audioAssist';
 
 const MAX_VOICES = 48;
+/** A repeated strike crosses the old string out quickly without clicking. */
+const RETRIGGER_RELEASE = 0.02;
 
 /**
  * A one-shot placed on the audio clock, which can still be taken back.
@@ -228,8 +231,7 @@ const MAX_SHOTS_LITE = 8;
 
 /** Fade a one-shot out in a few milliseconds when the budget takes its place back. */
 function cutShort(out: GainNode, now: number): void {
-  out.gain.cancelScheduledValues(now);
-  out.gain.setValueAtTime(out.gain.value, now);
+  holdAtTime(out.gain, now);
   out.gain.linearRampToValueAtTime(0, now + 0.01);
 }
 
@@ -277,6 +279,8 @@ interface KeyVoice {
   /** The voice's motion, tapped off the shared oscillators. Unhooked on release. */
   taps: Tap[];
   releasing: boolean;
+  /** Audio-clock time at which the scheduled sources have completely stopped. */
+  stopAt: number | null;
 }
 
 /** One connection from a pooled oscillator to a voice, through its own depth. */
@@ -850,8 +854,7 @@ export class AudioEngine {
     if (!this.ready || !this.ctx) return;
     const t = this.ctx.currentTime;
     const old = this.padGen;
-    old.gain.cancelScheduledValues(t);
-    old.gain.setValueAtTime(old.gain.value, t);
+    holdAtTime(old.gain, t);
     old.gain.linearRampToValueAtTime(0.0001, t + fade);
     // The faded node is left to its sources, which stop themselves; what
     // matters is that nothing new is put through it.
@@ -912,7 +915,7 @@ export class AudioEngine {
    */
   private duck(t: number): void {
     const g = this.padDuck.gain;
-    g.cancelScheduledValues(t);
+    holdAtTime(g, t);
     g.setTargetAtTime(DUCK_FLOOR, t, 0.008);
     g.setTargetAtTime(1, t + DUCK_HOLD, DUCK_RETURN);
   }
@@ -976,7 +979,7 @@ export class AudioEngine {
     if (!this.running || !this.ctx) return;
     if (this.keyVoicingMode === 'bed') { this.bedKeyOn(note, velocity, pan); return; }
     const t = this.ctx.currentTime;
-    this.noteOff(note, true);
+    this.retrigger(note, t);
 
     const v = clamp01(velocity);
     const freq = noteToFreq(note);
@@ -1018,7 +1021,8 @@ export class AudioEngine {
 
     const voice: KeyVoice = {
       note, startedAt: t, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
-      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, taps, releasing: false,
+      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, taps,
+      releasing: false, stopAt: null,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -1042,7 +1046,7 @@ export class AudioEngine {
   private bedKeyOn(note: number, velocity: number, pan: number): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.noteOff(note, true);
+    this.retrigger(note, t);
 
     const v = clamp01(velocity);
     const freq = noteToFreq(note);
@@ -1086,7 +1090,7 @@ export class AudioEngine {
 
     const voice: KeyVoice = {
       note, startedAt: t, sources, filter, amp, panner: chain.panner,
-      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false,
+      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false, stopAt: null,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -1400,12 +1404,13 @@ export class AudioEngine {
 
   noteOff(note: number, immediate = false): void {
     if (!this.running || !this.ctx) return;
-    // Pedal down: the note is held, and released when the pedal comes up.
-    if (this.pedal >= PEDAL_DOWN && !immediate) { this.sustained.add(note); return; }
+    this.pruneVoices(this.ctx.currentTime);
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
+    // Pedal down: the note is held, and released when the pedal comes up.
+    if (this.pedal >= PEDAL_DOWN && !immediate) { this.sustained.add(note); return; }
     this.voices.delete(note);
-    if (immediate) { this.release(voice, 0.02, false); return; }
+    if (immediate) { this.release(voice, RETRIGGER_RELEASE, false); return; }
     // Half down, the dampers only brush the strings and the note fades slowly.
     const seconds = pedalRelease(voice.release, this.pedal);
     this.release(voice, seconds, true, this.pedal >= PEDAL_UP ? RECATCH_REPRIEVE : 0);
@@ -1427,6 +1432,31 @@ export class AudioEngine {
     this.fading = this.fading.filter((f) => t - f.at <= RECATCH);
   }
 
+  /** Drop voices only after every source has reached its scheduled stop. */
+  private pruneVoices(t: number): void {
+    const expired = new Set(this.active.filter((voice) => voice.stopAt !== null && voice.stopAt <= t));
+    if (!expired.size) return;
+    this.active = this.active.filter((voice) => !expired.has(voice));
+    this.fading = this.fading.filter((f) => !expired.has(f.voice));
+    for (const voice of expired) {
+      if (this.voices.get(voice.note) !== voice) continue;
+      this.voices.delete(voice.note);
+      this.sustained.delete(voice.note);
+    }
+  }
+
+  /** Crossfade every still-sounding copy of a pitch before striking it again. */
+  private retrigger(note: number, t: number): void {
+    this.pruneVoices(t);
+    this.sustained.delete(note);
+    this.fading = this.fading.filter((f) => f.voice.note !== note);
+    for (const voice of this.active) {
+      if (voice.note !== note) continue;
+      if (this.voices.get(note) === voice) this.voices.delete(note);
+      this.release(voice, RETRIGGER_RELEASE, false);
+    }
+  }
+
   /**
    * Let a voice go. `damp` says whether a finger lifted: a damper falling
    * onto a string makes a sound of its own, but a note cut to make room for
@@ -1436,32 +1466,34 @@ export class AudioEngine {
   private release(voice: KeyVoice, seconds: number, damp = true, reprieve = 0): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    const firstRelease = !voice.releasing;
     voice.releasing = true;
-    if (damp && voice.damper && !this.lite) {
+    if (firstRelease && damp && voice.damper && !this.lite) {
       // As loud as what is left of the note: a string that has already died
       // away has little for the damper to stop.
       const left = clamp01(voice.amp.gain.value / Math.max(0.0001, voice.peak));
       this.addNoise(voice.panner, voice.damper, voice.freq, left, t, voice.k);
     }
-    voice.amp.gain.cancelScheduledValues(t);
-    voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
+    holdAtTime(voice.amp.gain, t);
     voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
-    const stop = t + seconds + 0.02 + reprieve;
+    const requestedStop = t + seconds + 0.02 + reprieve;
+    const stop = Math.min(voice.stopAt ?? Number.POSITIVE_INFINITY, requestedStop);
+    voice.stopAt = stop;
     for (const s of voice.sources) s.stop(stop);
     // The expression sources are permanent and hold a reference to every param
     // they feed, so a voice that is not explicitly unhooked never goes away.
-    for (const s of voice.sources) {
-      this.bendSource.disconnect(s.detune);
-      this.lfoVibrato.disconnect(s.detune);
+    if (firstRelease) {
+      for (const s of voice.sources) {
+        this.bendSource.disconnect(s.detune);
+        this.lfoVibrato.disconnect(s.detune);
+      }
+      this.lfoColour.disconnect(voice.filter.frequency);
+      // The pooled oscillators are permanent too, and hold every tap they feed.
+      for (const { lfo, gain } of voice.taps) {
+        lfo.disconnect(gain);
+        gain.disconnect();
+      }
     }
-    this.lfoColour.disconnect(voice.filter.frequency);
-    // The pooled oscillators are permanent too, and hold every tap they feed.
-    for (const { lfo, gain } of voice.taps) {
-      lfo.disconnect(gain);
-      gain.disconnect();
-    }
-    const idx = this.active.indexOf(voice);
-    if (idx >= 0) this.active.splice(idx, 1);
   }
 
   /**
@@ -1476,6 +1508,7 @@ export class AudioEngine {
     this.pedal = a;
     if (this.ready && this.ctx) {
       const t = this.ctx.currentTime;
+      this.pruneVoices(t);
       this.bodyWet.gain.setTargetAtTime(bodyMixFor(a), t, 0.05);
       if (a >= PEDAL_DOWN && before < PEDAL_DOWN) this.recatch(t);
     }
@@ -1504,12 +1537,12 @@ export class AudioEngine {
    * note is a note saved, not a note struck again.
    */
   private recatch(t: number): void {
+    this.pruneVoices(t);
     this.forgetFaded(t);
     for (const f of this.fading) {
       const voice = f.voice;
       if (this.voices.has(voice.note)) continue;
-      voice.amp.gain.cancelScheduledValues(t);
-      voice.amp.gain.setValueAtTime(Math.max(0.0001, voice.amp.gain.value), t);
+      holdAtTime(voice.amp.gain, t);
       voice.releasing = false;
       for (const s of voice.sources) {
         this.bendSource.connect(s.detune);
@@ -1518,7 +1551,6 @@ export class AudioEngine {
       this.lfoColour.connect(voice.filter.frequency);
       voice.taps = [];
       this.voices.set(voice.note, voice);
-      this.active.push(voice);
       this.sustained.add(voice.note);
     }
     this.fading = [];
@@ -1526,15 +1558,26 @@ export class AudioEngine {
 
   /** Oldest-first voice stealing, so a two-handed run never runs out. */
   private cull(): void {
-    while (this.active.length > MAX_VOICES) {
-      const oldest = this.active[0];
-      this.voices.delete(oldest.note);
+    if (!this.ctx) return;
+    this.pruneVoices(this.ctx.currentTime);
+    const excess = this.active.length - MAX_VOICES;
+    if (excess <= 0) return;
+    // Release tails are deliberately eligible: otherwise they disappear from
+    // the budget and can pile up invisibly under a fast passage.
+    for (const oldest of this.active.slice(0, excess)) {
+      if (this.voices.get(oldest.note) === oldest) {
+        this.voices.delete(oldest.note);
+        this.sustained.delete(oldest.note);
+      }
+      this.fading = this.fading.filter((f) => f.voice !== oldest);
       this.release(oldest, 0.05, false);
     }
   }
 
   allNotesOff(): void {
-    for (const note of [...this.voices.keys()]) this.noteOff(note, true);
+    if (this.ctx) this.pruneVoices(this.ctx.currentTime);
+    for (const voice of [...this.active]) this.release(voice, RETRIGGER_RELEASE, false);
+    this.voices.clear();
     this.sustained.clear();
     this.fading.length = 0;
   }
