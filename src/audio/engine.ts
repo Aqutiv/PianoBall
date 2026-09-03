@@ -160,6 +160,22 @@ const RUMBLE_HZ = 28;
  */
 const UNISON_TURN = 0.6180339887498949;
 
+/**
+ * How a unison copy's level is scaled back against the number of copies:
+ * `level / copies ^ this`.
+ *
+ * A square root is what copies at independent phases *ought* to want, since
+ * independent sources sum in power — but the copies were never independent.
+ * Starting them all at phase zero made them one loud oscillator at the strike,
+ * and a square root left that four decibels hot; turning them apart
+ * (`rotatePhase`) fixed the peak and took the loudness the voices were tuned
+ * around with it. This is the number that puts the loudness back without the
+ * peak, and it is set by measurement rather than by theory: what a listener
+ * hears is the power sum, what the ceiling sees is the crest, and the two do
+ * not move together.
+ */
+const UNISON_SPREAD = 0.33;
+
 /** The rooms are rendered from noise; one fixed seed makes them the same rooms on every load. */
 const ROOM_SEED = 0x50a7;
 
@@ -444,8 +460,10 @@ export class AudioEngine {
   private tempo = 96;
   private voices = new Map<number, KeyVoice>();
   private active: KeyVoice[] = [];
-  /** Every periodic wave built so far, by spectrum and register. */
+  /** Every periodic wave built so far, by spectrum, register and turn. */
   private waves = new Map<string, PeriodicWave>();
+  /** What each spectrum is normalised by, so every turn of it shares one scale. */
+  private wavePeaks = new Map<string, number>();
   /** Rendered strings, by voice, note and pluck. */
   private strings = new Lru<AudioBuffer>(STRING_ENTRIES, STRING_BYTES);
   /** The table's one-shots sounding now, so a multiball never turns to noise. */
@@ -1232,7 +1250,8 @@ export class AudioEngine {
     const out: Pitched[] = [];
     const curve = layer.velCurve ? Math.pow(v, layer.velCurve) : 1;
     const level = Math.max(
-      0.0001, ((layer.level + v * (layer.velLevel ?? 0)) * curve * h.level) / Math.sqrt(detunes.length));
+      0.0001,
+      ((layer.level + v * (layer.velLevel ?? 0)) * curve * h.level) / Math.pow(detunes.length, UNISON_SPREAD));
     const attack = layer.attack ?? 0;
     const hold = layer.hold ?? 0;
     for (let j = 0; j < detunes.length; j++) {
@@ -1416,13 +1435,25 @@ export class AudioEngine {
    * same table turned to a different place in its cycle — see `rotatePhase`.
    */
   private wave(ref: SpectrumRef, register: Register, phase = 0): PeriodicWave {
-    const key = `${spectrumKey(ref, register)}:${phase}`;
+    const base = spectrumKey(ref, register);
+    const key = `${base}:${phase}`;
     let w = this.waves.get(key);
     if (!w) {
       const ctx = this.ctx!;
-      const turned = rotatePhase(
-        spectrum(ref, register, ctx.sampleRate), phase * UNISON_TURN * 2 * Math.PI);
-      w = ctx.createPeriodicWave(turned.real, turned.imag);
+      const partials = spectrum(ref, register, ctx.sampleRate);
+      // Turning a waveform does not change how loud it is, only where its
+      // peak falls — but `createPeriodicWave` normalises whatever it is
+      // handed to a peak of one, which would scale each copy differently and
+      // turn a phase shift into a level change. So every turn of one spectrum
+      // is scaled by the *same* number, the one its unturned form would have
+      // been given, and the normalisation is done here instead.
+      let peak = this.wavePeaks.get(base);
+      if (peak === undefined) {
+        peak = wavePeak(partials);
+        this.wavePeaks.set(base, peak);
+      }
+      const turned = rotatePhase(partials, phase * UNISON_TURN * 2 * Math.PI, 1 / peak);
+      w = ctx.createPeriodicWave(turned.real, turned.imag, { disableNormalization: true });
       this.waves.set(key, w);
     }
     return w;
@@ -2270,17 +2301,35 @@ export function softClip(points: number): Float32Array<ArrayBuffer> {
  * Shifting a waveform by `angle` turns partial *k* by *k · angle*, which is
  * the rotation below.
  */
-function rotatePhase({ real, imag }: Partials, angle: number): Partials {
-  if (!angle) return { real, imag };
+function rotatePhase({ real, imag }: Partials, angle: number, scale: number): Partials {
   const r = new Float32Array(real.length);
   const m = new Float32Array(imag.length);
   for (let k = 0; k < real.length; k++) {
-    const c = Math.cos(k * angle);
-    const s = Math.sin(k * angle);
+    const c = Math.cos(k * angle) * scale;
+    const s = Math.sin(k * angle) * scale;
     r[k] = real[k] * c + imag[k] * s;
     m[k] = imag[k] * c - real[k] * s;
   }
   return { real: r, imag: m };
+}
+
+/**
+ * The tallest the waveform these partials describe ever gets, over one cycle.
+ *
+ * What `createPeriodicWave` normalises by, worked out here so that every turn
+ * of one spectrum can be given the same number — see `wave`. A cycle at this
+ * many points is finer than the partial count needs, and it is paid once per
+ * spectrum and register, during the warm-up.
+ */
+function wavePeak({ real, imag }: Partials, points = 4096): number {
+  let peak = 0;
+  for (let i = 0; i < points; i++) {
+    const t = (2 * Math.PI * i) / points;
+    let x = 0;
+    for (let k = 0; k < real.length; k++) x += real[k] * Math.cos(k * t) + imag[k] * Math.sin(k * t);
+    peak = Math.max(peak, Math.abs(x));
+  }
+  return peak || 1;
 }
 
 function makeNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
