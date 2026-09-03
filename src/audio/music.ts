@@ -698,6 +698,12 @@ const QUALITY_SUFFIX: Record<ChordQuality, string> = {
   sus2: 'sus2', sus4: 'sus4', dom7: '7', dim: 'dim',
 };
 
+/** Name a single pitch the way its key would write it. */
+export function noteNameInKey(note: number, tonic?: number): string {
+  const flat = tonic !== undefined && FLAT_SIDE.has(pitchClass(note - tonic));
+  return (flat ? FLAT_NAMES : NAMES)[pitchClass(note)];
+}
+
 /**
  * Name a chord that is already known, rather than guessed at.
  *
@@ -709,8 +715,7 @@ export function chordLabel(root: number, quality: ChordQuality, tonic?: number):
   // Spelling follows the key when there is one to follow. The sixth degree of D
   // minor is a B flat, and calling it an A sharp in a panel whose whole job is
   // to teach the player what they are hearing is worse than saying nothing.
-  const flat = tonic !== undefined && FLAT_SIDE.has(pitchClass(root - tonic));
-  return (flat ? FLAT_NAMES : NAMES)[pitchClass(root)] + QUALITY_SUFFIX[quality];
+  return noteNameInKey(root, tonic) + QUALITY_SUFFIX[quality];
 }
 
 /** Conventional single names for a shape once a ninth is stacked on it. */

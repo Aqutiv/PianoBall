@@ -507,6 +507,10 @@ export class Overlay {
         count of beats.</p>
       <div class="row"><label>Light the key a note is heading for</label>
         <button id="pt-assist">${tune.assist ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Note names on the auras</label>
+        <button id="pt-names">${tune.noteNames ? 'On' : 'Off'}</button></div>
+      <p class="diag">Spelled the way the tune's key writes them, so an aura and the
+        chord readout above it agree. Off leaves the board to hue and shape alone.</p>
       <div class="row"><label>Unlocked tunes</label>
         <span><span class="diag" id="pt-unlocked"></span> <button id="pt-reset">Reset&hellip;</button></span></div>
       <div class="row"><label>Unlocked chord parts</label>
@@ -631,6 +635,7 @@ export class Overlay {
     $<HTMLSelectElement>('#pt-lead').addEventListener('change', (e) =>
       setPlayTuneSettings({ leadBeats: Number((e.target as HTMLSelectElement).value) }));
     toggle('#pt-assist', () => playTuneSettings().assist, (v) => setPlayTuneSettings({ assist: v }));
+    toggle('#pt-names', () => playTuneSettings().noteNames, (v) => setPlayTuneSettings({ noteNames: v }));
 
     // One chain per role, wired the same way. The live mode only takes the
     // fresh progress if it is the role that was just wiped — the other one is

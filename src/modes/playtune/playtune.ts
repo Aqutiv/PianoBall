@@ -470,6 +470,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     stage.particles.draw(em, stage.cam);
 
     stage.composite();
+    if (settings.noteNames && this.tune) {
+      this.auras.drawLabels(stage.ctx, views, this.tune.root + this.shift);
+    }
     stage.drawRoll();
     stage.drawGlass();
     this.drawCountIn();

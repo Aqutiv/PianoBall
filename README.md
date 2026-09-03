@@ -173,10 +173,12 @@ a good run is also a piece of music.
 
 Learn a melody. The game plays the chords; you owe it the tune on top.
 
-Auras fall down the lane belonging to the key they are due on. Press the key as
-one arrives: on time it bursts into light, late or early it still counts for
-less, and one you never reach **shatters**. There is no failing — a tune always
-plays to its last bar, because the point is to have played it.
+Auras fall down the lane belonging to the key they are due on. Each writes its
+pitch name across its head; its hue is its pitch class on the circle of fifths,
+and its head shape is its note value. Press the key as one arrives: on time it
+bursts into light, late or early it still counts for less, and one you never
+reach **shatters**. There is no failing — a tune always plays to its last bar,
+because the point is to have played it.
 
 Fourteen tunes, unlocked in order, from three notes on the beat to Bach in
 continuous quavers:
@@ -221,10 +223,11 @@ hand Für Elise and the Minuet run on — and none of it is a drum machine. Ther
 are no drums in PlayTune, because a kick under a Gymnopédie is a costume.
 
 Passing a tune (accuracy above its own mark) unlocks the next and records your
-best. **Settings → PlayTune → Audio offset** exists because output latency is real.
-You play in time with what you *hear*, and what you hear has already happened,
-so an honest player lands late — raise the offset to compensate for that, lower
-it if you are landing early.
+best. **Settings → PlayTune → Note names on the auras** restores the clean board
+when turned off. **Audio offset** exists because output latency is real. You play
+in time with what you *hear*, and what you hear has already happened, so an
+honest player lands late — raise the offset to compensate for that, lower it if
+you are landing early.
 
 ---
 

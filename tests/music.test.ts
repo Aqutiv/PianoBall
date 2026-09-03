@@ -2,7 +2,7 @@ import { approachNote, colourTones, voiceChord, type Key } from '../src/audio/mu
 import { describe, it, expect } from 'vitest';
 import {
   SCALES, MODES, findMode, chordNotes, snapToScale, inScale, scaleDegree, degreeToNote,
-  identifyChord, retuneNote, voiceLead, Groove, chordLabel, classifyInterval,
+  identifyChord, retuneNote, voiceLead, Groove, chordLabel, noteNameInKey, classifyInterval,
 } from '../src/audio/music';
 import { pitchClass } from '../src/midi/notes';
 import { buildTable } from '../src/game/table/schema';
@@ -70,6 +70,12 @@ describe('chords', () => {
 });
 
 describe('naming a chord that was written down', () => {
+  it('names a note with the same spelling as its key', () => {
+    expect(noteNameInKey(70, 62)).toBe('B♭');
+    expect(noteNameInKey(66, 60)).toBe('F#');
+    expect(noteNameInKey(70)).toBe('A#');
+  });
+
   it('spells it the way it is written, matching what identifyChord returns', () => {
     expect(chordLabel(60, 'maj')).toBe('C');
     expect(chordLabel(62, 'min')).toBe('Dmin');

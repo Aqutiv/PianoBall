@@ -328,14 +328,17 @@ export class Stage {
     em.globalCompositeOperation = 'source-over';
   }
 
-  label(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, text: string, color: string, alpha: number): void {
+  label(
+    ctx: CanvasRenderingContext2D, x: number, y: number, z: number,
+    text: string, color: string, alpha: number, size = 21,
+  ): void {
     const p = { x: 0, y: 0 };
     this.cam.project(x, y, z, p);
     const scale = this.cam.scaleAt(x, y, z);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
-    ctx.font = `700 ${Math.max(10, 21 * scale)}px ${this.theme.fonts.display}`;
+    ctx.font = `700 ${Math.max(10, size * scale)}px ${this.theme.fonts.display}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.65)';
