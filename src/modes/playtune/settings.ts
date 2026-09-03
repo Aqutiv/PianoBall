@@ -32,6 +32,8 @@ export interface PlayTuneSettings {
   leadBeats: number;
   /** Light the key an aura is heading for. */
   assist: boolean;
+  /** Write each aura's pitch name across its head. */
+  noteNames: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export const DEFAULT_PLAYTUNE: PlayTuneSettings = {
   offsetMs: 0,
   leadBeats: 4,
   assist: true,
+  noteNames: true,
 };
 
 /**

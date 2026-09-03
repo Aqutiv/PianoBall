@@ -1,5 +1,6 @@
 import type { Stage } from '../../render/stage';
 import type { KeyDeck, KeyLit } from '../../game/keys';
+import { noteNameInKey } from '../../audio/music';
 import { FIELD } from '../../render/field';
 import { tone } from '../../render/palette';
 import { tracePath, circlePoints, fillPoly } from '../../render/geom';
@@ -25,6 +26,11 @@ export interface AuraView {
   tailBeats: number;
   /** True once the note has been struck and is being held. */
   held: boolean;
+}
+
+/** Opacity shared by every part of an aura, including its pitch name. */
+function auraAlpha(view: AuraView): number {
+  return view.held ? 1 : clamp01(view.progress * 3);
 }
 
 /** Which note value a length in beats reads as. */
@@ -157,10 +163,21 @@ export class AuraStage {
       const hue = this.stage.hue(g.note);
       const scale = cam.scaleAt(g.cx, v.y, 12);
       // Fades in rather than popping into existence at the far end.
-      const alpha = v.held ? 1 : clamp01(v.progress * 3);
+      const alpha = auraAlpha(v);
 
       this.drawTail(em, v, hue, alpha, scale);
       this.drawHead(em, v, hue, alpha, scale);
+    }
+  }
+
+  /** Pitch names sit above the composited glow so bloom cannot blur them. */
+  drawLabels(ctx: CanvasRenderingContext2D, views: readonly AuraView[], tonic: number): void {
+    for (const v of views) {
+      const g = v.key.geom;
+      this.stage.label(
+        ctx, g.cx, v.y, 12,
+        noteNameInKey(v.target.note, tonic), this.stage.palette.ink, auraAlpha(v), 30,
+      );
     }
   }
 

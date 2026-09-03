@@ -8,7 +8,9 @@ import { DEFAULT_QUALITY, Stage } from '../src/render/stage';
 import { MusicState, RANDOM } from '../src/audio/musicState';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { loadScores, saveBest } from '../src/modes/pinball/pinball';
-import { DEFAULT_PLAYTUNE, playTuneSettings, setPlayTuneSettings } from '../src/modes/playtune/settings';
+import {
+  DEFAULT_PLAYTUNE, playTuneSettings, resetPlayTuneSettings, setPlayTuneSettings,
+} from '../src/modes/playtune/settings';
 import { DEFAULT_FREESTYLE, freestyleSettings, setFreestyleSettings } from '../src/modes/freestyle/settings';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../src/audio/voices';
 
@@ -73,9 +75,11 @@ describe('settings persistence', () => {
   });
 
   it('remembers the PlayTune calibration', () => {
-    setPlayTuneSettings({ offsetMs: 45, leadBeats: 6, assist: false });
+    setPlayTuneSettings({ offsetMs: 45, leadBeats: 6, assist: false, noteNames: false });
 
-    expect(playTuneSettings()).toEqual({ role: 'melody', offsetMs: 45, leadBeats: 6, assist: false });
+    expect(playTuneSettings()).toEqual({
+      role: 'melody', offsetMs: 45, leadBeats: 6, assist: false, noteNames: false,
+    });
   });
 
   it('starts Freestyle with no bed under it', () => {
@@ -175,6 +179,8 @@ describe('settings persistence', () => {
     stage.setQuality({ bloom: false, colorBlind: true });
     stage.resetSettings();
 
+    resetPlayTuneSettings();
+
     const music = new MusicState({ ...AURORA.music });
     music.setChoice('blues');
     music.setChoice(RANDOM);
@@ -184,6 +190,7 @@ describe('settings persistence', () => {
     expect(input.velocity).toEqual(DEFAULT_VELOCITY);
     expect(input.midi.selectedId).toBe('keyboard-a');
     expect(stage.quality).toEqual(DEFAULT_QUALITY);
+    expect(playTuneSettings()).toEqual(DEFAULT_PLAYTUNE);
     expect(music.choice).toBe(RANDOM);
     expect(localStorage.getItem('pianoball.best')).toBe('12345');
   });
