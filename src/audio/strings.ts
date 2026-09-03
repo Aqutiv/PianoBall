@@ -82,6 +82,16 @@ export function renderString(spec: StringSpec, note: number, bucket: Bucket, rat
   }
   const pickAt = Math.round(spec.pick * n);
   if (pickAt > 0) for (let i = n - 1; i >= pickAt; i--) line[i] -= line[i - pickAt];
+  // The loop below passes direct current: the damping filter and the allpass
+  // both have unity gain at nothing per second, so only `g` touches it and it
+  // survives for the whole of the string's decay. The fill has an offset to
+  // give it — it is noise through a lowpass, which is a mean — and the pick's
+  // comb only cancels that past the pick itself. What is left is a thump
+  // nobody can hear and headroom everybody pays for.
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += line[i];
+  mean /= n;
+  for (let i = 0; i < n; i++) line[i] -= mean;
   let peak = 0;
   for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(line[i]));
   if (peak > 0) for (let i = 0; i < n; i++) line[i] *= 0.9 / peak;
