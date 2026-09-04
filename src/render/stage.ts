@@ -14,6 +14,21 @@ export interface RenderQuality {
   labels: boolean;
   reducedMotion: boolean;
   colorBlind: boolean;
+  /** How much of the screen the table takes, 1 being the size it was designed at. */
+  tableSize: number;
+}
+
+/**
+ * The range the table-size control offers.
+ *
+ * The top of it is where the rake runs out: past this the camera would have to
+ * crop rather than foreshorten, and the first thing off the bottom of the screen
+ * would be the front of the outermost keys.
+ */
+export const TABLE_SIZE = { min: 1, max: 1.15, step: 0.01 } as const;
+
+function clampTableSize(v: number): number {
+  return Number.isFinite(v) ? Math.min(TABLE_SIZE.max, Math.max(TABLE_SIZE.min, v)) : TABLE_SIZE.min;
 }
 
 export const DEFAULT_QUALITY: RenderQuality = {
@@ -23,6 +38,7 @@ export const DEFAULT_QUALITY: RenderQuality = {
   labels: true,
   reducedMotion: false,
   colorBlind: false,
+  tableSize: 1,
 };
 
 /**
@@ -101,9 +117,11 @@ export class Stage {
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
+    this.qualityPreference.tableSize = clampTableSize(this.qualityPreference.tableSize);
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
+    this.applyTableSize();
   }
 
   /**
@@ -127,11 +145,13 @@ export class Stage {
 
   /** Change what the player asked for, and remember it. */
   setQuality(patch: Partial<RenderQuality>): void {
+    if (patch.tableSize !== undefined) patch = { ...patch, tableSize: clampTableSize(patch.tableSize) };
     this.qualityPreference = { ...this.qualityPreference, ...patch };
     this.quality = { ...this.quality, ...patch };
     if (patch.particles !== undefined) this.particles.budget = patch.particles;
     if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
     if (patch.reducedMotion !== undefined) this.publishMotionPreference();
+    if (patch.tableSize !== undefined) { this.applyTableSize(); this.invalidate(); }
     save('quality', this.qualityPreference);
   }
 
@@ -140,8 +160,20 @@ export class Stage {
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
+    this.applyTableSize();
     this.invalidate();
     save('quality', this.qualityPreference);
+  }
+
+  /**
+   * Push the size preference onto the camera.
+   *
+   * Nothing else has to know about it: the camera pays for it in rake, and every
+   * stroke, label and sprite is already sized through `scaleAt`. The bake key
+   * does not cover camera state, so callers invalidate alongside this.
+   */
+  private applyTableSize(): void {
+    this.cam.configure({ magnify: this.quality.tableSize });
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {

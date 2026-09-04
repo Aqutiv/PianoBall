@@ -54,7 +54,7 @@ describe('settings persistence', () => {
     input.midi.select('keyboard-b');
 
     const stage = new Stage(fakeCanvas());
-    stage.setQuality({ bloom: false, labels: false, reducedMotion: true, colorBlind: true });
+    stage.setQuality({ bloom: false, labels: false, reducedMotion: true, colorBlind: true, tableSize: 1.1 });
 
     expect(new AudioEngine().settings).toMatchObject({
       master: 0.2, music: 0.3, leadLevel: 0.4, bedLevel: 0.7, effects: 0.4,
@@ -64,7 +64,7 @@ describe('settings persistence', () => {
     expect(new InputHub().velocity).toMatchObject({ curve: 'fixed', fixed: 0.5 });
     expect(new MidiInput().selectedId).toBe('keyboard-b');
     expect(new Stage(fakeCanvas()).quality).toMatchObject({
-      bloom: false, labels: false, reducedMotion: true, colorBlind: true,
+      bloom: false, labels: false, reducedMotion: true, colorBlind: true, tableSize: 1.1,
     });
   });
 
