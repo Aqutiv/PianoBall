@@ -9,6 +9,7 @@ import {
   BED_FAMILIES, BED_VOICES, LEAD_FAMILIES, LEAD_VOICES,
 } from '../../audio/voices';
 import { NOTE_NAMES, noteName } from '../../midi/notes';
+import { VoicePicker } from '../../ui/voicePicker';
 import { freestyleSettings, setFreestyleSettings } from './settings';
 import { rhythmSettings, setRhythmSettings } from './rhythmSettings';
 
@@ -26,9 +27,9 @@ export class FreestyleHud {
   private rollEl!: HTMLButtonElement;
   private nowEl!: HTMLElement;
   private bedEl!: HTMLButtonElement;
-  private voiceEl!: HTMLSelectElement;
+  private voiceEl!: VoicePicker;
   private voiceLevelEl!: HTMLInputElement;
-  private bedVoiceEl!: HTMLSelectElement;
+  private bedVoiceEl!: VoicePicker;
   private bedLevelEl!: HTMLInputElement;
   private reverbEl!: HTMLInputElement;
   private wheelsEl!: HTMLElement;
@@ -71,9 +72,7 @@ export class FreestyleHud {
       </div>
       <div class="hud-card">
         <div class="card-title">Instrument</div>
-        <select class="hud-select" id="fs-voice" aria-label="Instrument">
-          ${this.grouped(LEAD_VOICES, LEAD_FAMILIES, s.voiceId)}
-        </select>
+        <div id="fs-voice"></div>
         ${this.knob('fs-voice-level', 'level', 0, 100, this.leadLevel())}
       </div>
     `;
@@ -102,9 +101,7 @@ export class FreestyleHud {
       </div>
       <div class="hud-card">
         <button class="hud-toggle" id="fs-bed">Backing bed</button>
-        <select class="hud-select" id="fs-bed-voice" aria-label="Backing bed sound">
-          ${this.grouped(BED_VOICES, BED_FAMILIES, s.bedVoiceId)}
-        </select>
+        <div id="fs-bed-voice"></div>
         ${this.knob('fs-bed-level', 'level', 0, 100, this.bedLevel())}
       </div>
       <div class="wheel"><b>room</b><input type="range" id="fs-reverb" min="0" max="1" step="0.01"></div>
@@ -119,9 +116,19 @@ export class FreestyleHud {
     this.rollEl = q<HTMLButtonElement>('#fs-roll');
     this.nowEl = q('#fs-now');
     this.bedEl = q<HTMLButtonElement>('#fs-bed');
-    this.voiceEl = q<HTMLSelectElement>('#fs-voice');
+    // Neither picker cuts what is already sounding: a held note finishes as
+    // the voice it was struck as, and the bed changes at the next chord.
+    this.voiceEl = this.mountPicker(q('#fs-voice'), LEAD_VOICES, LEAD_FAMILIES, s.voiceId,
+      'Instrument', (id) => {
+        this.engine.setLeadVoice(id);
+        setFreestyleSettings({ voiceId: this.engine.leadVoice });
+      });
     this.voiceLevelEl = q<HTMLInputElement>('#fs-voice-level');
-    this.bedVoiceEl = q<HTMLSelectElement>('#fs-bed-voice');
+    this.bedVoiceEl = this.mountPicker(q('#fs-bed-voice'), BED_VOICES, BED_FAMILIES,
+      s.bedVoiceId, 'Backing bed sound', (id) => {
+        this.engine.setBedVoice(id);
+        setFreestyleSettings({ bedVoiceId: this.engine.bedVoice });
+      });
     this.bedLevelEl = q<HTMLInputElement>('#fs-bed-level');
     this.reverbEl = q<HTMLInputElement>('#fs-reverb');
     this.wheelsEl = q('#fs-wheels');
@@ -149,17 +156,6 @@ export class FreestyleHud {
       setFreestyleSettings({ bed: !freestyleSettings().bed });
       this.onBedChange();
     });
-    // Neither cuts what is already sounding: a held note finishes as the
-    // voice it was struck as, and the bed changes at the next chord.
-    this.voiceEl.addEventListener('change', () => {
-      this.engine.setLeadVoice(this.voiceEl.value);
-      setFreestyleSettings({ voiceId: this.engine.leadVoice });
-    });
-    this.bedVoiceEl.addEventListener('change', () => {
-      this.engine.setBedVoice(this.bedVoiceEl.value);
-      setFreestyleSettings({ bedVoiceId: this.engine.bedVoice });
-    });
-
     this.reverbEl.addEventListener('input', () => {
       this.engine.setSettings({ reverb: Number(this.reverbEl.value) });
       this.paintReverb();
@@ -231,8 +227,8 @@ export class FreestyleHud {
     this.levelEl.value = String(Math.round(this.box.level * 100));
     this.paintKnob(this.levelEl, 0, 100);
     this.patternEl.value = this.box.pattern.id;
-    this.voiceEl.value = this.engine.leadVoice;
-    this.bedVoiceEl.value = this.engine.bedVoice;
+    this.voiceEl.setValue(this.engine.leadVoice);
+    this.bedVoiceEl.setValue(this.engine.bedVoice);
     if (this.stepPips.length !== this.box.pattern.steps) this.buildSteps();
   }
 
@@ -278,6 +274,26 @@ export class FreestyleHud {
    * rhythms, the instrument and the bed. Families come from the library rather
    * than from here, so a new one appears in the list by being written.
    */
+  /**
+   * Swap a placeholder div for a picker.
+   *
+   * The HUD is written as one `innerHTML` string, so the pickers cannot be
+   * built inline with everything else; they are mounted into the holes that
+   * string leaves behind, which also keeps their DOM out of the template.
+   */
+  private mountPicker(
+    host: HTMLElement,
+    items: readonly { id: string; name: string; family: string }[],
+    families: readonly string[],
+    selected: string,
+    label: string,
+    onPick: (id: string) => void,
+  ): VoicePicker {
+    const picker = new VoicePicker(items, families, selected, label, onPick);
+    host.replaceWith(picker.el);
+    return picker;
+  }
+
   private grouped(
     items: readonly { id: string; name: string; family: string }[],
     families: readonly string[],
