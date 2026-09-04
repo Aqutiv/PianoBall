@@ -110,12 +110,49 @@ describe('settings persistence', () => {
   it('remembers the key as a pitch class, not an octave', () => {
     const music = new MusicState({ ...AURORA.music });
     const started = music.root;
-    music.setRoot(0);   // C
+    music.setKey(0);   // C
 
     expect(music.root % 12).toBe(0);
     // Stays in the register the app is written around rather than leaping.
     expect(Math.abs(music.root - started)).toBeLessThanOrEqual(12);
-    expect(new MusicState({ ...AURORA.music }).root % 12).toBe(0);
+    const reloaded = new MusicState({ ...AURORA.music });
+    expect(reloaded.keyChoice).toBe(0);
+    expect(reloaded.root % 12).toBe(0);
+  });
+
+  it('draws a fresh key on every roll while the key is random', () => {
+    const music = new MusicState({ ...AURORA.music });
+    expect(music.keyChoice).toBe(RANDOM);
+
+    // The same standard the random scale is held to: over enough draws it has
+    // to actually move, or the '?' is a lie.
+    const seen = new Set<number>();
+    for (let i = 0; i < 60; i++) {
+      music.roll();
+      seen.add(music.root % 12);
+      // And no draw leaps out of the register the app is written around.
+      expect(Math.abs(music.root - AURORA.music.root)).toBeLessThanOrEqual(6);
+    }
+    expect(seen.size).toBeGreaterThan(1);
+
+    // A named key pins it, and '?' hands it back to chance.
+    music.setKey(0);
+    const pinned = new Set<number>();
+    for (let i = 0; i < 20; i++) { music.roll(); pinned.add(music.root % 12); }
+    expect([...pinned]).toEqual([0]);
+
+    music.setKey(RANDOM);
+    expect(new MusicState({ ...AURORA.music }).keyChoice).toBe(RANDOM);
+  });
+
+  it('keeps a key pinned by a build that predates the random option', () => {
+    // Every scale change used to write the current tonic out, so a returning
+    // player has a key they may never have chosen. It is still theirs.
+    localStorage.setItem('pianoball.music', JSON.stringify({ mode: 'blues', key: 2 }));
+
+    const music = new MusicState({ ...AURORA.music });
+    expect(music.keyChoice).toBe(2);
+    expect(music.root).toBe(AURORA.music.root);
   });
 
   it('draws a fresh scale on every roll while the choice is random', () => {
@@ -183,7 +220,8 @@ describe('settings persistence', () => {
 
     const music = new MusicState({ ...AURORA.music });
     music.setChoice('blues');
-    music.setChoice(RANDOM);
+    music.setKey(7);
+    music.resetSettings();
 
     expect(audio.settings).toEqual(DEFAULT_AUDIO);
     expect(input.mapping.settings).toEqual(DEFAULT_MAPPING);
@@ -192,6 +230,7 @@ describe('settings persistence', () => {
     expect(stage.quality).toEqual(DEFAULT_QUALITY);
     expect(playTuneSettings()).toEqual(DEFAULT_PLAYTUNE);
     expect(music.choice).toBe(RANDOM);
+    expect(music.keyChoice).toBe(RANDOM);
     expect(localStorage.getItem('pianoball.best')).toBe('12345');
   });
 

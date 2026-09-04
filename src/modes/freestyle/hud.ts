@@ -3,7 +3,7 @@ import type { MusicState } from '../../audio/musicState';
 import type { AudioEngine } from '../../audio/engine';
 import type { RhythmBox } from '../../audio/rhythmBox';
 import { MODES } from '../../audio/music';
-import { MAX_BPM, MIN_BPM, RANDOM } from '../../audio/musicState';
+import { MAX_BPM, MIN_BPM, RANDOM, toKeyChoice } from '../../audio/musicState';
 import { PATTERNS, PATTERN_FAMILIES, findPattern } from '../../audio/patterns';
 import {
   BED_FAMILIES, BED_VOICES, LEAD_FAMILIES, LEAD_VOICES,
@@ -51,8 +51,10 @@ export class FreestyleHud {
   ) {}
 
   mount(): void {
-    const keys = NOTE_NAMES
-      .map((n, i) => `<option value="${i}">${n}</option>`).join('');
+    // Bare `?` rather than the panel's spelled-out label: there is no room in
+    // the card head, and the die beside it says what it means.
+    const keys = `<option value="${RANDOM}">?</option>`
+      + NOTE_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
     // Random belongs here as much as in the panel: picking a named scale used
     // to overwrite it globally, quietly ending random-each-game for the table.
     const scales = `<option value="${RANDOM}">random</option>`
@@ -80,7 +82,7 @@ export class FreestyleHud {
         <div class="card-head">
           <span class="card-title">Scale</span>
           <select class="hud-select" id="fs-key" aria-label="Key">${keys}</select>
-          <button id="fs-roll" title="Draw a scale at random">&#9860;</button>
+          <button id="fs-roll" title="Draw again at random">&#9860;</button>
         </div>
         <select class="hud-select" id="fs-scale" aria-label="Scale">${scales}</select>
         <div class="score-sub" id="fs-now"></div>
@@ -131,11 +133,18 @@ export class FreestyleHud {
     this.bpmEl = q('#fs-bpm');
     this.stepsEl = q('#fs-steps');
 
-    this.keyEl.addEventListener('change', () => this.music.setRoot(Number(this.keyEl.value)));
+    // Synced by hand as well as on the event: a draw that lands on the key
+    // already sounding moves nothing and so announces nothing, and the readout
+    // would sit there dimmed as though the key were still pinned.
+    this.keyEl.addEventListener('change', () => {
+      this.music.setKey(toKeyChoice(this.keyEl.value));
+      this.sync();
+    });
     this.scaleEl.addEventListener('change', () => this.music.setChoice(this.scaleEl.value));
     // Re-picking the option already selected fires no change event, so drawing
-    // again needs a control of its own.
-    this.rollEl.addEventListener('click', () => this.music.setChoice(RANDOM));
+    // again needs a control of its own — the only way to ask for another key,
+    // as well, without leaving the mode.
+    this.rollEl.addEventListener('click', () => this.music.drawAgain());
     this.bedEl.addEventListener('click', () => {
       setFreestyleSettings({ bed: !freestyleSettings().bed });
       this.onBedChange();
@@ -198,12 +207,12 @@ export class FreestyleHud {
 
   /** Push the current music and audio state into the controls. */
   sync(): void {
-    const random = this.music.choice === RANDOM;
-    this.keyEl.value = String(((this.music.root % 12) + 12) % 12);
+    const random = this.music.choice === RANDOM || this.music.keyChoice === RANDOM;
     // Show the preference, not what it resolved to — otherwise a player on
-    // random sees a named scale and has no way to know, or to get back.
-    this.scaleEl.value = random ? RANDOM : this.music.id;
-    // Which is why what it resolved to has to be said out loud.
+    // random sees a named key and scale and has no way to know, or to get back.
+    this.keyEl.value = String(this.music.keyChoice);
+    this.scaleEl.value = this.music.choice === RANDOM ? RANDOM : this.music.id;
+    // Which is why what they resolved to has to be said out loud.
     this.nowEl.textContent = `${noteName(this.music.root)} ${this.music.label}`;
     this.nowEl.style.opacity = random ? '1' : '0.5';
     this.reverbEl.value = String(this.engine.settings.reverb);
