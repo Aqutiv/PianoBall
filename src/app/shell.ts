@@ -3,6 +3,7 @@ import { load, save, stored } from '../core/storage';
 import { Stage, backingDensity } from '../render/stage';
 import { LITE_AUDIO_RUNG, MAX_RUNG, derive, rungLabel } from '../render/tiers';
 import { readDeviceHints, seedRung } from '../render/deviceHint';
+import { Adaptive } from './adaptive';
 import { PRESET_RUNG, perfSettings, resetPerfSettings, setPerfSettings,
   type GraphicsPreset, type SoundPreset } from '../render/perfSettings';
 import { applyTheme, type Theme } from '../render/theme';
@@ -32,9 +33,6 @@ import type { PlayTuneMode } from '../modes/playtune/playtune';
  * pixels before anyone sees it.
  */
 const IDLE_FRAME = 1 / 30;
-
-/** How long the adaptive pass looks away for after the workload changes. */
-const SETTLE = 1.5;
 
 export interface ModeResult {
   title: string;
@@ -90,39 +88,12 @@ export class Shell {
   private readonly ctx: ModeContext;
   private readonly canvas: HTMLCanvasElement;
   private readonly activePointers = new Map<number, number>();
-  private frameAvg = 8;
-  /** EMA of the wall-clock gap between frames. See `adaptQuality`. */
-  private wallAvg = 16.7;
-  /** The display's own frame interval, as the fastest frame seen lately. */
-  private refresh = 16.7;
-  /** Rungs the machine has climbed to and been pushed back off, and how often. */
-  private readonly rungFailures = new Map<number, number>();
-  /**
-   * Lowest rung the ladder will try to climb back to this session.
-   *
-   * Raised when a rung has been climbed to and lost twice, so a machine that
-   * cannot hold it stops flickering between two pictures. Deliberately a floor
-   * on *recovery* and not a cap on shedding: an earlier version capped the rung
-   * itself, which meant a machine that had failed to recover to rung 4 could
-   * never afterwards shed past 5 either -- so if the load then grew, the one
-   * thing it needed to do was the one thing it could not.
-   */
-  private rungFloor = 0;
-  /** The rung the last climb started from, to notice it being undone. */
-  private lastClimbFrom = -1;
-  private qualityHeld = 0;
+  /** When to give something up, and when to take it back. See `adaptive.ts`. */
+  private readonly adaptive = new Adaptive();
   /** Pending coalesced resize, if any. See `queueResize`. */
   private resizeRaf = 0;
   /** Time owed to the backdrop since it was last drawn. See `draw`. */
   private idleDt = 0;
-  /**
-   * Seconds to ignore before believing the frame again.
-   *
-   * Opened whenever the workload changes out from under the measurement -- a
-   * panel closing, a mode switch -- so the averages describe the thing now
-   * running rather than the thing that just stopped.
-   */
-  private settle = 0;
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, overlayRoot: HTMLElement) {
     this.canvas = canvas;
@@ -437,7 +408,7 @@ export class Shell {
     // default preset: a reset that left the ladder where it was would leave the
     // panel saying one thing and the picture showing another.
     this.forgetMeasurements();
-    this.qualityHeld = 1;
+    this.adaptive.hold(1);
     // `stage.resetSettings` has already put the rung and the recorded scale
     // back, so `shedTo` would see no transition and return before doing any of
     // what a rung change normally carries with it. Both of its side effects are
@@ -569,73 +540,17 @@ ${this.active?.debugLines?.() ?? ''}`
    */
   private adaptQuality(dt: number): void {
     const s = this.loop.stats;
-
-    // Nothing measured while a panel is up or the window is away means
-    // anything: `draw` is deliberately throttled there, so `frameMs` measures
-    // the throttle rather than the machine, and the run is suspended, so
-    // `stepMs` falls to nothing that has to do with what this machine can
-    // manage. These frames used to reach the averages -- the guard sat below
-    // them -- which meant a settings visit fed near-zero work in while
-    // `qualityHeld` quietly expired, and the first frame after closing the
-    // panel could act on it.
-    //
-    // The averages are left where they were, and a settle window is opened so
-    // the resumed workload is what gets measured.
-    if (this.overlay.visible || !this.focused) { this.settle = SETTLE; return; }
-    if (this.settle > 0) { this.settle -= dt; return; }
-
-    const k = Math.min(1, dt * 4);
-    this.frameAvg += ((s.stepMs + s.drawMs) - this.frameAvg) * k;
-
-    // A frame this long is a stall -- a mode switch, a bake, the tab coming
-    // back -- not a frame rate. Feeding it to the average would shed on the
-    // strength of one hitch.
-    if (s.frameMs < 200) {
-      this.wallAvg += (s.frameMs - this.wallAvg) * k;
-      // The display's own interval, as the fastest frame seen since the last
-      // thing that could have changed it. A true minimum, and deliberately so:
-      // it used to be allowed to creep upward, which meant a machine held at
-      // 30fps by its compositor dragged the baseline up to 33ms within about
-      // twelve seconds -- and then, with the yardstick moved to meet the
-      // failure, decided it was comfortable and climbed back. A refresh
-      // estimate must describe what the display can do, never what the machine
-      // is managing. `resize` resets it, which is where a monitor change shows
-      // up.
-      this.refresh = Math.min(this.refresh, Math.max(4, s.frameMs));
-    }
-
-    this.qualityHeld -= dt;
-    if (this.qualityHeld > 0) return;
-    // A pinned preset means the player has decided. A setting that then drifts
-    // is not a setting.
-    if (perfSettings().graphics !== 'auto') return;
-
-    // Late by the wall clock, which needs the display's own rate to mean
-    // anything -- 2.4x baseline on a 144Hz panel is still 60fps and perfectly
-    // playable, so a floor of 20ms sits under it.
-    const wallLate = this.wallAvg > Math.max(this.refresh * 1.5, 20);
-    const workLate = this.frameAvg > 13;
-
-    if (wallLate || workLate) {
-      // Two at a time when the frame is not close -- under 30fps, walking down
-      // one rung every three seconds spends half a minute being unplayable.
-      const jump = this.wallAvg > 33 ? 2 : 1;
-      let next = this.stage.rung;
-      for (let i = 0; i < jump; i++) next = this.nextEffectiveRung(next);
-      this.shedTo(next);
-      return;
-    }
-
-    const comfortable = this.frameAvg < 7 && this.wallAvg < Math.max(this.refresh * 1.15, 17.5);
-    if (comfortable && this.stage.rung > this.rungFloor) {
-      // One rung back, and slowly. If this rung has already been tried and
-      // lost twice, stop offering it: a machine that cannot hold it will
-      // otherwise spend the session flickering between two pictures.
-      const target = this.stage.rung - 1;
-      if ((this.rungFailures.get(target) ?? 0) >= 2) { this.rungFloor = this.stage.rung; return; }
-      this.lastClimbFrom = this.stage.rung;
-      this.shedTo(target, 8);
-    }
+    const target = this.adaptive.update(
+      { stepMs: s.stepMs, drawMs: s.drawMs, frameMs: s.frameMs, dt },
+      {
+        rung: this.stage.rung,
+        auto: perfSettings().graphics === 'auto',
+        // A panel is up, or this is not the window being played.
+        idle: this.overlay.visible || !this.focused,
+        nextEffective: (from) => this.nextEffectiveRung(from),
+      },
+    );
+    if (target !== null) this.shedTo(target);
   }
 
   /**
@@ -674,18 +589,10 @@ ${this.active?.debugLines?.() ?? ''}`
   /** Move the ladder, and everything that follows from where it lands. */
   private shedTo(rung: number, hold = 3): void {
     const from = this.stage.rung;
-    // At or *beyond*, not exactly at: a severe slowdown sheds two rungs at
-    // once, so a climb from 5 to 4 that is answered by a jump from 4 to 6 is
-    // just as much a failed recovery as one answered by a step back to 5 --
-    // and requiring equality meant that cycle was never counted and could
-    // repeat all session.
-    if (rung > from && this.lastClimbFrom >= 0 && rung >= this.lastClimbFrom) {
-      this.rungFailures.set(from, (this.rungFailures.get(from) ?? 0) + 1);
-    }
     const rescale = this.stage.setRung(rung);
     if (!rescale && from === this.stage.rung) return;
     if (rescale) this.resize();
-    this.qualityHeld = hold;
+    this.adaptive.hold(hold);
     this.applySoundPreset();
   }
 
@@ -707,7 +614,7 @@ ${this.active?.debugLines?.() ?? ''}`
     setPerfSettings({ graphics: preset });
     this.forgetMeasurements();
     if (preset !== 'auto') this.shedTo(PRESET_RUNG[preset], 0);
-    else this.qualityHeld = 1;
+    else this.adaptive.hold(1);
   }
 
   setSoundPreset(preset: SoundPreset): void {
@@ -739,20 +646,15 @@ ${this.active?.debugLines?.() ?? ''}`
    * ever true of one workload. Carried across a change of workload it becomes
    * a permanent verdict on a question nobody asked again.
    */
-  private forgetMeasurements(): void {
-    this.rungFailures.clear();
-    this.rungFloor = 0;
-    this.lastClimbFrom = -1;
-    this.settle = SETTLE;
-  }
+  private forgetMeasurements(): void { this.adaptive.forget(); }
 
   private resize(): void {
     const cssW = window.innerWidth, cssH = window.innerHeight;
     // A resize is the one event that can mean a different display, which is
     // the only thing the refresh estimate is trying to describe. It never
     // rises on its own, so this is where it gets to.
-    this.refresh = 16.7;
-    this.settle = SETTLE;
+    this.adaptive.resetRefresh();
+    this.adaptive.disturb();
     // The ladder's last rungs come through here. A backing store is the one
     // thing every full-frame pass is priced in, so scaling it is the only lever
     // that makes the void fill, the baked blit, the emissive clear, the bloom
