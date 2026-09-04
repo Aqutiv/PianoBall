@@ -271,15 +271,31 @@ export class Stage {
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
+    const w = Math.round(cssW * dpr), h = Math.round(cssH * dpr);
+    // Every mode calls this from `enter` with the size it already has, to refit
+    // the camera for its own table and drop the bake. That must keep working —
+    // but it is no reason to throw away five canvases and allocate five more,
+    // which at the device-pixel ceiling is the better part of a hundred
+    // megabytes. Reallocate only when the backing store actually changed size;
+    // do the rest always.
+    const sized = this.canvas.width === w && this.canvas.height === h
+      && this.cssW === cssW && this.cssH === cssH;
+
     this.cssW = cssW;
     this.cssH = cssH;
     this.dpr = dpr;
-    this.canvas.width = Math.round(cssW * dpr);
-    this.canvas.height = Math.round(cssH * dpr);
-    this.canvas.style.width = `${cssW}px`;
-    this.canvas.style.height = `${cssH}px`;
+    if (!sized) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.canvas.style.width = `${cssW}px`;
+      this.canvas.style.height = `${cssH}px`;
+      this.allocLayers(w, h);
+    }
+    this.cam.fit(cssW, cssH);
+    this.bakedFor = '';
+  }
 
-    const w = this.canvas.width, h = this.canvas.height;
+  private allocLayers(w: number, h: number): void {
     this.baked = makeLayer(w, h);
     this.emissive = makeLayer(w, h);
     // A halving chain. At exactly 2:1 a bilinear downscale degenerates into an
@@ -301,8 +317,6 @@ export class Stage {
       bw >>= 1;
       bh >>= 1;
     }
-    this.cam.fit(cssW, cssH);
-    this.bakedFor = '';
   }
 
   invalidate(): void { this.bakedFor = ''; }

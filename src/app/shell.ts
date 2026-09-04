@@ -79,6 +79,8 @@ export class Shell {
   private readonly activePointers = new Map<number, number>();
   private frameAvg = 8;
   private qualityHeld = 0;
+  /** Pending coalesced resize, if any. See `queueResize`. */
+  private resizeRaf = 0;
   /**
    * Whether the adaptive pass is holding anything back.
    *
@@ -130,7 +132,7 @@ export class Shell {
     });
 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('resize', () => this.queueResize());
     this.wireAudioUnlock();
     this.wirePointer();
     this.wireKeys();
@@ -513,6 +515,23 @@ export class Shell {
   private resize(): void {
     const cssW = window.innerWidth, cssH = window.innerHeight;
     this.stage.resize(cssW, cssH, backingDensity(cssW, cssH, window.devicePixelRatio));
+  }
+
+  /**
+   * One resize per frame at most.
+   *
+   * Dragging a window edge fires `resize` continuously, and each one used to
+   * reallocate five canvases and force a full re-bake -- 2,600 grain dots, the
+   * brushed arcs and every wall, all to be thrown away by the next event a few
+   * milliseconds later. Coalescing onto a frame keeps the last size, which is
+   * the only one that was ever going to be kept.
+   */
+  private queueResize(): void {
+    if (this.resizeRaf) return;
+    this.resizeRaf = requestAnimationFrame(() => {
+      this.resizeRaf = 0;
+      this.resize();
+    });
   }
 
   // --------------------------------------------------------------- audio ---
