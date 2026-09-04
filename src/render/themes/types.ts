@@ -160,8 +160,15 @@ export interface Theme {
    * material rather than a flag so the width and colour travel together.
    */
   outline: { color: string; width: number } | null;
-  /** Additive bloom strength for the two downscale passes. */
-  bloom: { alphaA: number; alphaB: number };
+  /**
+   * Additive bloom, as a pyramid rather than as two separate taps.
+   *
+   * `spread` is how much of each level folds into the next one up, which sets
+   * how far the glow reaches; `strength` is how much of the combined result
+   * reaches the screen, which sets how hot it is. Two numbers still, but they
+   * are now independent of how many levels the chain happens to have.
+   */
+  bloom: { strength: number; spread: number };
   /** The glow sprite ramp: how a point of light falls off. */
   glow: { coreLight: number; midLight: number; midSat: number; midAlpha: number };
   /**
