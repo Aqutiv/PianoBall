@@ -74,6 +74,19 @@ describe('themes', () => {
     }
   });
 
+  it('gives every theme a void dark enough to outline white type', () => {
+    // PlayTune strokes its aura pitch names in `void` so they survive the glow
+    // they sit on. What that outline has to beat is not the theme's own
+    // background but the blown-out white the bloom makes of an aura's core, so
+    // the ratio that matters is against white. Toybox's `#241b4d` is the
+    // lightest void there is and still clears 15:1; a fifth theme with a paler
+    // one would put the letters back where they started.
+    for (const t of THEMES) {
+      expect(contrastRatio(t.palette.void, '#ffffff'), `${t.id} void vs white`).toBeGreaterThan(7);
+      expect(contrastRatio(t.palette.void, t.palette.ink), `${t.id} void vs ink`).toBeGreaterThan(7);
+    }
+  });
+
   it('gives every theme six ball gradient stops', () => {
     // The renderer pairs these with a fixed list of gradient offsets.
     for (const t of THEMES) expect(t.ball.body, t.id).toHaveLength(6);
@@ -136,3 +149,28 @@ describe('theme persistence', () => {
     expect(mod.currentTheme().id).toBe(DEFAULT_THEME.id);
   });
 });
+
+/**
+ * WCAG relative luminance and contrast ratio.
+ *
+ * Here rather than in `palette.ts` because nothing the app draws needs to ask:
+ * the one colour whose whole job is contrast is a hand-picked token per theme,
+ * and this is the assertion that keeps a hand-picked value honest.
+ */
+function luminance(hex: string): number {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  const channel = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel((n >> 16) & 255)
+    + 0.7152 * channel((n >> 8) & 255)
+    + 0.0722 * channel(n & 255);
+}
+
+function contrastRatio(a: string, b: string): number {
+  const la = luminance(a), lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}

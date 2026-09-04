@@ -170,13 +170,37 @@ export class AuraStage {
     }
   }
 
-  /** Pitch names sit above the composited glow so bloom cannot blur them. */
+  /**
+   * Pitch names sit above the composited glow so bloom cannot blur them.
+   *
+   * Above it, but still on it: the name is centred on the head, and the head's
+   * halo is a near-white core wider than the glyph is tall, so the letter is
+   * not merely over a bright patch — it is entirely inside the brightest thing
+   * on the board. Hence the edge. It is stroked in the theme's `void`, the
+   * darkest colour each look names, which is what keeps the letterform under a
+   * hue the mode is free to pick and a bloom the player is free to turn off.
+   */
   drawLabels(ctx: CanvasRenderingContext2D, views: readonly AuraView[], tonic: number): void {
     for (const v of views) {
       const g = v.key.geom;
       this.stage.label(
         ctx, g.cx, v.y, 12,
         noteNameInKey(v.target.note, tonic), this.stage.palette.ink, auraAlpha(v), 30,
+        {
+          edge: this.stage.palette.void,
+          // The camera is nearly orthographic, so this size holds around 17 to
+          // 25px across the lane on any ordinary window and the floor never
+          // comes up. It is here for the short viewport — below about 500px of
+          // height the projection drops the name under the shared 10px default,
+          // which is not enough type to carry an outline.
+          minSize: 12,
+          // The UI face, not the display face. Velvet's display is Cormorant
+          // Garamond and `styles.css` only ships that family at 300 and 600, so
+          // the 700 asked for here came back synthetically emboldened: a light
+          // serif, faked bold, over bloom. Every other theme's two faces are
+          // the same family, so this changes nothing but Velvet.
+          font: this.stage.theme.fonts.ui,
+        },
       );
     }
   }

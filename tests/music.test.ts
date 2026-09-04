@@ -71,7 +71,7 @@ describe('chords', () => {
 
 describe('naming a chord that was written down', () => {
   it('names a note with the same spelling as its key', () => {
-    expect(noteNameInKey(70, 62)).toBe('B♭');
+    expect(noteNameInKey(70, 62)).toBe('Bb');
     expect(noteNameInKey(66, 60)).toBe('F#');
     expect(noteNameInKey(70)).toBe('A#');
   });
@@ -87,13 +87,25 @@ describe('naming a chord that was written down', () => {
     expect(chordLabel(48, 'maj')).toBe(chordLabel(72, 'maj'));
   });
 
+  it('spells every name in characters the bundled faces actually carry', () => {
+    // The woff2 files are latin subsets. A `♭` here — which is what this used
+    // to be — is in none of them, so it came back from a system fallback at a
+    // different weight, glued to a letter drawn in the theme's own face. The
+    // names are drawn with an outline now, which makes that mismatch plain.
+    for (let note = 0; note < 128; note++) {
+      for (const tonic of [undefined, 60, 62, 65, 70]) {
+        expect(noteNameInKey(note, tonic), `note ${note} in ${tonic}`).toMatch(/^[A-G][#b]?$/);
+      }
+    }
+  });
+
   it('follows the key when it is given one', () => {
     // The sixth degree of D minor is a B flat, whatever the MIDI number says.
-    expect(chordLabel(70, 'maj', 62)).toBe('B♭');
+    expect(chordLabel(70, 'maj', 62)).toBe('Bb');
     expect(chordLabel(70, 'maj')).toBe('A#');
     // And a sharp stays a sharp where the key has sharps in it.
     expect(chordLabel(66, 'min', 62)).toBe('F#min');
-    expect(chordLabel(63, 'maj', 60)).toBe('E♭');
+    expect(chordLabel(63, 'maj', 60)).toBe('Eb');
   });
 });
 

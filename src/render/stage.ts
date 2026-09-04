@@ -60,6 +60,29 @@ function clampTableSize(v: number): number {
   return Number.isFinite(v) ? Math.min(TABLE_SIZE.max, Math.max(TABLE_SIZE.min, v)) : TABLE_SIZE.min;
 }
 
+/**
+ * How a label separates itself from what it is drawn over.
+ *
+ * Most canvas text on this stage is near-white and lands after `composite()`,
+ * which means on top of an additive bloom. Over a glow's hot core — 92 to 98
+ * per cent lightness before the bloom adds to it — near-white on near-white is
+ * the result, and a soft shadow cannot rescue it because there is no dark
+ * anywhere near the glyph to fall on. A hard stroke under the fill can.
+ *
+ * Every field is optional and an absent object is the old fill-only label, so
+ * the call sites that are already legible stay exactly as they were.
+ */
+export interface LabelStyle {
+  /** Colour of the contrast outline stroked under the glyph. */
+  edge?: string;
+  /** Outline weight as a fraction of the rendered size; half of it shows. */
+  edgeScale?: number;
+  /** Smallest the text may shrink to under perspective, in CSS pixels. */
+  minSize?: number;
+  /** Face to use instead of the theme's display face. */
+  font?: string;
+}
+
 export const DEFAULT_QUALITY: RenderQuality = {
   bloom: true,
   particles: 1400,
@@ -391,19 +414,40 @@ export class Stage {
 
   label(
     ctx: CanvasRenderingContext2D, x: number, y: number, z: number,
-    text: string, color: string, alpha: number, size = 21,
+    text: string, color: string, alpha: number, size = 21, style: LabelStyle = {},
   ): void {
     const p = { x: 0, y: 0 };
     this.cam.project(x, y, z, p);
     const scale = this.cam.scaleAt(x, y, z);
+    const px = Math.max(style.minSize ?? 10, size * scale);
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
-    ctx.font = `700 ${Math.max(10, size * scale)}px ${this.theme.fonts.display}`;
+    ctx.font = `700 ${px}px ${style.font ?? this.theme.fonts.display}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.65)';
-    ctx.shadowBlur = 6;
+    if (style.edge) {
+      // Scaled with the type rather than the old flat six pixels, which was a
+      // smear under small text and nothing at all under large.
+      ctx.shadowBlur = Math.max(4, px * 0.28);
+      ctx.lineWidth = Math.max(2, px * (style.edgeScale ?? 0.2));
+      // Round joins and a short miter: the sharp corners inside a `#` throw
+      // spikes several times the line width otherwise.
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeStyle = style.edge;
+      // Stroke first, fill second, and never the other way round. `strokeText`
+      // centres the line on the glyph contour, so the fill that lands on top
+      // covers its inward half: half the width shows outside the letter and
+      // none of it eats the stem. Reversed, a 700-weight glyph is thinned into
+      // a hairline by its own outline.
+      ctx.strokeText(text, p.x, p.y);
+      // Otherwise the fill lays a second shadow over the outline just drawn.
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.shadowBlur = 6;
+    }
     ctx.fillText(text, p.x, p.y);
     ctx.restore();
   }
