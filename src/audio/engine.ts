@@ -219,6 +219,29 @@ interface StringAt {
  * frame; smoothed on the audio side, so a frame's worth of change is a slope
  * rather than a step.
  */
+/**
+ * A reading of the master chain: what is reaching the ceiling, and what the
+ * compressor is doing to keep it there. See `AudioEngine.measure`.
+ */
+export interface MixReading {
+  /** Seconds the window covered. */
+  seconds: number;
+  /**
+   * Peak at the clipper's input. The soft clipper spans this directly, so 1 is
+   * the ceiling, up to ~1.3 is rounding nobody hears, and above that is a flat
+   * top -- and in lite mode, an aliased one.
+   */
+  peak: number;
+  /** RMS over the same window, for peak-to-average. */
+  rms: number;
+  /** Deepest gain reduction seen, in dB. Negative. */
+  reductionPeak: number;
+  /** Mean gain reduction, in dB. Negative. */
+  reductionMean: number;
+  /** How far the reduction travelled. This is the pumping figure. */
+  reductionRange: number;
+}
+
 export interface RollHandle {
   /** `speed` in table units a second, `contact` how much of the ball is on the table, 0..1. */
   update(speed: number, contact: number, pan: number, depth: number): void;
@@ -1135,6 +1158,91 @@ export class AudioEngine {
       this.toClip.disconnect(meter);
     }
     return peak;
+  }
+
+  /**
+   * Everything `headroom` says, plus what the compressor is doing to get there.
+   *
+   * `headroom` taps `toClip`, which is *after* the compressor — so by
+   * construction it cannot see the one fault it is most often reached for. A
+   * mix that pumps reads perfectly healthy there: the compressor is holding the
+   * peak down, which is exactly what makes the level look fine and the sound
+   * fall apart. `glue.reduction` is the missing number, and it is otherwise
+   * unreachable from outside this class.
+   *
+   * `reductionRange` is the pumping figure specifically. A compressor sitting at
+   * a steady −6 dB is glue; one swinging between 0 and −10 with every ball
+   * impact is a mix breathing in and out, and only the range tells them apart.
+   */
+  async measure(seconds = 2, opts: { silent?: boolean } = {}): Promise<MixReading> {
+    const empty: MixReading = {
+      seconds, peak: 0, rms: 0, reductionPeak: 0, reductionMean: 0, reductionRange: 0,
+    };
+    if (!this.running || !this.ctx) return empty;
+    const ctx = this.ctx;
+
+    // Measuring without listening.
+    //
+    // The mute a lost window applies sits on `master`, which is upstream of the
+    // tap — so an unfocused window measures perfect silence and says nothing
+    // about the mix. But simply unmuting to measure would put the sound through
+    // the speakers of whoever is working in another window, which is the thing
+    // the mute exists to prevent.
+    //
+    // So: take the speaker off the end of the chain and open the master behind
+    // it. The analyser keeps the sub-graph alive and reading, and nothing
+    // reaches the device. Restored to whatever the mute state says *now*, not
+    // to what it said when this started, so a mute arriving mid-measurement is
+    // not undone by the restore.
+    const silent = opts.silent ?? false;
+    if (silent) {
+      try { this.clip.disconnect(ctx.destination); } catch { /* already apart */ }
+      this.master.gain.cancelScheduledValues(ctx.currentTime);
+      this.master.gain.setValueAtTime(this.settings.master, ctx.currentTime);
+    }
+
+    const meter = ctx.createAnalyser();
+    meter.fftSize = 2048;
+    this.toClip.connect(meter);
+    const window = new Float32Array(meter.fftSize);
+    const until = ctx.currentTime + seconds;
+    const giveUp = Date.now() + (seconds + 1) * 1000;
+    let peak = 0, sumSq = 0, samples = 0;
+    let redMin = 0, redMax = -Infinity, redSum = 0, redN = 0;
+    try {
+      while (ctx.currentTime < until && Date.now() < giveUp) {
+        meter.getFloatTimeDomainData(window);
+        for (const s of window) {
+          const a = Math.abs(s);
+          if (a > peak) peak = a;
+          sumSq += s * s;
+        }
+        samples += window.length;
+        // Reduction is negative dB, zero when the compressor is asleep.
+        const r = this.glue.reduction;
+        if (r < redMin) redMin = r;
+        if (r > redMax) redMax = r;
+        redSum += r;
+        redN++;
+        await new Promise((done) => setTimeout(done, 16));
+      }
+    } finally {
+      this.toClip.disconnect(meter);
+      if (silent) {
+        this.clip.connect(ctx.destination);
+        this.master.gain.setValueAtTime(
+          this.muted ? 0 : this.settings.master, ctx.currentTime,
+        );
+      }
+    }
+    return {
+      seconds,
+      peak,
+      rms: samples ? Math.sqrt(sumSq / samples) : 0,
+      reductionPeak: redMin,
+      reductionMean: redN ? redSum / redN : 0,
+      reductionRange: redN ? (redMax === -Infinity ? 0 : redMax - redMin) : 0,
+    };
   }
 
   /** Measured round trip, for the diagnostics panel. */
