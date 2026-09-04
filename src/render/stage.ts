@@ -271,11 +271,11 @@ export class Stage {
     // minification through a two-tap filter, sampling four of every sixteen
     // texels and then two of every five, which is where the shimmer came from.
     //
-    // Stopping at an eighth is deliberate. Chrome does not accelerate small 2D
-    // canvases, and past this the levels fall under that threshold on a normal
-    // viewport, at which point each blit between a software canvas and the
-    // accelerated main one costs an upload and gives back a blur nobody can
-    // see.
+    // Three of them, so the widest tap is a sixteenth — wider than the tenth
+    // the old chain stopped at, which is where the reach of the outer glow
+    // comes from. Dropping the last level was measured against keeping it:
+    // within noise on the frame either way, and visibly tighter around a lit
+    // bumper, so it stays.
     this.blooms = [];
     for (let i = 0, bw = w >> BLOOM_FIRST, bh = h >> BLOOM_FIRST; i < BLOOM_LEVELS; i++) {
       this.blooms.push(makeLayer(Math.max(1, bw), Math.max(1, bh)));

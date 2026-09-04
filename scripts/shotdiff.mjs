@@ -12,9 +12,16 @@ async function raw(file) {
   return { data, info };
 }
 
-const names = fs.readdirSync(dir)
-  .filter((f) => f.startsWith(a + '-') && f.endsWith('.png'))
-  .map((f) => f.slice(a.length + 1, -4));
+// The union of both prefixes, not just the first. Taking the names from `a`
+// alone means a shot that exists only under `b` — because the `a` capture
+// stopped partway through, say — is never looked at, and the run still reports
+// success on the pairs it did manage.
+function shotsUnder(prefix) {
+  return fs.readdirSync(dir)
+    .filter((f) => f.startsWith(prefix + '-') && f.endsWith('.png'))
+    .map((f) => f.slice(prefix.length + 1, -4));
+}
+const names = [...new Set([...shotsUnder(a), ...shotsUnder(b)])].sort();
 
 // A comparison that could not be made is a failure, not a pass. Printing a
 // diagnostic and carrying on left `worst` at zero, so a run whose every other
@@ -25,13 +32,14 @@ let worst = 0;
 let invalid = 0;
 
 if (!names.length) {
-  console.log(`NO SHOTS  nothing in .shots matches the prefix "${a}"`);
+  console.log(`NO SHOTS  nothing in .shots matches "${a}-" or "${b}-"`);
   process.exit(1);
 }
 
 for (const n of names) {
   const fa = path.join(dir, `${a}-${n}.png`);
   const fb = path.join(dir, `${b}-${n}.png`);
+  if (!fs.existsSync(fa)) { console.log(`MISSING  ${a}-${n}.png`); invalid++; continue; }
   if (!fs.existsSync(fb)) { console.log(`MISSING  ${b}-${n}.png`); invalid++; continue; }
   const A = await raw(fa), B = await raw(fb);
   if (A.data.length !== B.data.length) {
