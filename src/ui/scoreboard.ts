@@ -103,6 +103,28 @@ export const TIMING = {
 /** Past this the reveal has nothing left to move, however many rows there are. */
 export const REVEAL_SECONDS = 3;
 
+/** The most the frame that builds the panel may be worth. */
+export const BUILD_FRAME_CAP = 0.05;
+
+/**
+ * What a frame is worth to the reveal.
+ *
+ * Only the first one is clamped, and that one has a reason: the frame that
+ * opens this panel is the frame that also parsed it, and the loop hands down a
+ * delta as large as a quarter second — enough to arrive a fifth of the way
+ * through the reveal already.
+ *
+ * Every frame after it runs at wall clock, and that also has a reason. The
+ * cadence is placed on the audio clock, which does not slow down for anything;
+ * a reveal that took only fifty milliseconds a frame would run at half speed
+ * on a device managing ten of them, and the tune would resolve while the ring
+ * was still climbing. Better a single honest jump than a screen that drifts
+ * away from its own sound.
+ */
+export function revealStep(dt: number, primed: boolean): number {
+  return primed ? dt : Math.min(dt, BUILD_FRAME_CAP);
+}
+
 /**
  * The reveal's own clock.
  *

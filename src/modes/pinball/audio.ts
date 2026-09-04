@@ -313,6 +313,17 @@ export class PinballAudio {
     this.apply(0);
   }
 
+  /**
+   * A fresh run is starting.
+   *
+   * The game-over fall is placed a beat and a half ahead of itself, and
+   * Backspace inside that window starts a run the fall does not belong to —
+   * the last ball rolling home over a new one being served. Nothing else was
+   * going to stop it: `mallet` sits outside the engine's shot budget, so the
+   * app's hush cannot reach it, and these handles are the only way back.
+   */
+  newGame(): void { this.dropAhead(); }
+
   /** Take back everything placed ahead that has not sounded yet. */
   private dropAhead(): void {
     for (const h of this.ahead) h.cancel();

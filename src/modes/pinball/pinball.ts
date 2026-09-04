@@ -100,6 +100,10 @@ export class PinballMode extends ModeBase implements GameMode {
     this.game.tuneNote = (note) => note;
     this.game.keybed.allOff();
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
+    // The timer was only half of what the last run left pending: the fall it
+    // fired on the way out is on the audio clock, ahead of itself, and belongs
+    // to a game that is over.
+    this.audio.newGame();
     this.ctx.hud.clearPanels();
   }
 
@@ -196,6 +200,10 @@ export class PinballMode extends ModeBase implements GameMode {
     // run that has just begun — and opening a screen does not stop the
     // simulation, so the new ball would play on unattended behind it.
     if (this.overTimer) { clearTimeout(this.overTimer); this.overTimer = 0; }
+    // The timer was only half of what the last run left pending: the fall it
+    // fired on the way out is on the audio clock, ahead of itself, and belongs
+    // to a game that is over.
+    this.audio.newGame();
     // Asked for from behind a menu as often as not — the pause panel's
     // Restart, or the home screen with this table already the one behind it.
     // Those paths suspended the mode without ever resuming it, and a new game

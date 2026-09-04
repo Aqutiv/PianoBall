@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  REVEAL_SECONDS, Reveal, TIMING, bucketRun, formatCount, formatShare, formatTime,
-  type VerdictTone,
+  BUILD_FRAME_CAP, REVEAL_SECONDS, Reveal, TIMING, bucketRun, formatCount, formatShare,
+  formatTime, revealStep, type VerdictTone,
 } from '../src/ui/scoreboard';
 import { stingLength, type Sting } from '../src/audio/sting';
 import { tuneSting } from '../src/modes/playtune/sting';
@@ -95,6 +95,43 @@ describe('the reveal clock', () => {
     for (let i = 0; i < 600; i++) r.advance(1 / 60);
     expect(r.done).toBe(true);
     expect(r.t).toBeLessThan(REVEAL_SECONDS + 1);
+  });
+});
+
+describe('what a frame is worth to the reveal', () => {
+  it('caps the frame that built the panel', () => {
+    // The loop's own ceiling is a quarter second, and that frame carries the
+    // cost of parsing the panel it is about to show.
+    expect(revealStep(0.25, false)).toBe(BUILD_FRAME_CAP);
+    expect(revealStep(0.01, false)).toBe(0.01);
+  });
+
+  it('runs at wall clock after that, so the reveal cannot drift from its sound', () => {
+    // The cadence is placed on the audio clock, which does not slow down. A
+    // reveal that took only BUILD_FRAME_CAP a frame would run at half speed on
+    // a device managing ten of them, and the tune would resolve while the ring
+    // was still climbing.
+    expect(revealStep(0.1, true)).toBe(0.1);
+    expect(revealStep(0.25, true)).toBe(0.25);
+  });
+
+  it('reaches the ring landing in step with the clock at any frame rate', () => {
+    for (const fps of [120, 60, 30, 10]) {
+      const r = new Reveal();
+      let wall = 0;
+      let primed = false;
+      // The build frame, then honest frames at that rate.
+      for (let i = 0; i < fps * 3; i++) {
+        const dt = 1 / fps;
+        r.advance(revealStep(dt, primed));
+        primed = true;
+        wall += dt;
+        if (wall >= TIMING.badge.at + 0.2) break;
+      }
+      // Within one frame of where the cadence is scheduled, rather than the
+      // twofold stretch a per-frame clamp produced at 10 fps.
+      expect(Math.min(r.t, REVEAL_SECONDS)).toBeGreaterThan(TIMING.badge.at - 1 / fps);
+    }
   });
 });
 

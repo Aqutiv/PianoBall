@@ -1,6 +1,6 @@
 import { clamp01 } from '../core/math';
 import {
-  Reveal, TIMING, formatCount, formatShare,
+  Reveal, TIMING, formatCount, formatShare, revealStep,
   type Hero, type HeroMark, type ModeResult, type Split, type Stat, type StatTone,
   type VerdictTone,
 } from './scoreboard';
@@ -322,13 +322,16 @@ function bindBoard(root: HTMLElement, result: ModeResult): Frames {
     if (banner) banner.style.opacity = reveal.phase(TIMING.banner.at, TIMING.banner.len).toFixed(3);
   };
 
+  // Whether the build frame has been absorbed. `tick(0)` on the way in paints
+  // the starting state without being a frame, so it is the first delta that
+  // actually passes time that gets clamped.
+  let primed = false;
+
   return {
     tick(dt: number) {
-      // Clamped, because the frame that builds this panel is the one that also
-      // parsed it: the loop caps `frameDt` at a quarter second, and handing
-      // that straight in would open the screen already a fifth of the way
-      // through its own reveal.
-      reveal.advance(Math.min(dt, 0.05));
+      const step = revealStep(dt, primed);
+      if (dt > 0) primed = true;
+      reveal.advance(step);
       paint();
     },
     seek(seconds: number) {
