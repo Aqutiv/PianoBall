@@ -1,6 +1,6 @@
 import { GameLoop } from '../core/loop';
 import { load, save } from '../core/storage';
-import { Stage } from '../render/stage';
+import { Stage, backingDensity } from '../render/stage';
 import { applyTheme, type Theme } from '../render/theme';
 import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSettings';
 import { InputHub } from '../midi/inputHub';
@@ -19,17 +19,6 @@ import { Overlay, type Screen } from '../ui/overlay';
 import { FACTORIES, availableModes, type ModeInfo } from './registry';
 import type { GameMode, GameModeId, ModeContext } from './mode';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
-
-/**
- * Ceiling on the canvas backing store, in device pixels.
- *
- * `Stage.resize` allocates two full-size layers besides the canvas itself, so
- * the density has to be bounded by area and not by ratio alone: an unbounded 3
- * on a large viewport would ask for hundreds of megabytes of canvas. A 4K budget
- * is exactly the line that lets every 4K panel draw at its native resolution
- * whatever the OS scaling is set to, and stops short of anything larger.
- */
-const DEVICE_PIXEL_BUDGET = 3840 * 2160;
 
 export interface ModeResult {
   title: string;
@@ -423,17 +412,13 @@ export class Shell {
   }
 
   /**
-   * Backing-store density.
-   *
-   * A 4K laptop reports 2.5 or 3 depending on the scaling it is set to, and the
-   * old cap of 2 left the table visibly soft on one. Nothing sheds this later:
-   * the adaptive pass drops effects under load, never resolution.
+   * A 4K laptop reports a ratio of 2.5 or 3 depending on the scaling it is set
+   * to, and the old cap of 2 left the table visibly soft on one. Nothing sheds
+   * this later: the adaptive pass drops effects under load, never resolution.
    */
   private resize(): void {
     const cssW = window.innerWidth, cssH = window.innerHeight;
-    const budget = Math.sqrt(DEVICE_PIXEL_BUDGET / Math.max(1, cssW * cssH));
-    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1, budget));
-    this.stage.resize(cssW, cssH, dpr);
+    this.stage.resize(cssW, cssH, backingDensity(cssW, cssH, window.devicePixelRatio));
   }
 
   // --------------------------------------------------------------- audio ---

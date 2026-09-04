@@ -28,6 +28,34 @@ export interface RenderQuality {
  */
 export const TABLE_SIZE = { min: 1, max: 1.13, step: 0.01 } as const;
 
+/**
+ * Ceiling on the canvas backing store, in device pixels.
+ *
+ * A 4K budget is the line that lets every 4K panel draw at its native
+ * resolution whatever the OS scaling is set to, and stops short of anything
+ * larger. `resize` allocates two full-size layers besides the canvas itself, so
+ * this is worth about 95MB of canvas at the ceiling.
+ */
+const DEVICE_PIXEL_BUDGET = 3840 * 2160;
+
+/** Nothing gains from drawing denser than this, whatever the display claims. */
+const MAX_DENSITY = 3;
+
+/**
+ * Backing-store density for a viewport.
+ *
+ * The bound is on total device pixels rather than on the ratio alone, because
+ * what has to be afforded is the layers and not the sharpness. It has to be
+ * free to come out below 1: zooming the browser out shrinks the reported ratio
+ * and grows the viewport in step, so a 4K display at 50% zoom asks for a
+ * 7680x4320 viewport at a ratio of 0.5 — still 4K of real pixels, but four
+ * times the budget if the density is floored at 1 on the way through.
+ */
+export function backingDensity(cssW: number, cssH: number, devicePixelRatio: number): number {
+  const budget = Math.sqrt(DEVICE_PIXEL_BUDGET / Math.max(1, cssW * cssH));
+  return Math.min(MAX_DENSITY, devicePixelRatio || 1, budget);
+}
+
 function clampTableSize(v: number): number {
   return Number.isFinite(v) ? Math.min(TABLE_SIZE.max, Math.max(TABLE_SIZE.min, v)) : TABLE_SIZE.min;
 }

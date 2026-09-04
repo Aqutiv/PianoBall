@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CAMERA, TableCamera } from '../src/render/project';
 import { AURORA } from '../src/game/table/tables/aurora';
 import { DEFAULT_KEYBED } from '../src/game/keyLayout';
-import { TABLE_SIZE } from '../src/render/stage';
+import { TABLE_SIZE, backingDensity } from '../src/render/stage';
 
 const LANDSCAPE = { w: 1920, h: 1080 };
 const KEYBED = { ...DEFAULT_KEYBED, ...AURORA.keybed };
@@ -109,5 +109,45 @@ describe('the table camera', () => {
     // Raking lower only makes the table wider there, so there is nothing to win
     // and — more to the point — nothing to lose.
     expect(keyScale(fitted(TABLE_SIZE.max, 390, 844))).toBe(base);
+  });
+});
+
+/** Device pixels the canvas and its two full-size layers would come to. */
+const backingPixels = (cssW: number, cssH: number, ratio: number): number => {
+  const d = backingDensity(cssW, cssH, ratio);
+  return cssW * d * cssH * d;
+};
+
+describe('the backing store', () => {
+  it('draws every 4K panel at its native resolution, whatever the scaling', () => {
+    // css size and reported ratio for one 4K display at each Windows setting.
+    for (const [cssW, cssH, ratio] of [[2560, 1440, 1.5], [1920, 1080, 2], [1536, 864, 2.5], [1280, 720, 3]]) {
+      expect(backingDensity(cssW, cssH, ratio), `${ratio}x`).toBe(ratio);
+    }
+  });
+
+  it('holds the budget when the browser is zoomed out', () => {
+    // Zooming out shrinks the reported ratio and grows the viewport in step, so
+    // the pixels are the same 4K either way. Flooring the density at 1 here cost
+    // four times the budget at 50% zoom, and sixteen times it at 25%.
+    const full = backingPixels(3840, 2160, 1);
+
+    for (const [cssW, cssH, ratio] of [[5734, 3226, 0.67], [7680, 4320, 0.5], [15360, 8640, 0.25]]) {
+      expect(backingPixels(cssW, cssH, ratio), `${ratio}x`).toBeCloseTo(full, -3);
+    }
+  });
+
+  it('never asks for more than the budget, and never more than it can use', () => {
+    for (const [cssW, cssH, ratio] of [[3840, 2160, 2], [2560, 1440, 2], [1920, 1080, 4], [800, 600, 1]]) {
+      const d = backingDensity(cssW, cssH, ratio);
+      expect(cssW * d * cssH * d, `${cssW}x${cssH} @${ratio}`).toBeLessThanOrEqual(3840 * 2160 + 1);
+      expect(d).toBeLessThanOrEqual(Math.min(3, ratio));
+      expect(d).toBeGreaterThan(0);
+    }
+  });
+
+  it('falls back to 1 when the browser reports no ratio at all', () => {
+    expect(backingDensity(1920, 1080, 0)).toBe(1);
+    expect(backingDensity(1920, 1080, undefined as unknown as number)).toBe(1);
   });
 });
