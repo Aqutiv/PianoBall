@@ -182,12 +182,32 @@ export function updateAABB(s: Collider): void {
  * Distance from a point to the collider surface (negative inside), and the
  * outward unit normal there. Used for de-penetration and for resting contacts.
  */
-export function closestFeature(s: Collider, p: Vec2): { dist: number; nx: number; ny: number } {
+/** Nearest point on a collider: how far outside it, and which way is out. */
+export interface Feature { dist: number; nx: number; ny: number }
+
+function feat(out: Feature, dist: number, nx: number, ny: number): Feature {
+  out.dist = dist; out.nx = nx; out.ny = ny;
+  return out;
+}
+
+/**
+ * Nearest feature of `s` to `p`.
+ *
+ * `out` is here because this is one of the hottest functions in the solver:
+ * `depenetrate` alone reaches it sixty-odd times per ball per step, and a
+ * fresh three-field object each time is tens of thousands of allocations a
+ * second for a value every caller reads immediately and then drops. Leaving it
+ * off still returns a new object, so a caller that wants to keep the result
+ * can simply not pass one.
+ */
+export function closestFeature(
+  s: Collider, p: Vec2, out: Feature = { dist: 0, nx: 0, ny: 0 },
+): Feature {
   if (s.kind === 'circle') {
     const dx = p.x - s.c.x, dy = p.y - s.c.y;
     const d = Math.hypot(dx, dy) || 1e-9;
-    if (s.hollow) return { dist: s.r - d, nx: -dx / d, ny: -dy / d };
-    return { dist: d - s.r, nx: dx / d, ny: dy / d };
+    if (s.hollow) return feat(out, s.r - d, -dx / d, -dy / d);
+    return feat(out, d - s.r, dx / d, dy / d);
   }
   if (s.kind === 'segment') {
     const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y;
@@ -197,7 +217,7 @@ export function closestFeature(s: Collider, p: Vec2): { dist: number; nx: number
     const qx = s.a.x + dx * t, qy = s.a.y + dy * t;
     const ex = p.x - qx, ey = p.y - qy;
     const d = Math.hypot(ex, ey) || 1e-9;
-    return { dist: d - s.r, nx: ex / d, ny: ey / d };
+    return feat(out, d - s.r, ex / d, ey / d);
   }
   // Arc: distance to the circular centreline, clamped into the angular sweep.
   const dx = p.x - s.c.x, dy = p.y - s.c.y;
@@ -205,14 +225,14 @@ export function closestFeature(s: Collider, p: Vec2): { dist: number; nx: number
   if (angleInArc(Math.atan2(dy, dx), s.a0, s.a1)) {
     const radial = d - s.r;
     const sgn = radial >= 0 ? 1 : -1;
-    return { dist: Math.abs(radial) - s.w, nx: (dx / d) * sgn, ny: (dy / d) * sgn };
+    return feat(out, Math.abs(radial) - s.w, (dx / d) * sgn, (dy / d) * sgn);
   }
-  if (!s.caps) return { dist: Infinity, nx: 0, ny: 0 };
+  if (!s.caps) return feat(out, Infinity, 0, 0);
   const e0x = s.c.x + Math.cos(s.a0) * s.r, e0y = s.c.y + Math.sin(s.a0) * s.r;
   const e1x = s.c.x + Math.cos(s.a1) * s.r, e1y = s.c.y + Math.sin(s.a1) * s.r;
   const d0 = Math.hypot(p.x - e0x, p.y - e0y);
   const d1 = Math.hypot(p.x - e1x, p.y - e1y);
   const ex = d0 < d1 ? e0x : e1x, ey = d0 < d1 ? e0y : e1y;
   const dd = Math.min(d0, d1) || 1e-9;
-  return { dist: dd - s.w, nx: (p.x - ex) / dd, ny: (p.y - ey) / dd };
+  return feat(out, dd - s.w, (p.x - ex) / dd, (p.y - ey) / dd);
 }

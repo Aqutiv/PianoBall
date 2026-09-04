@@ -5,6 +5,7 @@ import { shadowSprite, glowSprite, poolSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
 import { clamp01, TAU } from '../core/math';
 import { load, save } from '../core/storage';
+import { clampRung, derive } from './tiers';
 
 export interface RenderQuality {
   bloom: boolean;
@@ -15,6 +16,19 @@ export interface RenderQuality {
   colorBlind: boolean;
   /** Light thrown onto the playfield by lit elements and charged balls. */
   pools: boolean;
+  /** The warm/cool cast over the whole frame. One full-frame `soft-light` fill. */
+  grade: boolean;
+  /** The piano roll of your own playing, up the margins. */
+  roll: boolean;
+  /**
+   * Backing-store scale, on top of the density the display asks for.
+   *
+   * The one thing that makes every full-frame pass cheaper at once -- the void
+   * fill, the baked blit, the emissive clear, the bloom pyramid and the three
+   * additive composites all cost what the backing store costs. Last on the
+   * ladder because it is the most visible loss.
+   */
+  renderScale: number;
   /** How much of the screen the table takes, 1 being the size it was designed at. */
   tableSize: number;
 }
@@ -109,6 +123,9 @@ export const DEFAULT_QUALITY: RenderQuality = {
   reducedMotion: false,
   colorBlind: false,
   pools: true,
+  grade: true,
+  roll: true,
+  renderScale: 1,
   tableSize: 1,
 };
 
@@ -179,9 +196,34 @@ export class Stage {
 
   /** The bloom pyramid, each level exactly half the one above it. */
   private blooms: Layer[] = [];
+  /**
+   * The full-frame gradients, which are the same object every frame.
+   *
+   * A `CanvasGradient` depends only on its geometry and its stops, and for
+   * these four that means the viewport and the theme -- neither of which
+   * changes between frames. They were being rebuilt sixty times a second, four
+   * objects each carrying up to five stops, and every one of them then fills
+   * the entire canvas.
+   *
+   * Guarded by the three values they actually depend on rather than by a key
+   * string, so the check itself allocates nothing either.
+   */
+  private gradW = -1;
+  private gradH = -1;
+  private gradTheme = '';
+  private sheenGrad: CanvasGradient | null = null;
+  private vignetteGrad: CanvasGradient | null = null;
+  private gradeGrad: CanvasGradient | null = null;
+  private rollGuideGrad: CanvasGradient | null = null;
   private bakedFor = '';
   /** What the player asked for, which the adaptive pass restores towards. */
   private qualityPreference: RenderQuality;
+  /**
+   * How far down the ladder the machine has been pushed. Zero is everything the
+   * player asked for; `quality` is derived from the two together, so restoring
+   * is a matter of moving this back rather than of remembering what was taken.
+   */
+  private shedRung = 0;
   private shake = 0;
   private shakeX = 0;
   private shakeY = 0;
@@ -193,7 +235,7 @@ export class Stage {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
     this.qualityPreference.tableSize = clampTableSize(this.qualityPreference.tableSize);
-    this.quality = { ...this.qualityPreference };
+    this.quality = derive(this.qualityPreference, 0);
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
     this.applyTableSize();
@@ -218,25 +260,50 @@ export class Stage {
 
   get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
 
+  /** How far down the ladder the running quality currently sits. */
+  get rung(): number { return this.shedRung; }
+
+  /**
+   * Move the ladder.
+   *
+   * Returns whether the backing-store scale changed, which is the one rung
+   * effect the stage cannot apply on its own: only the shell knows the
+   * viewport and the display density to multiply it by.
+   */
+  setRung(rung: number): boolean {
+    const next = clampRung(rung);
+    if (next === this.shedRung) return false;
+    const before = this.quality.renderScale;
+    this.shedRung = next;
+    this.applyQuality();
+    return this.quality.renderScale !== before;
+  }
+
+  /** Rebuild the running quality from the preference and the current rung. */
+  private applyQuality(): void {
+    this.quality = derive(this.qualityPreference, this.shedRung);
+    this.particles.budget = this.quality.particles;
+    this.publishMotionPreference();
+    this.applyTableSize();
+    this.invalidate();
+  }
+
   /** Change what the player asked for, and remember it. */
   setQuality(patch: Partial<RenderQuality>): void {
     if (patch.tableSize !== undefined) patch = { ...patch, tableSize: clampTableSize(patch.tableSize) };
     this.qualityPreference = { ...this.qualityPreference, ...patch };
-    this.quality = { ...this.quality, ...patch };
-    if (patch.particles !== undefined) this.particles.budget = patch.particles;
-    if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
-    if (patch.reducedMotion !== undefined) this.publishMotionPreference();
-    if (patch.tableSize !== undefined) { this.applyTableSize(); this.invalidate(); }
+    // Through the same derivation as everything else. A player turning an
+    // effect back on while the ladder has it shed is asking about the
+    // preference, not about what is on screen this second -- and they get it
+    // the moment the ladder climbs back past that rung.
+    this.applyQuality();
     save('quality', this.qualityPreference);
   }
 
   resetSettings(): void {
     this.qualityPreference = defaultQuality();
-    this.quality = { ...this.qualityPreference };
-    this.particles.budget = this.quality.particles;
-    this.publishMotionPreference();
-    this.applyTableSize();
-    this.invalidate();
+    this.shedRung = 0;
+    this.applyQuality();
     save('quality', this.qualityPreference);
   }
 
@@ -252,15 +319,31 @@ export class Stage {
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
+    const w = Math.round(cssW * dpr), h = Math.round(cssH * dpr);
+    // Every mode calls this from `enter` with the size it already has, to refit
+    // the camera for its own table and drop the bake. That must keep working —
+    // but it is no reason to throw away five canvases and allocate five more,
+    // which at the device-pixel ceiling is the better part of a hundred
+    // megabytes. Reallocate only when the backing store actually changed size;
+    // do the rest always.
+    const sized = this.canvas.width === w && this.canvas.height === h
+      && this.cssW === cssW && this.cssH === cssH;
+
     this.cssW = cssW;
     this.cssH = cssH;
     this.dpr = dpr;
-    this.canvas.width = Math.round(cssW * dpr);
-    this.canvas.height = Math.round(cssH * dpr);
-    this.canvas.style.width = `${cssW}px`;
-    this.canvas.style.height = `${cssH}px`;
+    if (!sized) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.canvas.style.width = `${cssW}px`;
+      this.canvas.style.height = `${cssH}px`;
+      this.allocLayers(w, h);
+    }
+    this.cam.fit(cssW, cssH);
+    this.bakedFor = '';
+  }
 
-    const w = this.canvas.width, h = this.canvas.height;
+  private allocLayers(w: number, h: number): void {
     this.baked = makeLayer(w, h);
     this.emissive = makeLayer(w, h);
     // A halving chain. At exactly 2:1 a bilinear downscale degenerates into an
@@ -282,8 +365,6 @@ export class Stage {
       bw >>= 1;
       bh >>= 1;
     }
-    this.cam.fit(cssW, cssH);
-    this.bakedFor = '';
   }
 
   invalidate(): void { this.bakedFor = ''; }
@@ -585,12 +666,20 @@ export class Stage {
     ctx.restore();
   }
 
-  /** Sheen and vignette: the pane of glass the whole thing lives under. */
-  drawGlass(): void {
-    const ctx = this.ctx;
+  /**
+   * Rebuild the frame-sized gradients, if the frame or the theme has moved
+   * since they were last built. Nothing here depends on anything that changes
+   * between two frames of the same size under the same theme.
+   */
+  private ensureGradients(): void {
     const w = this.cssW, h = this.cssH;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    if (this.gradW === w && this.gradH === h && this.gradTheme === this.theme.id) return;
+    this.gradW = w;
+    this.gradH = h;
+    this.gradTheme = this.theme.id;
+    const ctx = this.ctx;
+    const pal = this.palette;
+
     const tint = this.theme.glass.sheen;
     const sheen = ctx.createLinearGradient(0, h * 0.1, w * 0.75, h);
     sheen.addColorStop(0, withAlpha(tint, 0));
@@ -598,14 +687,45 @@ export class Stage {
     sheen.addColorStop(0.52, withAlpha(tint, 0.055));
     sheen.addColorStop(0.62, withAlpha(tint, 0.02));
     sheen.addColorStop(1, withAlpha(tint, 0));
-    ctx.fillStyle = sheen;
+    this.sheenGrad = sheen;
+
+    const vig = ctx.createRadialGradient(
+      w / 2, h * 0.52, Math.min(w, h) * 0.32, w / 2, h * 0.52, Math.max(w, h) * 0.78,
+    );
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, withAlpha(pal.void, this.theme.glass.vignette));
+    this.vignetteGrad = vig;
+
+    const g = this.theme.grade;
+    if (g) {
+      const grade = ctx.createLinearGradient(0, 0, 0, h);
+      grade.addColorStop(0, g.far);
+      grade.addColorStop(0.55, g.far);
+      grade.addColorStop(1, g.near);
+      this.gradeGrad = grade;
+    } else {
+      this.gradeGrad = null;
+    }
+
+    const guide = ctx.createLinearGradient(0, h, 0, 0);
+    guide.addColorStop(0, withAlpha(pal.railTop, 0.3));
+    guide.addColorStop(0.45, withAlpha(pal.railTop, 0.09));
+    guide.addColorStop(1, withAlpha(pal.railTop, 0));
+    this.rollGuideGrad = guide;
+  }
+
+  /** Sheen and vignette: the pane of glass the whole thing lives under. */
+  drawGlass(): void {
+    const ctx = this.ctx;
+    const w = this.cssW, h = this.cssH;
+    this.ensureGradients();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = this.sheenGrad!;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
 
-    const vig = ctx.createRadialGradient(w / 2, h * 0.52, Math.min(w, h) * 0.32, w / 2, h * 0.52, Math.max(w, h) * 0.78);
-    vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, withAlpha(this.palette.void, this.theme.glass.vignette));
-    ctx.fillStyle = vig;
+    ctx.fillStyle = this.vignetteGrad!;
     ctx.fillRect(0, 0, w, h);
 
     this.drawGrade();
@@ -627,18 +747,13 @@ export class Stage {
    */
   private drawGrade(): void {
     const g = this.theme.grade;
-    if (!g) return;
+    if (!g || !this.gradeGrad || !this.quality.grade) return;
     const ctx = this.ctx;
-    const w = this.cssW, h = this.cssH;
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, g.far);
-    grad.addColorStop(0.55, g.far);
-    grad.addColorStop(1, g.near);
     ctx.save();
     ctx.globalCompositeOperation = 'soft-light';
     ctx.globalAlpha = g.strength;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = this.gradeGrad;
+    ctx.fillRect(0, 0, this.cssW, this.cssH);
     ctx.restore();
   }
 
@@ -670,9 +785,13 @@ export class Stage {
     const pad = 14;
     if (Math.min(left, right) < 78) return;
 
-    // Drop anything that has scrolled off the top.
+    // Drop anything that has scrolled off the top. Ahead of the quality gate,
+    // so a roll switched off does not quietly accumulate notes it will have to
+    // catch up on the moment it comes back.
     while (this.roll.length && this.t - this.roll[0].at > WINDOW + 1) this.roll.shift();
+    if (!this.quality.roll) return;
 
+    this.ensureGradients();
     const { low, high } = this.rollRange;
     const span = Math.max(1, high - low);
     const h = this.cssH;
@@ -689,12 +808,8 @@ export class Stage {
       ctx.clip();
 
       // Octave guides, fading upward so they read as a time grid rather than
-      // a seam in the cabinet.
-      const guide = ctx.createLinearGradient(0, h, 0, 0);
-      guide.addColorStop(0, withAlpha(pal.railTop, 0.3));
-      guide.addColorStop(0.45, withAlpha(pal.railTop, 0.09));
-      guide.addColorStop(1, withAlpha(pal.railTop, 0));
-      ctx.strokeStyle = guide;
+      // a seam in the cabinet. Built once for both sides and both frames.
+      ctx.strokeStyle = this.rollGuideGrad!;
       ctx.lineWidth = 1;
       ctx.font = `600 9px ${this.theme.fonts.mono}`;
       ctx.textAlign = 'center';

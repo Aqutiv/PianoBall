@@ -1,7 +1,7 @@
 import { type Vec2, v2 } from './vec2';
 import { type Ball } from './ball';
 import {
-  type Collider, type SegmentCollider, type SoundTag, type Material,
+  type AABB, type Collider, type Feature, type SegmentCollider, type SoundTag, type Material,
   closestFeature, updateAABB,
 } from './colliders';
 import { SpatialGrid } from './grid';
@@ -98,6 +98,32 @@ export class World {
   private readonly cand: Collider[] = [];
   private readonly hit: SweepHit = { t: 0, nx: 0, ny: 0 };
   private readonly probe: SweepHit = { t: 0, nx: 0, ny: 0 };
+  /**
+   * Which sensors this ball is touching, for the duration of one call to
+   * `updateSensors`. Shared rather than made fresh each time: at four balls and
+   * 240 Hz a new set per ball per step is a thousand of them a second, and the
+   * only thing that ever reads it is the exit sweep at the end of that call.
+   */
+  private readonly seen = new Set<number>();
+  /**
+   * Every enabled paddle's bounds, unioned. Rebuilt once a step rather than
+   * consulted per candidate: the paddles are not in the broadphase grid, so
+   * `solveBall` had no way to reject them without walking all thirty-two, once
+   * per TOI iteration, per ball — even for a ball at the top of the table with
+   * the whole playfield between it and the keybed. Thirty-two reads a step
+   * buys a single compare in the place that used to do a thousand.
+   */
+  private readonly padBounds: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  /** Scratch for `closestFeature`, which is read and dropped at both callers. */
+  private readonly feat: Feature = { dist: 0, nx: 0, ny: 0 };
+  /**
+   * `solidNear` gets its own candidate list and feature. It is called from the
+   * renderer rather than from `step`, and sharing the solver's scratch would
+   * make that an ordering constraint nobody could see.
+   */
+  private readonly probeCand: Collider[] = [];
+  private readonly probeFeat: Feature = { dist: 0, nx: 0, ny: 0 };
+  private readonly probePoint: Vec2 = v2(0, 0);
   private rand: () => number;
   private dirty = true;
 
@@ -135,6 +161,30 @@ export class World {
     this.dirty = false;
   }
 
+  /**
+   * Is a ball of radius `r`, centred here, touching anything solid?
+   *
+   * A read-only probe for things outside the solver that need to know what the
+   * table is like at a point -- the landing predictor being the one that
+   * matters, which asks a few hundred times a frame. It lives here rather than
+   * on the caller because the broadphase does, and a caller without it has no
+   * choice but to walk every collider on the table for each question.
+   */
+  solidNear(x: number, y: number, r: number): boolean {
+    if (this.dirty) this.reindex();
+    this.grid.query(x - r, y - r, x + r, y + r, this.probeCand);
+    this.probePoint.x = x;
+    this.probePoint.y = y;
+    for (let i = 0; i < this.probeCand.length; i++) {
+      const s = this.probeCand[i];
+      if (!s.enabled || s.sensor) continue;
+      const bb = s.aabb;
+      if (x + r < bb.minX || x - r > bb.maxX || y + r < bb.minY || y - r > bb.maxY) continue;
+      if (closestFeature(s, this.probePoint, this.probeFeat).dist < r) return true;
+    }
+    return false;
+  }
+
   addBall(b: Ball): void { this.balls.push(b); }
 
   removeBall(id: number): void {
@@ -146,6 +196,7 @@ export class World {
   step(dt: number): void {
     if (this.dirty) this.reindex();
     this.contacts.length = 0;
+    this.boundPaddles();
 
     const gx = this.tilt.x;
     const gy = -this.cfg.gravity + this.tilt.y;
@@ -200,6 +251,27 @@ export class World {
    * resolve exactly that one contact. Because motion is never applied past a
    * collision, a ball can never pass through a wall regardless of speed.
    */
+  /**
+   * Union of the enabled paddles' bounds, for this step.
+   *
+   * Empty when nothing is enabled — the sentinels invert the box so every test
+   * against it fails, which is what a world with no paddles should do.
+   */
+  private boundPaddles(): void {
+    const bb = this.padBounds;
+    bb.minX = bb.minY = Infinity;
+    bb.maxX = bb.maxY = -Infinity;
+    for (let i = 0; i < this.paddles.length; i++) {
+      const s = this.paddles[i].collider;
+      if (!s.enabled) continue;
+      const a = s.aabb;
+      if (a.minX < bb.minX) bb.minX = a.minX;
+      if (a.minY < bb.minY) bb.minY = a.minY;
+      if (a.maxX > bb.maxX) bb.maxX = a.maxX;
+      if (a.maxY > bb.maxY) bb.maxY = a.maxY;
+    }
+  }
+
   private solveBall(ball: Ball, dt: number): void {
     let remaining = dt;
     let iter = 0;
@@ -231,7 +303,13 @@ export class World {
         }
       }
 
-      for (let i = 0; i < this.paddles.length; i++) {
+      // One reject for the whole keybed. A ball anywhere but the bottom of the
+      // table misses every paddle, and this is the only place that can say so
+      // cheaply: paddles move every step, so they are not in the grid.
+      const pb = this.padBounds;
+      const nearPaddles = pb.maxX >= minX && pb.minX <= maxX
+        && pb.maxY >= minY && pb.minY <= maxY;
+      for (let i = 0; nearPaddles && i < this.paddles.length; i++) {
         const p = this.paddles[i];
         const s = p.collider;
         if (!s.enabled) continue;
@@ -348,7 +426,17 @@ export class World {
    */
   private depenetrate(ball: Ball): void {
     const r = ball.r;
-    this.grid.query(ball.p.x - r - 2, ball.p.y - r - 2, ball.p.x + r + 2, ball.p.y + r + 2, this.cand);
+    const minX = ball.p.x - r - 2, minY = ball.p.y - r - 2;
+    const maxX = ball.p.x + r + 2, maxY = ball.p.y + r + 2;
+    this.grid.query(minX, minY, maxX, maxY, this.cand);
+    // The grid candidates arrive already filtered by the query box; the
+    // paddles do not, and this loop used to reach `closestFeature` for all
+    // thirty-two of them, twice, for every ball on the table — with no bounds
+    // test of any kind. A capsule that fails its own AABB cannot be
+    // overlapping the ball, so rejecting on it changes nothing but the bill.
+    const pb = this.padBounds;
+    const nearPaddles = pb.maxX >= minX && pb.minX <= maxX
+      && pb.maxY >= minY && pb.minY <= maxY;
     for (let pass = 0; pass < 2; pass++) {
       let moved = false;
       for (let i = 0; i < this.cand.length; i++) {
@@ -356,18 +444,21 @@ export class World {
         if (!s.enabled || s.sensor) continue;
         moved = this.pushOut(ball, s, 0, 0) || moved;
       }
-      for (let i = 0; i < this.paddles.length; i++) {
+      for (let i = 0; nearPaddles && i < this.paddles.length; i++) {
         const p = this.paddles[i];
-        if (!p.collider.enabled) continue;
+        const s = p.collider;
+        if (!s.enabled) continue;
+        const bb = s.aabb;
+        if (bb.maxX < minX || bb.minX > maxX || bb.maxY < minY || bb.minY > maxY) continue;
         const sv = this.surfaceVelocity(p, ball.p.x, ball.p.y);
-        moved = this.pushOut(ball, p.collider, sv.x, sv.y) || moved;
+        moved = this.pushOut(ball, s, sv.x, sv.y) || moved;
       }
       if (!moved) break;
     }
   }
 
   private pushOut(ball: Ball, s: Collider, svx: number, svy: number): boolean {
-    const f = closestFeature(s, ball.p);
+    const f = closestFeature(s, ball.p, this.feat);
     if (!isFinite(f.dist)) return false;
     const pen = ball.r - f.dist;
     if (pen <= 1e-4) return false;
@@ -395,12 +486,13 @@ export class World {
 
     const vx = (ball.p.x - ball.prev.x) / dt;
     const vy = (ball.p.y - ball.prev.y) / dt;
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
 
     for (let i = 0; i < this.cand.length; i++) {
       const s = this.cand[i];
       if (!s.enabled || !s.sensor) continue;
-      let touching = closestFeature(s, ball.p).dist < r;
+      let touching = closestFeature(s, ball.p, this.feat).dist < r;
       if (!touching) {
         touching = sweepVsCollider(ball.prev.x, ball.prev.y, vx, vy, r, s, dt, this.probe);
       }

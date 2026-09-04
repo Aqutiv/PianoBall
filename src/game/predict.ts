@@ -1,7 +1,6 @@
 import type { Ball } from '../physics/ball';
 import type { World } from '../physics/world';
 import type { Vec2 } from '../physics/vec2';
-import { closestFeature } from '../physics/colliders';
 import { crownAt } from './keyLayout';
 import type { Keybed } from './keybed';
 
@@ -44,17 +43,6 @@ const KEY_R = 5;
  * walls, which over a one-second flight lands well inside one key's width —
  * and it is an affordance, so being readable matters more than being exact.
  */
-/** Would a ball of this radius, centred here, be touching something solid? */
-function obstructed(world: World, x: number, y: number, r: number): boolean {
-  for (const col of world.colliders) {
-    if (!col.enabled || col.sensor) continue;
-    const a = col.aabb;
-    if (x + r < a.minX || x - r > a.maxX || y + r < a.minY || y - r > a.maxY) continue;
-    if (closestFeature(col, { x, y }).dist < r) return true;
-  }
-  return false;
-}
-
 export function predictLanding(ball: Ball, world: World, keybed: Keybed): Landing | null {
   if (!ball.alive) return null;
   const L = keybed.layout;
@@ -96,7 +84,12 @@ export function predictLanding(ball: Ball, world: World, keybed: Keybed): Landin
     // Anything solid in the way makes the rest of this a guess, and a hint
     // pointing at the wrong key is worse than no hint at all. Stop and say
     // nothing; the ball will clear the obstruction and be predicted then.
-    if (obstructed(world, px, py, ball.r)) return null;
+    //
+    // Asked through the world's own broadphase. Up to three hundred and sixty
+    // times per ball per frame, this used to be answered by walking every
+    // collider on the table -- tens of thousands of AABB tests a frame for
+    // something the grid settles by looking at four cells.
+    if (world.solidNear(px, py, ball.r)) return null;
 
     // Only a descending ball lands. Rising through the plane is the launch.
     const face = L.baseY + crownAt(px, L) + ball.r + KEY_R;

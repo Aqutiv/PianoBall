@@ -53,6 +53,12 @@ export class PinballAudio {
   private lastPan = 0;
   /** The rolling sound under every live ball, by id. */
   private readonly rolls = new Map<number, RollHandle>();
+  /**
+   * Which balls were seen this frame, for the sweep that stops the rolls of
+   * the ones that are gone. Reused: this runs once a drawn frame, and the set
+   * is dead by the end of it.
+   */
+  private readonly seen = new Set<number>();
   /** When each ball last scraped, so a long graze is one scrape and not forty. */
   private readonly scraped = new Map<number, number>();
 
@@ -107,7 +113,8 @@ export class PinballAudio {
   frame(): void {
     if (this.paused) return;
     const game = this.game;
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     for (const ball of game.balls) {
       if (!ball.alive) continue;
       seen.add(ball.id);

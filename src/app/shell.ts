@@ -1,6 +1,11 @@
 import { GameLoop } from '../core/loop';
 import { load, save } from '../core/storage';
 import { Stage, backingDensity } from '../render/stage';
+import { LITE_AUDIO_RUNG, MAX_RUNG, derive, rungLabel } from '../render/tiers';
+import { readDeviceHints, seedRung } from '../render/deviceHint';
+import { Adaptive } from './adaptive';
+import { PRESET_RUNG, perfSettings, resetPerfSettings, setPerfSettings,
+  type GraphicsPreset, type SoundPreset } from '../render/perfSettings';
 import { applyTheme, type Theme } from '../render/theme';
 import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSettings';
 import { InputHub } from '../midi/inputHub';
@@ -20,8 +25,14 @@ import { FACTORIES, availableModes, type ModeInfo } from './registry';
 import type { GameMode, GameModeId, ModeContext } from './mode';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 
-/** Live particles allowed while the adaptive pass is shedding. */
-const SHED_PARTICLES = 500;
+/**
+ * How often the table behind an open panel is repainted, in seconds.
+ *
+ * Thirty a second: half the work on a sixty-hertz display and a fifth of it on
+ * a hundred-and-forty-four, for motion that is already being blurred by seven
+ * pixels before anyone sees it.
+ */
+const IDLE_FRAME = 1 / 30;
 
 export interface ModeResult {
   title: string;
@@ -77,24 +88,12 @@ export class Shell {
   private readonly ctx: ModeContext;
   private readonly canvas: HTMLCanvasElement;
   private readonly activePointers = new Map<number, number>();
-  private frameAvg = 8;
-  private qualityHeld = 0;
-  /**
-   * Whether the adaptive pass is holding anything back.
-   *
-   * Recovery used to infer this by comparing what is running against what the
-   * player asked for, which is only sound while nothing else can reconcile the
-   * two. A player who re-enables the very thing that was shed — from the panel,
-   * before the machine recovers — makes preference and reality agree by hand,
-   * and every comparison then reads as "nothing was shed": the budget stayed
-   * capped at 500, and the audio stayed in lite mode with its shorter hall and
-   * fewer voices, for the rest of the session. Twice now, in two different
-   * flags, which is the sign the comparison was the wrong question.
-   *
-   * Recording the fact directly cannot be erased by anything the player does,
-   * and recovery still restores towards whatever the preference says *now*.
-   */
-  private shedding = false;
+  /** When to give something up, and when to take it back. See `adaptive.ts`. */
+  private readonly adaptive = new Adaptive();
+  /** Pending coalesced resize, if any. See `queueResize`. */
+  private resizeRaf = 0;
+  /** Time owed to the backdrop since it was last drawn. See `draw`. */
+  private idleDt = 0;
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, overlayRoot: HTMLElement) {
     this.canvas = canvas;
@@ -130,11 +129,49 @@ export class Shell {
     });
 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    this.seedRung();
+    window.addEventListener('resize', () => this.queueResize());
     this.wireAudioUnlock();
     this.wirePointer();
     this.wireKeys();
     this.input.keyboard.attach(window);
+  }
+
+  /**
+   * Where to start the ladder on a machine that has never run this before.
+   *
+   * The measured controller is the real answer and is only a few seconds
+   * behind; this exists so a weak machine does not spend those seconds
+   * stuttering through the home screen before anything has been shed. It is
+   * capped well short of the resolution rungs, because guessing a capable
+   * machine into a soft picture is a worse first impression than the stutter.
+   *
+   * Only ever on a genuinely first run. Once the player has a stored quality
+   * setting -- which they get the moment they touch anything in Display, and
+   * which the controller does not write -- their choice stands, and a guess
+   * from a coarse thread count has no business overruling it.
+   */
+  private seedRung(): void {
+    // Whatever the sound was left on, whether or not the ladder moves below.
+    // It used to be applied only as a side effect of `shedTo`, so a stored
+    // Lite started as Full on a capable machine, and a stored Full started as
+    // Lite on one reporting four threads, until something happened to move the
+    // rung.
+    this.applySoundPreset();
+
+    // A pinned preset is a decision, and it has to be put back on the ladder
+    // at startup or the panel says Low while the picture is High -- the
+    // controller will not move it afterwards, precisely because it is pinned.
+    const preset = perfSettings().graphics;
+    if (preset !== 'auto') { this.shedTo(PRESET_RUNG[preset], 0); return; }
+
+    // Once, ever, and recorded as such. Whatever the controller settled on
+    // last session is a measurement of this machine; the hint is a guess about
+    // it, and a guess does not get to overrule a measurement every morning.
+    if (perfSettings().seeded) return;
+    setPerfSettings({ seeded: true });
+    const rung = seedRung(readDeviceHints(this.stage.cssW * this.stage.cssH * this.stage.dpr * this.stage.dpr));
+    if (rung > 0) this.shedTo(rung, 6);
   }
 
   // ---------------------------------------------------------------- boot ---
@@ -166,6 +203,12 @@ export class Shell {
     if (this.modeId === id && this.active) return;
     const factory = FACTORIES[id];
     if (!factory) return;
+
+    // A new mode is a new workload, so what the ladder learned about the old
+    // one no longer applies. Without this, a floor earned during a heavy
+    // multiball followed the player into Freestyle and held it permanently
+    // degraded with both signals showing plenty of room.
+    this.forgetMeasurements();
 
     this.active?.exit();
     this.active = null;
@@ -363,7 +406,26 @@ export class Shell {
     resetPinballSettings();
     resetThemeSettings();
     this.setTheme(currentTheme());
+    resetPerfSettings();
     this.stage.resetSettings();
+    // Back to rung zero and back to being measured, not merely back to the
+    // default preset: a reset that left the ladder where it was would leave the
+    // panel saying one thing and the picture showing another.
+    this.forgetMeasurements();
+    this.adaptive.hold(1);
+    // `stage.resetSettings` has already put the rung and the recorded scale
+    // back, so `shedTo` would see no transition and return before doing any of
+    // what a rung change normally carries with it. Both of its side effects are
+    // therefore applied here instead.
+    //
+    // The canvas, or it would sit at 0.85 or 0.72 scale while the panel
+    // reported full quality, until some unrelated window resize corrected it.
+    // Free when the size has not actually changed.
+    this.resize();
+    // And the sound, or a session reset out of Lite would stay lite -- the
+    // preset says Auto, the rung says zero, and the engine went on with the
+    // short hall and single unison voices.
+    this.applySoundPreset();
     this.remapKeys();
     this.applyModeSettings();
     this.refreshStatus(this.input.midi.status);
@@ -393,6 +455,12 @@ export class Shell {
     this.stage.theme = theme;
     applyTheme(theme);
     this.stage.invalidate();
+    // A theme is a workload. Toybox draws neither the floor light nor the
+    // grade, so two of the ladder's rungs do nothing there and the frame is
+    // cheaper throughout -- which means what the controller learned under
+    // Nocturne is not true here. Without this, a floor earned on the expensive
+    // theme followed the player to the cheap one and kept bloom off for good.
+    this.forgetMeasurements();
   }
 
   /** The keybed range changed; every built mode has to follow. */
@@ -417,13 +485,39 @@ export class Shell {
   private draw(alpha: number, frameDt: number): void {
     this.loop.timeScale = this.active?.timeScale ?? 1;
     this.adaptQuality(frameDt);
-    this.active?.draw(alpha, frameDt);
+
+    // Behind a panel the table is a backdrop under a seven-pixel blur, and the
+    // compositor re-blurs the whole canvas every time it changes. Something has
+    // to keep moving there — a frozen board reads as a crash, which is why the
+    // attract mode exists at all — but it does not have to move sixty times a
+    // second, and this is the *first* thing the app is asked to do: the home
+    // screen is up before the player has touched anything.
+    //
+    // Only `draw` is held back. The HUD and the panel still update every frame,
+    // and the simulation is on the loop's other callback, so nothing about the
+    // run changes — just how often the picture behind the glass is repainted.
+    this.idleDt += frameDt;
+    const idling = this.overlay.visible;
+    if (!idling || this.idleDt >= IDLE_FRAME) {
+      // The accumulated time, not this frame's slice. `beginFrame` advances the
+      // stage clock, the particles and the shake decay by whatever it is given,
+      // so passing one frame's worth on every third frame would run the whole
+      // backdrop at a third speed.
+      this.active?.draw(alpha, this.idleDt);
+      this.idleDt = 0;
+    }
     this.active?.hud();
     this.hud.update({
       fps: this.loop.stats.fps,
       stepMs: this.loop.stats.stepMs,
       drawMs: this.loop.stats.drawMs,
-      extra: this.active?.debugLines?.(),
+      // Only when something is going to read it. A mode's debug lines walk its
+      // live particles and build a handful of strings, and the readout they go
+      // to is off unless someone has pressed F3.
+      extra: this.hud.showFps
+        ? `${this.qualityLine()}
+${this.active?.debugLines?.() ?? ''}`
+        : undefined,
     });
     if (this.overlay.visible) this.overlay.update();
     // Typing in a panel — or arrowing through a control in the HUD — must not
@@ -439,62 +533,109 @@ export class Shell {
    * Adaptive quality.
    *
    * Rather than guessing what the machine can do, watch what it actually
-   * manages and shed the expensive effects only when the frame budget is
-   * genuinely under pressure.
-   */
-  /**
-   * Everything that happens whichever rung of the ladder fires.
+   * manages and give up the expensive things only when the frame is genuinely
+   * not fitting -- one rung at a time, worst-looking loss last.
    *
-   * The particle cap used to live in the bloom branch alone, so a session that
-   * already had Bloom off by preference shed pools and then shadows and went on
-   * stepping and drawing all fourteen hundred particles — the one cost on the
-   * list that no quality flag gates, and so the one that is always there to
-   * give back. Capping particles is not a bloom setting; it is what shedding
-   * means, and it belongs where the other three lines already were.
+   * Two signals, because either one alone lies. `stepMs + drawMs` is what this
+   * code costs, and it misses everything the browser does afterwards:
+   * compositing, style, paint, garbage collection. A machine falling over on
+   * GPU compositing -- which is exactly what old integrated graphics does --
+   * reports a comfortable number here and would never shed. `frameMs` is the
+   * wall-clock gap between frames and catches all of it, but on its own it says
+   * nothing about headroom: a healthy 60Hz display sits at a flat 16.7ms
+   * whether the frame took one millisecond or fifteen.
+   *
+   * So: shed when either says the frame is late, and climb back only when both
+   * say it is not.
    */
-  private shed(): void {
-    this.stage.particles.budget = SHED_PARTICLES;
-    this.shedding = true;
-    this.qualityHeld = 3;
-    // The sound sheds its own expensive effects on the same signal.
-    this.audio.setLite(true);
-  }
-
   private adaptQuality(dt: number): void {
     const s = this.loop.stats;
-    const q = this.stage.quality;
-    const want = this.stage.preferredQuality;
-    this.frameAvg += ((s.stepMs + s.drawMs) - this.frameAvg) * Math.min(1, dt * 4);
-    this.qualityHeld -= dt;
-    if (this.qualityHeld > 0) return;
-    if (this.frameAvg > 13 && q.bloom) {
-      q.bloom = false;
-      this.shed();
-    } else if (this.frameAvg > 13 && q.pools && this.stage.theme.pool !== null) {
-      // Between bloom and shadows: the floor light costs fill rate rather than
-      // geometry, so it is the next thing worth giving back on a machine that
-      // is struggling, and the last thing anyone notices going.
-      //
-      // Only where the theme actually draws one, though. Toybox wants no floor
-      // light at all, so turning the flag off there would give nothing back and
-      // still spend a three-second hold doing it — three seconds in which the
-      // frame stays over budget and shadows, the next thing that would really
-      // help, go untouched.
-      q.pools = false;
-      this.shed();
-    } else if (this.frameAvg > 13 && q.shadows) {
-      q.shadows = false;
-      this.shed();
-    } else if (this.frameAvg < 7 && this.shedding) {
-      q.bloom = want.bloom;
-      q.shadows = want.shadows;
-      q.pools = want.pools;
-      this.stage.particles.budget = want.particles;
-      this.shedding = false;
-      this.qualityHeld = 6;
-      this.audio.setLite(false);
-    }
+    const target = this.adaptive.update(
+      { stepMs: s.stepMs, drawMs: s.drawMs, frameMs: s.frameMs, dt },
+      {
+        rung: this.stage.rung,
+        auto: perfSettings().graphics === 'auto',
+        // A panel is up, or this is not the window being played.
+        idle: this.overlay.visible || !this.focused,
+        nextEffective: (from) => this.nextEffectiveRung(from),
+      },
+    );
+    if (target !== null) this.shedTo(target);
   }
+
+  /**
+   * The next rung down that would actually change what is drawn.
+   *
+   * A rung can be inert for two reasons: the player has already turned that
+   * effect off by hand, or the theme never draws it -- Toybox sets `pool` to
+   * null, so shedding the floor light there gives nothing back. Stepping onto
+   * one of those still costs a three-second hold, during which the frame stays
+   * over budget and the next rung that *would* have helped goes untouched. The
+   * old two-rung pass had a hand-written guard for exactly the Toybox case;
+   * replacing it with a ladder dropped that, and this is it generalised.
+   */
+  private nextEffectiveRung(from: number): number {
+    const pref = this.stage.preferredQuality;
+    const now = derive(pref, from);
+    for (let r = from + 1; r <= MAX_RUNG; r++) {
+      const next = derive(pref, r);
+      if (now.bloom !== next.bloom || now.shadows !== next.shadows
+        || now.roll !== next.roll || now.particles !== next.particles
+        || now.renderScale !== next.renderScale) return r;
+      // These two exist only where the theme draws them.
+      if (now.pools !== next.pools && this.stage.theme.pool !== null) return r;
+      if (now.grade !== next.grade && this.stage.theme.grade) return r;
+    }
+    return MAX_RUNG;
+  }
+
+  /** What the ladder is currently giving up, for the F3 readout. */
+  private qualityLine(): string {
+    const q = this.stage.quality;
+    const scale = q.renderScale === 1 ? '' : ` @${q.renderScale.toFixed(2)}`;
+    return `q ${this.stage.rung}/${MAX_RUNG}${scale} ${rungLabel(this.stage.rung)}`;
+  }
+
+  /** Move the ladder, and everything that follows from where it lands. */
+  private shedTo(rung: number, hold = 3): void {
+    const from = this.stage.rung;
+    const rescale = this.stage.setRung(rung);
+    if (!rescale && from === this.stage.rung) return;
+    if (rescale) this.resize();
+    this.adaptive.hold(hold);
+    this.applySoundPreset();
+  }
+
+  /**
+   * Whether the sound is running lite.
+   *
+   * On `auto` it follows the ladder: the sound gives up its long hall and its
+   * unison voices once the picture has already given up enough that the
+   * machine is clearly the problem. Pinned either way, the player has said,
+   * and a player who would rather keep the hall and lose frames is entitled to.
+   */
+  private applySoundPreset(): void {
+    const pref = perfSettings().sound;
+    this.audio.setLite(pref === 'lite' || (pref === 'auto' && this.stage.rung >= LITE_AUDIO_RUNG));
+  }
+
+  /** Apply a graphics preset: pin the ladder, or hand it back to the measurement. */
+  setGraphicsPreset(preset: GraphicsPreset): void {
+    setPerfSettings({ graphics: preset });
+    this.forgetMeasurements();
+    if (preset !== 'auto') this.shedTo(PRESET_RUNG[preset], 0);
+    else this.adaptive.hold(1);
+  }
+
+  setSoundPreset(preset: SoundPreset): void {
+    setPerfSettings({ sound: preset });
+    this.applySoundPreset();
+  }
+
+  get graphicsPreset(): GraphicsPreset { return perfSettings().graphics; }
+  get soundPreset(): SoundPreset { return perfSettings().sound; }
+  /** What the ladder is giving up right now, for the settings panel. */
+  get qualitySummary(): string { return rungLabel(this.stage.rung); }
 
   /** True while the keyboard belongs to an on-screen control rather than the piano. */
   private hudHasFocus(): boolean {
@@ -507,9 +648,47 @@ export class Shell {
    * to, and the old cap of 2 left the table visibly soft on one. Nothing sheds
    * this later: the adaptive pass drops effects under load, never resolution.
    */
+  /**
+   * Forget what was measured, and what was concluded from it.
+   *
+   * The failure latch is the important half: it exists to stop a machine
+   * flickering between two pictures it cannot decide between, and that is only
+   * ever true of one workload. Carried across a change of workload it becomes
+   * a permanent verdict on a question nobody asked again.
+   */
+  private forgetMeasurements(): void { this.adaptive.forget(); }
+
   private resize(): void {
     const cssW = window.innerWidth, cssH = window.innerHeight;
-    this.stage.resize(cssW, cssH, backingDensity(cssW, cssH, window.devicePixelRatio));
+    // A resize is the one event that can mean a different display, which is
+    // the only thing the refresh estimate is trying to describe. It never
+    // rises on its own, so this is where it gets to.
+    this.adaptive.resetRefresh();
+    this.adaptive.disturb();
+    // The ladder's last rungs come through here. A backing store is the one
+    // thing every full-frame pass is priced in, so scaling it is the only lever
+    // that makes the void fill, the baked blit, the emissive clear, the bloom
+    // pyramid and the three composites all cheaper at once. The canvas keeps
+    // its CSS size, so nothing moves and the compositor upscales for free.
+    const density = backingDensity(cssW, cssH, window.devicePixelRatio);
+    this.stage.resize(cssW, cssH, density * this.stage.quality.renderScale);
+  }
+
+  /**
+   * One resize per frame at most.
+   *
+   * Dragging a window edge fires `resize` continuously, and each one used to
+   * reallocate five canvases and force a full re-bake -- 2,600 grain dots, the
+   * brushed arcs and every wall, all to be thrown away by the next event a few
+   * milliseconds later. Coalescing onto a frame keeps the last size, which is
+   * the only one that was ever going to be kept.
+   */
+  private queueResize(): void {
+    if (this.resizeRaf) return;
+    this.resizeRaf = requestAnimationFrame(() => {
+      this.resizeRaf = 0;
+      this.resize();
+    });
   }
 
   // --------------------------------------------------------------- audio ---

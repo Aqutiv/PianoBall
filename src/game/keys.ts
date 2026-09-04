@@ -165,9 +165,20 @@ export class KeyDeck<K extends KeyLit = KeyLit> {
         next = k.pos * Math.max(0, 1 - dt / t.release);
         if (next < 0.01) next = 0;
       }
+      // A key that was already still and stays still has nothing to place:
+      // the capsule, the pivot and the kick all come out exactly where the
+      // last `place` left them. Thirty-two keys re-placed at 240 Hz is seven
+      // and a half thousand identical AABB rebuilds a second, almost all of
+      // them for keys nobody is touching.
+      //
+      // The old `rate` is part of the test, not just the position. A key that
+      // reached zero on the *previous* step still has that step's fall in
+      // `paddle.vel`, and it takes one more `place` at rate zero to clear it;
+      // skipping that one would leave the paddle claiming to be moving.
+      const still = !k.down && k.pos === 0 && next === 0 && k.rate === 0;
       k.rate = dt > 0 ? (next - k.pos) / dt : 0;
       k.pos = next;
-      this.place(k);
+      if (!still) this.place(k);
     }
   }
 
