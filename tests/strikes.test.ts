@@ -293,6 +293,27 @@ describe('the ball on the table', () => {
     expect(hits[0].glance).toBeCloseTo(1, 6);
   });
 
+  it('lets a harder strike through inside the graze window', () => {
+    // The gap must never swallow the second bumper of a real rally, so beating
+    // the last strike by half again is always worth its own sound.
+    const { hits, game } = rig();
+    game.bus.emit('impact', contact({ energy: 300 }));
+    game.bus.emit('impact', contact({ energy: 320 }));   // barely harder: dropped
+    expect(hits).toHaveLength(1);
+    game.bus.emit('impact', contact({ energy: 900 }));   // three times harder: kept
+    expect(hits).toHaveLength(2);
+  });
+
+  it('does not let one surface silence another', () => {
+    // A ball rattling between a post and a rail is two sounds and both belong;
+    // only a repeat of the *same* surface is a graze.
+    const { hits, game } = rig();
+    game.bus.emit('impact', contact({ sound: 'rubber', energy: 400 }));
+    game.bus.emit('impact', contact({ sound: 'metal', energy: 400 }));
+    game.bus.emit('impact', contact({ sound: 'rubber', energy: 400 }));
+    expect(hits.map((h) => h.tag)).toEqual(['rubber', 'metal']);
+  });
+
   it('tells a graze from a square hit by the slide', () => {
     const { hits, game } = rig();
     game.bus.emit('impact', contact({ energy: 300, slide: 900 }));
@@ -333,7 +354,11 @@ describe('the ball on the table', () => {
     game.bus.emit('impact', graze);
     game.bus.emit('impact', graze);
     game.bus.emit('impact', graze);
-    expect(hits).toHaveLength(3);
+    // One struck sound, not three. A ball skimming a rail clears the impact
+    // threshold on every step of the solver, and every one of those used to
+    // ring the surface again -- a couple of hundred bursts a second from a
+    // ball that is, to look at, rolling along a wall.
+    expect(hits).toHaveLength(1);
     expect(scrapes).toHaveLength(1);
     expect(scrapes[0].slide).toBe(900);
     engine.now += 0.1;

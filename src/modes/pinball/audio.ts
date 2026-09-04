@@ -24,6 +24,27 @@ import { strikeFor } from './strikes';
 const SCRAPE_MIN = 300;
 const SCRAPE_RATIO = 2.5;
 const SCRAPE_GAP = 0.08;
+/**
+ * Softest impact that can retrigger a struck sound on the same ball, as a
+ * multiple of the one before it, and how long that holds.
+ *
+ * A ball resting against a rail or skimming a curve clears the impact threshold
+ * on the normal on *every* 240 Hz step, and each one used to fire a full
+ * surface hit -- up to a couple of hundred noise-through-resonator bursts a
+ * second from one ball that is, to look at, simply rolling along a wall. The
+ * shot budget then cut the oldest of them short every few milliseconds, which
+ * is amplitude-modulated noise rather than a table.
+ *
+ * Held per ball *and per surface*, not per ball: a ball rattling between a post
+ * and a rail is two different sounds and both belong, where a ball skimming one
+ * rail is one sound arriving two hundred times. And a harder strike always gets
+ * through regardless, so the second bumper of a real rally is never the one
+ * that goes missing: within the window a hit has to beat the last one by half
+ * again to earn its own sound. What is dropped is the tail of a graze, which
+ * was never a separate event in the first place.
+ */
+const HIT_GAP = 0.035;
+const HIT_LOUDER = 1.5;
 
 /** A key press that landed on the beat. */
 export interface GrooveHit {
@@ -61,6 +82,8 @@ export class PinballAudio {
   private readonly seen = new Set<number>();
   /** When each ball last scraped, so a long graze is one scrape and not forty. */
   private readonly scraped = new Map<number, number>();
+  /** When each ball last struck each surface, and how hard. See `HIT_GAP`. */
+  private readonly struck = new Map<string, { at: number; energy: number }>();
 
   constructor(
     private readonly engine: AudioEngine,
@@ -139,6 +162,7 @@ export class PinballAudio {
       handle.stop();
       this.rolls.delete(id);
       this.scraped.delete(id);
+      for (const k of this.struck.keys()) if (k.startsWith(`${id}:`)) this.struck.delete(k);
     }
   }
 
@@ -146,6 +170,7 @@ export class PinballAudio {
     for (const handle of this.rolls.values()) handle.stop();
     this.rolls.clear();
     this.scraped.clear();
+    this.struck.clear();
   }
 
   /** Back to whatever rung the table is on, drums included. */
@@ -213,7 +238,20 @@ export class PinballAudio {
       }
       const depth = this.depth(y);
       const glance = energy / Math.max(1e-6, Math.hypot(energy, slide));
-      engine.hit(sound, energy, { pan, depth, glance, note });
+      // Ball, surface *and* note. Every key on the keybed is the same `key`
+      // surface, so a ball running along it strikes a different note each time
+      // through one tag -- and keying on the tag alone silenced half of them.
+      // A graze is a repeat of one surface at one pitch; anything else is a
+      // separate event and keeps its own sound.
+      const key = `${ball}:${sound}:${note ?? ''}`;
+      const last = this.struck.get(key);
+      const fresh = !last
+        || engine.now - last.at >= HIT_GAP
+        || energy >= last.energy * HIT_LOUDER;
+      if (fresh) {
+        this.struck.set(key, { at: engine.now, energy });
+        engine.hit(sound, energy, { pan, depth, glance, note });
+      }
       // A graze — far more sliding than striking — scrapes as well, but a
       // ball skimming a rail touches it every step, and that is one scrape.
       if (slide > SCRAPE_MIN && slide > SCRAPE_RATIO * energy) {
