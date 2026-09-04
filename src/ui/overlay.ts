@@ -136,6 +136,17 @@ export class Overlay {
     } else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
       this.cursor = (this.cursor - 1 + modes.length) % modes.length;
     } else if (e.code === 'Enter' || e.code === 'Space') {
+      // Enter and Space are how a focused button is pressed, so while one has
+      // the keyboard they belong to it rather than to the mode cards. Without
+      // this, tabbing to Settings or About and pressing Enter started the
+      // highlighted mode first and opened the panel over the run — and Back
+      // from there led to a pause screen for a game nobody asked to play. A
+      // focused mode card is the same bug quietly: it would start whichever
+      // mode the cursor was on rather than the one under the finger.
+      //
+      // Only these two keys. The arrows and digits below are not how a button
+      // is activated, so they stay shortcuts wherever the focus happens to be.
+      if (this.hasControlFocus()) return;
       this.shell.play(modes[this.cursor].id);
       return;
     } else if (/^Digit[1-9]$/.test(e.code)) {
@@ -148,6 +159,17 @@ export class Overlay {
     e.preventDefault();
     const cards = this.body.querySelectorAll('.mode-card');
     cards.forEach((el, i) => el.classList.toggle('on', i === this.cursor));
+  }
+
+  /**
+   * True while a control in the panel has the keyboard.
+   *
+   * The same claim `Shell.hudHasFocus` makes for the HUD, on the other piece
+   * of chrome that can hold focus.
+   */
+  private hasControlFocus(): boolean {
+    const el = document.activeElement;
+    return el !== null && el !== document.body && this.body.contains(el);
   }
 
   private deviceLine(): string {
