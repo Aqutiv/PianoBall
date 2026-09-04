@@ -32,6 +32,41 @@ export function installDebugApi(shell: Shell): void {
     /** Peak, RMS and what the compressor did to get there. */
     measure: (seconds = 2, silent = true) => shell.audio.measure(seconds, { silent }),
     /**
+     * `n` rolling balls, at a fixed speed, with no game underneath them.
+     *
+     * The roll is the app's only continuous sound and so the whole of the
+     * reported whoosh, but measuring it through the table proved useless: the
+     * level depends on ball speed, on where each ball is (which sets `depth`),
+     * and on the slow-motion time scale, and all three differ every run. Three
+     * repeats of the same scene came out eight times apart.
+     *
+     * So this drives the engine directly and holds every input still. It is the
+     * only way to say whether a change to `roll` made it quieter.
+     */
+    rollBench: async (n = 4, speed = 1500, seconds = 1.5, share = 1 / Math.sqrt(Math.max(1, n))) => {
+      await shell.startAudio();
+      // Away from the table first. Pinball's attract mode rolls balls of its
+      // own, and `hush` cannot stop a roll -- rolls are not in the shot budget
+      // -- so measuring here would add the table's rolls to the ones under
+      // test, and leave them behind in the floor reading afterwards.
+      shell.play('freestyle');
+      shell.bed.stop();
+      shell.audio.hush();
+      await new Promise((done) => setTimeout(done, 300));
+      const handles = Array.from({ length: n }, () => shell.audio.roll());
+      // Driven for a moment first: the gain is smoothed with a 50 ms time
+      // constant and would otherwise still be climbing when the window opens.
+      for (let i = 0; i < 12; i++) {
+        for (const h of handles) h.update(speed, share, 0, 0);
+        await new Promise((done) => setTimeout(done, 25));
+      }
+      const on = await shell.audio.measure(seconds, { silent: true });
+      for (const h of handles) h.stop();
+      await new Promise((done) => setTimeout(done, 400));
+      const off = await shell.audio.measure(0.5, { silent: true });
+      return { n, speed, share, rms: on.rms, peak: on.peak, floorRms: off.rms };
+    },
+    /**
      * The same six scenes, measured the same way, every time.
      *
      * Three audio faults were reported from play — a continuous whoosh in
@@ -79,6 +114,11 @@ export function installDebugApi(shell: Shell): void {
       // Pinball, idling in attract behind nothing: this is the state the
       // whoosh was reported in, and it has no music over it to hide behind.
       shell.play('pinball');
+      // Explicitly, because `restartMode` does not: it leaves the mode's audio
+      // paused and relies on the panel closing to resume it. An audit that
+      // never opens a panel would otherwise measure a table with no rolls at
+      // all -- which is how this line came to be written.
+      shell.overlay.hide();
       await settle();
       out.attract = await shell.audio.measure(seconds, { silent: true });
 
@@ -105,7 +145,14 @@ export function installDebugApi(shell: Shell): void {
       shell.audio.hush();
       const wasSuspended = shell.suspended;
       shell.suspended = true;
+      // Pinned velocities, or this reading is not comparable with itself.
+      // A roll's level is a function of ball speed, and freezing the
+      // simulation freezes whatever speeds the balls happened to have — which
+      // differ every run, and swamp the effect of any change being measured.
+      const frozen = pinball()?.game.world.balls ?? [];
+      for (const b of frozen) { b.v.x = 900; b.v.y = -1200; }
       await settle();
+      out.rollBalls = frozen.length;
       out.rollsOn = await shell.audio.measure(seconds, { silent: true });
 
       const world = pinball()?.game.world;

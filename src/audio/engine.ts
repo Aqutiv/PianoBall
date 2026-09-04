@@ -243,16 +243,33 @@ export interface MixReading {
 }
 
 export interface RollHandle {
-  /** `speed` in table units a second, `contact` how much of the ball is on the table, 0..1. */
-  update(speed: number, contact: number, pan: number, depth: number): void;
+  /**
+   * `speed` in table units a second, `pan` and `depth` where the ball is.
+   *
+   * `share` is this ball's portion of the one roll the table is allowed to
+   * make. It used to be `contact`, "how much of the ball is on the table" --
+   * which is meaningless in a simulation that never leaves the plane, and so
+   * was passed a hardcoded 1 by its only caller for as long as it existed.
+   * Rolls now sum to about one ball's worth however many are on the table,
+   * which is what stops multiball turning into four times the hiss.
+   */
+  update(speed: number, share: number, pan: number, depth: number): void;
   stop(): void;
 }
 
 /** A roll that never reached the graph. */
 const NO_ROLL: RollHandle = { update() {}, stop() {} };
 
-/** Speed at which a roll is as loud as it gets, and how loud that is. */
-const ROLL_FULL = 1800;
+/**
+ * Speed at which a roll is as loud as it gets, and how loud that is.
+ *
+ * `ROLL_FULL` used to be 1800 against a world `maxSpeed` of 3600, so a ball at
+ * half speed was already at the ceiling and everything above that sounded
+ * identical -- the roll spent an ordinary rally pinned flat, which is where the
+ * "one unwavering pitch" in the complaint came from. At the top speed the
+ * physics can actually produce, the roll now still has somewhere to go.
+ */
+const ROLL_FULL = 3200;
 const ROLL_GAIN = 0.12;
 /** Sliding speed at which a scrape is as loud as it gets, and how loud that is. */
 const SCRAPE_FULL = 1800;
@@ -2158,17 +2175,30 @@ export class AudioEngine {
     const panner = ctx.createStereoPanner();
     src.connect(hp).connect(bp).connect(g).connect(panner);
     panner.connect(this.fxBus);
+    // The cabinet send, well down from where it was.
+    //
+    // `CAB` carries a 420 Hz resonance, and convolving *continuous* noise with
+    // a resonant impulse puts a steady tone on top of the hiss. Every other
+    // caller of this send is a one-shot, which is over before the resonance can
+    // establish itself; the roll is the only thing that ever drives it without
+    // stopping, and that tone is the "hum" half of the complaint. Kept rather
+    // than cut, because a ball should sound like it is inside a box -- but at a
+    // quarter of what it was.
     const box = ctx.createGain();
-    box.gain.value = 0.4;
+    box.gain.value = 0.1;
     panner.connect(box).connect(this.cabSend);
-    src.start();
+    // Every other noise user in this file starts somewhere random in the
+    // buffer; this one did not. Four rolls opened in the same frame -- which is
+    // what a multiball spawn is -- therefore played *identical* noise and summed
+    // coherently, at four times the amplitude instead of twice.
+    src.start(ctx.currentTime, Math.random() * 0.9);
     let stopped = false;
     return {
-      update: (speed, contact, pan, depth) => {
+      update: (speed, share, pan, depth) => {
         if (stopped) return;
         const t = ctx.currentTime;
         const s = clamp01(speed / ROLL_FULL);
-        const level = Math.pow(s, 1.3) * clamp01(contact) * ROLL_GAIN * (1 - 0.35 * clamp01(depth));
+        const level = Math.pow(s, 1.3) * clamp01(share) * ROLL_GAIN * (1 - 0.35 * clamp01(depth));
         g.gain.setTargetAtTime(level, t, 0.05);
         bp.frequency.setTargetAtTime(300 + 1500 * s, t, 0.08);
         panner.pan.setTargetAtTime(clamp(pan, -1, 1), t, 0.05);

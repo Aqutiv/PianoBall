@@ -115,6 +115,10 @@ export class PinballAudio {
     const game = this.game;
     const seen = this.seen;
     seen.clear();
+    // Incoherent sources sum in power, so N of them at 1/sqrt(N) each come to
+    // one ball's worth however many are rolling. Without this, multiball was
+    // four separate continuous noise sources and sounded like it.
+    const share = 1 / Math.sqrt(Math.max(1, game.balls.length));
     for (const ball of game.balls) {
       if (!ball.alive) continue;
       seen.add(ball.id);
@@ -128,7 +132,7 @@ export class PinballAudio {
         this.rolls.set(ball.id, handle);
       }
       const speed = Math.hypot(ball.v.x, ball.v.y) * game.timeScale;
-      handle.update(speed, 1, this.pan(ball.p.x), this.depth(ball.p.y));
+      handle.update(speed, share, this.pan(ball.p.x), this.depth(ball.p.y));
     }
     for (const [id, handle] of this.rolls) {
       if (seen.has(id)) continue;
