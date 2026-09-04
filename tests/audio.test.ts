@@ -232,7 +232,7 @@ describe('switching the bed on', () => {
  * comped bar lands on its beats, and that a change never lands mid-bar.
  */
 describe("the loop's pattern", () => {
-  interface Pad { notes: number[]; seconds: number; gain: number; at: number }
+  interface Pad { notes: number[]; seconds: number; gain: number; at: number; attack: number }
   const BAR = (60 / AURORA.music.bpm) * 4;
   const BEAT = BAR / 4;
 
@@ -241,9 +241,10 @@ describe("the loop's pattern", () => {
     const engine = {
       running: true,
       now: 0,
+      bedVoice: 'warm',
       settings: { bed: true },
-      pad: (notes: number[], seconds: number, gain: number, at: number) => {
-        pads.push({ notes, seconds, gain, at });
+      pad: (notes: number[], seconds: number, gain: number, at: number, attack: number) => {
+        pads.push({ notes, seconds, gain, at, attack });
       },
       setBedAudible: () => {},
     };
@@ -368,6 +369,25 @@ describe("the loop's pattern", () => {
     expect(first).toHaveLength(5);
     const stabs = first.filter((p) => p.notes.length > 1).map((p) => p.at / BEAT);
     expect(stabs.map((s) => Math.round(s * 1000) / 1000)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('uses natural plucked tails instead of stacking a wash beside them', () => {
+    const sustained = harness();
+    sustained.bed.setLoopPattern('pulse');
+    sustained.tick();
+    sustained.bar();
+    const withWash = sustained.pads.filter((p) => p.at < BAR - 1e-6);
+    expect(withWash).toHaveLength(7);
+    expect(withWash.filter((p) => p.attack >= p.seconds * 0.2)).toHaveLength(2);
+
+    const plucked = harness();
+    plucked.engine.bedVoice = 'nylon-guitar';
+    plucked.bed.setLoopPattern('pulse');
+    plucked.tick();
+    plucked.bar();
+    const naturalTails = plucked.pads.filter((p) => p.at < BAR - 1e-6);
+    expect(naturalTails).toHaveLength(5);
+    expect(naturalTails.every((p) => p.attack < p.seconds * 0.2)).toBe(true);
   });
 
   it('changes on the next bar line, never in the middle of a bar', () => {

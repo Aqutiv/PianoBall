@@ -1113,6 +1113,11 @@ export class AudioEngine {
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     const amp = ctx.createGain();
+    // AudioScheduledSourceNode.start() is called while the rest of the voice is
+    // still being assembled. Mute the fresh chain immediately, before it is
+    // connected, so a busy audio thread cannot render a quantum at GainNode's
+    // default gain of one before applyEnvelope() schedules the attack.
+    amp.gain.value = 0.0001;
     const panner = ctx.createStereoPanner();
     panner.pan.value = clamp(pan, -1, 1) * width;
     // Tremolo wants a gain of its own to swing about one: summed onto the

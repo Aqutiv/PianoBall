@@ -1,13 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import { holdAtTime } from '../src/audio/automation';
 import { AudioEngine } from '../src/audio/engine';
+import { findBedVoice } from '../src/audio/voices';
 
 interface FakeParam {
   value: number;
   cancelAndHoldAtTime: ReturnType<typeof vi.fn>;
   cancelScheduledValues: ReturnType<typeof vi.fn>;
   exponentialRampToValueAtTime: ReturnType<typeof vi.fn>;
+  linearRampToValueAtTime: ReturnType<typeof vi.fn>;
   setValueAtTime: ReturnType<typeof vi.fn>;
+  setTargetAtTime: ReturnType<typeof vi.fn>;
+}
+
+interface FakeNode {
+  connect: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+}
+
+interface FakeGainNode extends FakeNode {
+  gain: FakeParam;
+}
+
+interface FakeFilterNode extends FakeNode {
+  type: string;
+  frequency: FakeParam;
+  Q: { value: number };
 }
 
 interface FakeVoice {
@@ -41,14 +59,64 @@ interface EngineInternals {
   cull(): void;
 }
 
+interface GraphInternals {
+  leadOut: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', FakeNode>;
+  padDuck: FakeGainNode;
+  padGen: FakeNode;
+  lfoColour: FakeNode;
+  addLayer: ReturnType<typeof vi.fn>;
+}
+
 function param(value = 0.25): FakeParam {
   return {
     value,
     cancelAndHoldAtTime: vi.fn(),
     cancelScheduledValues: vi.fn(),
     exponentialRampToValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
     setValueAtTime: vi.fn(),
+    setTargetAtTime: vi.fn(),
   } as FakeParam;
+}
+
+function connectable<T extends object>(value: T): T & FakeNode {
+  return Object.assign(value, { connect: vi.fn((to: unknown) => to), disconnect: vi.fn() });
+}
+
+function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
+  const engine = new AudioEngine();
+  if (voices.lead) engine.setLeadVoice(voices.lead);
+  if (voices.bed) engine.setBedVoice(voices.bed);
+
+  const gains: FakeGainNode[] = [];
+  const filters: FakeFilterNode[] = [];
+  const ctx = {
+    currentTime: now,
+    state: 'running',
+    createBiquadFilter: vi.fn(() => {
+      const filter = connectable({ type: 'lowpass', frequency: param(), Q: { value: 0 } });
+      filters.push(filter);
+      return filter;
+    }),
+    createGain: vi.fn(() => {
+      const gain = connectable({ gain: param(1) });
+      gains.push(gain);
+      return gain;
+    }),
+    createStereoPanner: vi.fn(() => connectable({ pan: { value: 0 } })),
+  };
+  engine.ctx = ctx as unknown as AudioContext;
+  engine.ready = true;
+
+  const state = engine as unknown as EngineInternals & GraphInternals;
+  state.leadOut = {
+    dry: connectable({}), hall: connectable({}), cab: connectable({}),
+    delay: connectable({}), body: connectable({}),
+  };
+  state.padDuck = connectable({ gain: param(1) });
+  state.padGen = connectable({});
+  state.lfoColour = connectable({});
+  return { engine, state, gains, filters };
 }
 
 function voice(note: number, startedAt = 0, releasing = false, stopAt: number | null = null): FakeVoice {
@@ -110,6 +178,58 @@ describe('holding gain automation', () => {
     holdAtTime(gain, 4);
 
     expect(calls).toEqual(['read', 'cancel:4', 'set:0.23:4']);
+  });
+});
+
+describe('voice attack envelopes', () => {
+  it('starts a key chain silent before any voice layer can start', () => {
+    const { engine, state, gains } = graphHarness(1, { lead: 'sub-bass' });
+    const gainAtSourceStart: number[] = [];
+    state.addLayer = vi.fn(() => {
+      gainAtSourceStart.push(gains[0]!.gain.value);
+      return [];
+    });
+
+    engine.noteOn(60, 0.5);
+
+    expect(gainAtSourceStart.length).toBeGreaterThan(0);
+    expect(gainAtSourceStart.every((value) => value === 0.0001)).toBe(true);
+  });
+
+  it('keeps a slow plucked pad on its finite pluck envelope', () => {
+    const spec = findBedVoice('nylon-guitar').spec;
+    const { engine, state, gains, filters } = graphHarness(1, { bed: 'nylon-guitar' });
+    state.addLayer = vi.fn(() => [{ stop: vi.fn() }]);
+
+    engine.pad([60], 5, 0.1, 5, 1.75);
+
+    const gain = gains[0]!.gain;
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 5);
+    expect(gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.1 * spec.gain, 5.006);
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(2, 0.0001, 5 + spec.pluck!);
+
+    const frequency = filters[0]!.frequency;
+    expect(frequency.setValueAtTime).toHaveBeenCalledWith(spec.filter.startStruck, 5);
+    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, spec.filter.peakStruck, 5.02);
+    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(2, spec.filter.end, 5 + spec.pluck!);
+  });
+
+  it('keeps short plucked comp events struck', () => {
+    const spec = findBedVoice('nylon-guitar').spec;
+    const { engine, state, gains, filters } = graphHarness(1, { bed: 'nylon-guitar' });
+    state.addLayer = vi.fn(() => [{ stop: vi.fn() }]);
+
+    engine.pad([60], 2, 0.1, 5, 0.01);
+
+    const gain = gains[0]!.gain;
+    expect(gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.1 * spec.gain, 5.006);
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(2, 0.0001, 6.7);
+
+    const frequency = filters[0]!.frequency;
+    expect(frequency.setValueAtTime).toHaveBeenCalledWith(spec.filter.startStruck, 5);
+    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, spec.filter.peakStruck, 5.02);
   });
 });
 
