@@ -60,6 +60,16 @@ export class Shell {
    * tune cannot run on while the player is reading.
    */
   suspended = false;
+  /**
+   * Whether the window is the one being played.
+   *
+   * `blur` and `visibilitychange` both fire for a single switch away, and
+   * `focus` can arrive for a window that never lost it, so the transition is
+   * tracked rather than inferred: coming back puts sound down before opening
+   * the master, and doing that to a window that was never away would cut the
+   * menu's bed off mid-chord.
+   */
+  private focused = true;
   /** Filled in when a mode finishes a run, for the results screen. */
   lastResult: ModeResult | null = null;
 
@@ -243,6 +253,43 @@ export class Shell {
     this.pauseActive();
     this.hush();
     this.overlay.show('paused');
+  }
+
+  /**
+   * The window is no longer the one being played, so it stops making noise.
+   *
+   * A run pauses, which is what `suspend` has always done. The rest is what
+   * that missed: the menu's bed plays with no run under it, and a MIDI
+   * keyboard keeps delivering notes to a window that is not in front, so the
+   * player switching away and playing something else would still be heard.
+   * Everything sounding is put down and the master is held at zero, which
+   * also catches whatever a mode writes onto the audio clock after this.
+   */
+  private leaveFocus(): void {
+    if (!this.focused) return;
+    this.focused = false;
+    this.suspend();
+    this.hush();
+    this.audio.setMuted(true);
+  }
+
+  /**
+   * Back in front: the output opens again, and the menu gets its bed back.
+   *
+   * Not while playing — losing focus mid-run put the pause panel up, and
+   * nothing sounds behind that until the player resumes.
+   */
+  private enterFocus(): void {
+    if (this.focused) return;
+    this.focused = true;
+    // Web MIDI keeps delivering to a window that is not in front, and the mute
+    // is at the master rather than at the input: a mode still made voices for
+    // those notes, silently. So they are put down here, before the master
+    // opens — otherwise a key held on the controller while the player was
+    // elsewhere, or the release tail of one, comes up with it.
+    this.hush();
+    this.audio.setMuted(false);
+    if (!this.playing) this.wakeBed();
   }
 
   /**
@@ -496,10 +543,11 @@ export class Shell {
     // running, so anything timed against the audio clock would come back to a
     // run that carried on without it. Pause instead of returning to a ruin.
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.suspend();
-      else unlock();
+      if (document.hidden) this.leaveFocus();
+      else { unlock(); this.enterFocus(); }
     });
-    window.addEventListener('blur', () => this.suspend());
+    window.addEventListener('blur', () => this.leaveFocus());
+    window.addEventListener('focus', () => this.enterFocus());
     this.audio.onStateChange = () => this.refreshSound();
 
     // Controller messages that belong to the app rather than to a mode.

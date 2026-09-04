@@ -395,6 +395,16 @@ export class AudioEngine {
   /** Fired whenever the context starts or stops running, so the UI can react. */
   onStateChange: (() => void) | null = null;
 
+  /**
+   * Held silent while the window is not the one being played.
+   *
+   * A mute at the master rather than a suspended context: what the browser
+   * hands back after a suspend is a context the HUD has to call not running,
+   * and the player alt-tabbing away has not turned the sound off. The graph
+   * keeps its clock, so coming back is a ramp rather than a rebuild.
+   */
+  private muted = false;
+
   private master!: GainNode;
   private glue!: DynamicsCompressorNode;
   private clip!: WaveShaperNode;
@@ -559,6 +569,22 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Silence the output without putting anything down.
+   *
+   * The ramp is short but not instant: cutting a gain to zero on a sounding
+   * chord is a click, and the window losing focus should not be audible on
+   * the way out.
+   */
+  setMuted(on: boolean): void {
+    if (this.muted === on) return;
+    this.muted = on;
+    if (!this.ready || !this.ctx) return;
+    this.master.gain.setTargetAtTime(
+      on ? 0 : this.settings.master, this.ctx.currentTime, 0.015,
+    );
+  }
+
   private build(ctx: AudioContext): void {
     // The master chain. One compressor, and only one: Chromium's carries six
     // milliseconds of look-ahead, which this chain already pays once, and a
@@ -596,7 +622,7 @@ export class AudioEngine {
     rumble.connect(this.glue).connect(air).connect(preClip).connect(this.clip).connect(ctx.destination);
 
     this.master = ctx.createGain();
-    this.master.gain.value = this.settings.master;
+    this.master.gain.value = this.muted ? 0 : this.settings.master;
     this.master.connect(rumble);
 
     this.musicBus = ctx.createGain();
@@ -795,7 +821,7 @@ export class AudioEngine {
     // gain stepped sixty times a second is a staircase in the waveform.
     const t = this.ctx.currentTime;
     const to = (g: GainNode, value: number) => g.gain.setTargetAtTime(value, t, 0.02);
-    to(this.master, this.settings.master);
+    to(this.master, this.muted ? 0 : this.settings.master);
     to(this.musicBus, this.settings.music);
     to(this.fxBus, this.settings.effects);
     to(this.hallWet, REVERB_MAX * this.settings.reverb);
