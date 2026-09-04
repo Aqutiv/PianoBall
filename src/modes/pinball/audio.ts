@@ -82,8 +82,13 @@ export class PinballAudio {
   private readonly seen = new Set<number>();
   /** When each ball last scraped, so a long graze is one scrape and not forty. */
   private readonly scraped = new Map<number, number>();
-  /** When each ball last struck each surface, and how hard. See `HIT_GAP`. */
-  private readonly struck = new Map<string, { at: number; energy: number }>();
+  /**
+   * When each ball last struck each surface, and how hard. See `HIT_GAP`.
+   *
+   * Nested under the ball rather than flattened into one key, so retiring a
+   * ball is a single delete instead of a scan of every entry in the map.
+   */
+  private readonly struck = new Map<number, Map<string, { at: number; energy: number }>>();
 
   constructor(
     private readonly engine: AudioEngine,
@@ -161,9 +166,14 @@ export class PinballAudio {
       if (seen.has(id)) continue;
       handle.stop();
       this.rolls.delete(id);
-      this.scraped.delete(id);
-      for (const k of this.struck.keys()) if (k.startsWith(`${id}:`)) this.struck.delete(k);
     }
+    // Swept against the balls, not against the rolls. A ball that never got a
+    // handle -- every ball, while the audio context is still locked, which is
+    // exactly what attract mode is doing behind the landing screen -- was
+    // never retired from either of these, so they grew for as long as that
+    // screen stayed open and every drained ball left its entries behind.
+    for (const id of this.scraped.keys()) if (!seen.has(id)) this.scraped.delete(id);
+    for (const id of this.struck.keys()) if (!seen.has(id)) this.struck.delete(id);
   }
 
   private stopRolls(): void {
@@ -230,7 +240,7 @@ export class PinballAudio {
 
     // The ball meeting the table: the surface rung at its own modes, from
     // wherever on the table it happened, as square or as glancing as it was.
-    offs.push(bus.on('impact', ({ sound, energy, slide, kind, note, x, y, ball }) => {
+    offs.push(bus.on('impact', ({ sound, energy, slide, kind, note, x, y, ball, collider }) => {
       const pan = this.pan(x);
       if (kind === 'ball') {
         engine.mech('ballclick', clamp01(energy / 900), pan);
@@ -238,18 +248,23 @@ export class PinballAudio {
       }
       const depth = this.depth(y);
       const glance = energy / Math.max(1e-6, Math.hypot(energy, slide));
-      // Ball, surface *and* note. Every key on the keybed is the same `key`
-      // surface, so a ball running along it strikes a different note each time
-      // through one tag -- and keying on the tag alone silenced half of them.
-      // A graze is a repeat of one surface at one pitch; anything else is a
-      // separate event and keeps its own sound.
-      const key = `${ball}:${sound}:${note ?? ''}`;
-      const last = this.struck.get(key);
+      // The collider *and* the note, not just the sound tag. A tag is a
+      // material, not a thing: every post and rubber rail on the table is
+      // `rubber` with no note, and every key on the keybed is `key`, so a
+      // throttle keyed on the tag treats a rattle between two posts as one
+      // post struck twice. Keying on the tag alone silenced half the keybed;
+      // adding the note fixed that and left the note-less surfaces still
+      // sharing an identity. A graze is a repeat of *one* collider at one
+      // pitch; anything else is a separate event and keeps its own sound.
+      const key = `${sound}:${collider}:${note ?? ''}`;
+      let history = this.struck.get(ball);
+      if (!history) { history = new Map(); this.struck.set(ball, history); }
+      const last = history.get(key);
       const fresh = !last
         || engine.now - last.at >= HIT_GAP
         || energy >= last.energy * HIT_LOUDER;
       if (fresh) {
-        this.struck.set(key, { at: engine.now, energy });
+        history.set(key, { at: engine.now, energy });
         engine.hit(sound, energy, { pan, depth, glance, note });
       }
       // A graze — far more sliding than striking — scrapes as well, but a

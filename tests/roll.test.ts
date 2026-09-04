@@ -31,6 +31,12 @@ function rig(running = true) {
   const opened: FakeRoll[] = [];
   const engine = {
     get running() { return running; },
+    // The impact path runs whether or not the context is open, which is the
+    // subject of one of the tests below.
+    now: 10,
+    hit() {},
+    mech() {},
+    scrape() {},
     roll(): RollHandle {
       const h: FakeRoll = {
         stopped: false,
@@ -51,6 +57,7 @@ function rig(running = true) {
   const game = new Game(new InputHub(), AURORA, new MusicState({ ...AURORA.music }));
   game.active = true;
   const audio = new PinballAudio(engine, bed, game);
+  audio.attach();
   return {
     opened, game, audio,
     setRunning(v: boolean) { running = v; },
@@ -124,6 +131,30 @@ describe('the rolling ball', () => {
     r.setRunning(true);
     r.audio.frame();
     expect(r.live()).toHaveLength(1);
+  });
+
+  it('forgets a ball that never rolled, because the context was locked', () => {
+    // Attract mode plays behind the landing screen before anyone has clicked,
+    // so no ball there ever gets a roll handle -- and the per-ball strike
+    // state used to be swept from the roll map. A ball that was never in it
+    // was never taken out of it, and every drained ball left its entries
+    // behind for as long as that screen stayed open.
+    const r = rig(false);
+    const tracked = () => (r.audio as unknown as { struck: Map<number, unknown> }).struck.size;
+
+    for (let i = 0; i < 5; i++) {
+      const ball = r.game.spawnBall(300, 700, 100, -200)!;
+      r.audio.frame();
+      r.game.bus.emit('impact', {
+        sound: 'rubber', energy: 400, slide: 0, kind: 'surface', note: null,
+        x: 512, y: 700, nx: 0, ny: 1, ball: ball.id, collider: 3,
+      });
+      expect(tracked()).toBe(1);
+      r.game.world.removeBall(ball.id);
+      r.audio.frame();
+      expect(tracked()).toBe(0);
+    }
+    expect(r.opened).toHaveLength(0);
   });
 
   it('does not orphan a roll when a ball goes in the same frame the context opens', () => {

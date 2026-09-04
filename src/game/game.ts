@@ -33,6 +33,8 @@ export interface GameEvents {
   impact: {
     sound: SoundTag; energy: number; slide: number; kind: ContactKind;
     note: number | null; x: number; y: number; nx: number; ny: number; ball: number;
+    /** Which collider, so a listener can tell two rails apart. `sound` cannot. */
+    collider: number;
   };
   element: { el: TableElement; energised: boolean; impact: number; x: number; y: number };
   score: { amount: number; total: number; x: number; y: number; label: string };
@@ -632,7 +634,7 @@ export class Game {
       if (c.impact > 24 && c.kind !== 'sensor-exit') {
         this.bus.emit('impact', {
           sound: c.sound, energy: c.impact, slide: c.slide, kind: c.kind, note: c.note,
-          x: c.x, y: c.y, nx: c.nx, ny: c.ny, ball: c.ballId,
+          x: c.x, y: c.y, nx: c.nx, ny: c.ny, ball: c.ballId, collider: c.colliderId,
         });
       }
       if (!c.owner) continue;

@@ -274,10 +274,10 @@ describe('the flourishes', () => {
 describe('the ball on the table', () => {
   const contact = (over: Partial<{
     sound: SoundTag; energy: number; slide: number; kind: 'surface' | 'paddle' | 'ball';
-    note: number | null; x: number; y: number; ball: number;
+    note: number | null; x: number; y: number; ball: number; collider: number;
   }> = {}) => ({
     sound: 'wood' as SoundTag, energy: 900, slide: 0, kind: 'surface' as const,
-    note: null, x: 512, y: 700, nx: 0, ny: 1, ball: 1, ...over,
+    note: null, x: 512, y: 700, nx: 0, ny: 1, ball: 1, collider: 1, ...over,
   });
 
   it('rings the surface where and how the ball met it', () => {
@@ -312,6 +312,23 @@ describe('the ball on the table', () => {
     game.bus.emit('impact', contact({ sound: 'metal', energy: 400 }));
     game.bus.emit('impact', contact({ sound: 'rubber', energy: 400 }));
     expect(hits.map((h) => h.tag)).toEqual(['rubber', 'metal']);
+  });
+
+  it('does not let one post silence the next', () => {
+    // The case the test above describes but cannot reach. It tells two
+    // surfaces apart by their sound tags, and a tag is a material rather than
+    // a thing: every post and rubber rail on this table is `rubber` with no
+    // note, so nothing in the event distinguished them and a rattle between
+    // two posts was heard as one post struck twice.
+    const { hits, game } = rig();
+    game.bus.emit('impact', contact({ sound: 'rubber', collider: 7, energy: 400 }));
+    game.bus.emit('impact', contact({ sound: 'rubber', collider: 9, energy: 400 }));
+    expect(hits).toHaveLength(2);
+
+    // The same post twice inside the window is still a graze, which is the
+    // whole point of the throttle and must survive the finer identity.
+    game.bus.emit('impact', contact({ sound: 'rubber', collider: 7, energy: 400 }));
+    expect(hits).toHaveLength(2);
   });
 
   it('tells a graze from a square hit by the slide', () => {
