@@ -33,6 +33,9 @@ export interface DrawHints {
   beat: BeatHint | null;
 }
 
+/** Scratch for the ball's motion-blur ghosts. */
+const GHOST = { x: 0, y: 0 };
+
 /** The centre of the bumper nest, which is where the table's pulse is drawn from. */
 export function nestOf(game: Game): { x: number; y: number } {
   let x = 0, y = 0, n = 0;
@@ -655,6 +658,7 @@ export class PinballRenderer {
   private trails = new Map<number, { x: number; y: number }[]>();
 
   private drawBalls(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, alpha: number): void {
+    const pal = this.stage.palette;
     const live = new Set<number>();
     const p = { x: 0, y: 0 };
 
@@ -704,6 +708,26 @@ export class PinballRenderer {
       this.stage.groundShadow(ctx, x, y, ball.r, ball.r, 1);
       this.cam.project(x, y, ball.r, p);
 
+      // Motion blur: the ball's own body smeared back along where it has just
+      // been. The additive streak above says which note the ball is carrying
+      // and has to stay, but a streak alone reads as a comet with a solid head;
+      // what fast motion actually looks like is the thing itself, in several
+      // places at once. Frozen under reduced motion, where a smear is the one
+      // thing that would still read as movement.
+      if (speed > 900 && !this.quality.reducedMotion) {
+        const back = Math.min(0.024, speed / 150000);
+        ctx.fillStyle = this.stage.theme.ball.body[3];
+        for (let i = 1; i <= 3; i++) {
+          const f = i / 3;
+          this.cam.project(x - ball.v.x * back * f, y - ball.v.y * back * f, ball.r, GHOST);
+          ctx.globalAlpha = 0.2 * (1 - f) * Math.min(1, (speed - 900) / 1400);
+          ctx.beginPath();
+          ctx.ellipse(GHOST.x, GHOST.y, r * (1 - f * 0.18), r * (1 - f * 0.18), 0, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       // Chrome: dark limb, bright lit side, a hard specular and a rim kick.
       const lx = p.x - r * 0.42, ly = p.y - r * 0.5;
       const body = ctx.createRadialGradient(lx, ly, r * 0.06, p.x, p.y, r * 1.08);
@@ -726,11 +750,29 @@ export class PinballRenderer {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Equator band rotates with the ball so spin is readable.
+      // Inside one clip: the room the ball is standing in, and then its equator.
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, r, r, 0, 0, TAU);
       ctx.clip();
+
+      // A chrome ball reflects what is around it, and this one reflected
+      // nothing — six gradient stops lit from the upper left, which is a shaded
+      // circle rather than metal. The top half takes the cabinet above it and
+      // the bottom half the playfield it is rolling over, with a hard break
+      // between them at the horizon. That break is the whole cue: a smooth
+      // ramp reads as shading, and only an edge reads as a reflection.
+      const env = ctx.createLinearGradient(p.x, p.y - r, p.x, p.y + r);
+      env.addColorStop(0, withAlpha(pal.railTop, 0.5));
+      env.addColorStop(0.42, withAlpha(pal.railTop, 0.16));
+      env.addColorStop(0.47, withAlpha(pal.floorFar, 0.34));
+      env.addColorStop(1, withAlpha(pal.floorNear, 0.5));
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = env;
+      ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Equator band rotates with the ball so spin is readable.
       ctx.globalAlpha = 0.35;
       ctx.strokeStyle = chrome.seam;
       ctx.lineWidth = r * 0.3;
