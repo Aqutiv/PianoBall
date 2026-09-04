@@ -1,0 +1,317 @@
+{
+ "signature": {
+  "name": "PianoBall",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A polished chrome sphere resting in the curve of a single glossy white piano key that is lit from within, the key tilted at a raked three-quarter angle, a thin cyan light trail arcing up away from the ball. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "electric-piano": {
+  "name": "Electric Piano",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 57,
+  "prompt": "A vintage Fender Rhodes stage electric keyboard. It is a long, low, completely flat rectangular slab covered in black tolex, with a rounded moulded top edge and a red nameplate at the left end. A single row of white and black keys runs along the full front edge. It rests on four thin tapered chrome legs. The top surface is flat and level from end to end like a table, with nothing raised above it. Seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "wurlitzer": {
+  "name": "Wurlitzer",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A 1960s Wurlitzer electric piano: a compact moulded cabinet with rounded corners, a short keyboard, a perforated speaker grille across the front panel and thin chrome legs, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "clavinet": {
+  "name": "Clavinet",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A Hohner clavinet: a long low wedge-shaped cabinet in dark wood with a row of small coloured rocker switches along the top edge above a short keyboard, on four slim chrome legs, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "felt-piano": {
+  "name": "Felt Piano",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "An upright piano with its front panel open, a long strip of thick pale felt hanging between the hammers and the strings, the tuning pins and copper-wound bass strings visible behind it, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "toy-piano": {
+  "name": "Toy Piano",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A small child's toy piano: a squat cabinet with a short keyboard of chunky white and black keys and a lifted lid showing tiny metal rods inside, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "drawbar": {
+  "name": "Drawbar",
+  "family": "Organ",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A Hammond tonewheel organ: a heavy wooden console with two stacked keyboards and a fanned row of long stepped drawbars above them, on a solid plinth, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "rock-organ": {
+  "name": "Rock Organ",
+  "family": "Organ",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A Hammond organ console beside a tall rotating Leslie speaker cabinet with louvred wooden slats, the two standing together, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "pipe-organ": {
+  "name": "Pipe Organ",
+  "family": "Organ",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A church pipe organ facade: a tall symmetrical array of polished metal pipes of graduated heights rising from a carved dark wooden case, seen from a slightly raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "reed-organ": {
+  "name": "Reed Organ",
+  "family": "Organ",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A pedal reed organ harmonium: an upright carved wooden case with a fold-out keyboard, a fretwork panel above it and two large treadle pedals below, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "choir": {
+  "name": "Choir",
+  "family": "Air",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A vintage large-diaphragm ribbon microphone in a chrome shock mount on a slim boom stand, its oval mesh grille facing the viewer, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "vox-pad": {
+  "name": "Vox Pad",
+  "family": "Air",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 91,
+  "prompt": "A sculpture of a soft breathy pad. The top edge is a row of four broad rounded humps like low rolling hills, every curve smooth with no sharp corner, glowing pale frosted cyan glass. It is one thin upright slab, mounted on a low machined brushed-steel base and seen from a raked three-quarter angle: brushed steel edges with a glowing coloured glass face, its top edge cut into the wave profile described. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "breath-flute": {
+  "name": "Breath Flute",
+  "family": "Air",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A silver concert flute lying at a slight angle, its keys and rods catching the light along the polished tube, the headjoint and embouchure hole at the left, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "glass": {
+  "name": "Glass",
+  "family": "Air",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a bell's decay: five slender tapering spires in polished steel and glowing clear crystal glass, tallest at the left and shrinking to the right like a ringing tone fading out, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "music-box": {
+  "name": "Music Box",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "An open music box: a small brass cylinder studded with pins turning against a steel comb, mounted on a polished movement plate inside a lidded wooden case, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "marimba": {
+  "name": "Marimba",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A concert marimba with wide rosewood bars in two graduated rows and long tapering wooden resonator tubes hanging beneath them, on a low frame, seen from a raked three-quarter angle. Two soft mallets rest across the near bars. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "vibraphone": {
+  "name": "Vibraphone",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 22,
+  "prompt": "A concert vibraphone seen from a raked three-quarter angle: two rows of polished aluminium tone bars in a graduated ladder, a row of long cylindrical resonator tubes hanging beneath them, and a low tubular steel frame. Two soft yarn mallets rest across the near bars. Studio product render of a single musical instrument, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole instrument fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people, no stage, no background scenery. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "tubular-bell": {
+  "name": "Tubular Bell",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A set of orchestral tubular bells: a row of long polished brass tubes of graduated length hanging from a tall rectangular steel frame, a wooden mallet resting against the base, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "harp": {
+  "name": "Harp",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A concert pedal harp: a tall curved neck and column with a long row of taut strings running down to the soundboard, standing on its base, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "saw-lead": {
+  "name": "Saw Lead",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a sawtooth wave: four tall asymmetric ramps in brushed steel and glowing cyan glass, each rising in a long straight slope then dropping down a sharp vertical cliff, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "square-lead": {
+  "name": "Square Lead",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 202,
+  "prompt": "Nine flat-topped rectangular pillars stand in a row, all exactly the same width and touching one another. They alternate strictly: tall, short, tall, short, tall, short, tall, short, tall. Every tall pillar is exactly the same height as the other tall ones, every short pillar exactly the same height as the other short ones. Every top is perfectly flat and every corner is a sharp ninety-degree angle. Brushed steel and glowing cyan glass, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing cyan glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "supersaw": {
+  "name": "Supersaw",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of seven detuned sawtooth waves: seven tall asymmetric ramps in brushed steel and glowing cyan and violet glass, fanned and offset from one another so they overlap into a thick wide stack, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "bright-poly": {
+  "name": "Bright Poly",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 103,
+  "prompt": "Three thin upright slabs standing side by side in a row on one shared low machined brushed-steel base, seen from a raked three-quarter angle. The left slab is short with a glowing cyan glass face, the middle slab is taller with a glowing violet glass face, the right slab is tallest with a glowing warm amber glass face. Each slab's top edge is a single smooth rounded dome. Brushed steel edges. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "sub-bass": {
+  "name": "Sub Bass",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a single deep sine wave: one very large, thick, smooth rolling curve in brushed steel and glowing deep violet glass, low and heavy and wide, filling the frame with one slow crest and trough, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "warm": {
+  "name": "Warm Pad",
+  "family": "Pads",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of one broad warm swell: a single very wide smooth dome in brushed steel and glowing warm amber glass, low and gentle, rising and falling once across the whole width, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "strings": {
+  "name": "Strings",
+  "family": "Pads",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A violin resting on its side with its bow laid across it, the scroll and f-holes clearly visible, polished amber-brown wood, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "glass-pad": {
+  "name": "Glass Pad",
+  "family": "Pads",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a wide shimmering pad: a broad slab of glowing clear crystal glass whose top edge is a row of six shallow rounded crests of equal height, cool and frosted. It is one thin upright slab, mounted on a low machined brushed-steel base and seen from a raked three-quarter angle: brushed steel edges with a glowing coloured glass face, its top edge cut into the profile described. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "analog-brass": {
+  "name": "Analog Brass",
+  "family": "Pads",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A brass trumpet resting at an angle, its bell facing the viewer, three valves and looping tubing catching the light, polished lacquered brass, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "nylon-guitar": {
+  "name": "Nylon Guitar",
+  "family": "Plucked",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A classical nylon-string guitar resting upright on a stand, its round soundhole and rosette facing the viewer, warm wooden body and slotted headstock, seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "square-pad": {
+  "name": "Square Pad",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a softened pulse: the top edge steps between a low level and a high level four times, but every corner is generously rounded rather than sharp, glowing violet glass. It is one thin upright slab, mounted on a low machined brushed-steel base and seen from a raked three-quarter angle: brushed steel edges with a glowing coloured glass face, its top edge cut into the profile described. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "saw-swell": {
+  "name": "Saw Swell",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a rising ramp: five asymmetric sawtooth ramps in brushed steel and glowing cyan glass standing in a row, each one clearly taller than the one before it so the whole row climbs from left to right, standing on a low machined brushed-steel base, seen from a raked three-quarter angle. Brushed steel edges with glowing coloured glass faces. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "sine-bed": {
+  "name": "Sine Bed",
+  "family": "Synth",
+  "language": "sculpture",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A sculpture of a slow low wave: the top edge is three wide, shallow, perfectly smooth sine crests of equal height, long and unhurried with no sharp corner anywhere, glowing deep violet glass. It is one thin upright slab, mounted on a low machined brushed-steel base and seen from a raked three-quarter angle: brushed steel edges with a glowing coloured glass face, its top edge cut into the profile described. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "grand": {
+  "name": "Grand Piano",
+  "family": "Keys",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A concert grand piano with its wing-shaped lid raised on the prop stick, the long curved side facing the viewer, strings and cast iron frame visible inside, resting on three heavy legs. Seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "solo-string": {
+  "name": "Solo String",
+  "family": "Air",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A full-size cello standing upright on its endpin, its scroll and pegbox at the top, f-holes and bridge clearly visible on the polished amber-brown body, a bow leaning against it. Seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ },
+ "glockenspiel": {
+  "name": "Glockenspiel",
+  "family": "Mallets",
+  "language": "physical",
+  "model": "qwen-image-2512-Q4_K_S.gguf",
+  "steps": 4,
+  "seed": 88,
+  "prompt": "A small orchestral glockenspiel: two rows of short bright silver metal bars laid in a compact shallow wooden carrying case with the lid open, no resonator tubes underneath, a pair of small hard mallets resting across the bars. Seen from a raked three-quarter angle. Studio product render, isolated and centred on a plain flat near-black navy background, lit from above by cool cyan and violet rim light with one warm amber key light. Glossy hard-surface materials, clean crisp edges, strong readable silhouette, subtle glow bloom, high contrast. The whole object fits inside the frame with even margins. Nothing else in frame, no text, no hands, no people. Colour palette, strictly: background near-black navy #04050d, primary neon cyan #57dcff, secondary neon violet #a678ff, warm amber accent #ffc978 used sparingly, cool steel #232c52 with #8494cf highlights."
+ }
+}

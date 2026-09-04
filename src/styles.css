@@ -581,6 +581,105 @@ kbd {
   border-radius: 8px;
 }
 
+/*
+ * The instrument picker.
+ *
+ * A native `<select>` renders its open list in the operating system's own
+ * layer, where an `<option>` cannot be hovered or measured — so there is
+ * nowhere to hang a preview, and the control had to be rebuilt. `.voice-button`
+ * borrows `.hud-select` so it inherits every theme's treatment of a select
+ * without any of them naming it.
+ */
+.voice-picker { position: relative; width: 100%; }
+.voice-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+.voice-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-caret { color: var(--dim); font-size: 9px; flex: none; }
+
+.voice-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: min(320px, 52vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+}
+.voice-family {
+  padding: 7px 10px 3px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: var(--ink);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+/* One highlight for both roads in: the pointer sets `.active` on enter, and so
+   does the keyboard, so a list being driven by arrows looks hovered. */
+.voice-row.active { background: rgba(255, 255, 255, 0.07); border-left-color: var(--neon); }
+.voice-row.picked { color: var(--neon); }
+.voice-thumb {
+  width: 30px; height: 30px; flex: none;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--floor-deep);
+}
+
+.voice-card {
+  position: absolute;
+  z-index: 31;
+  left: calc(100% + 8px);
+  width: 190px;
+  overflow: hidden;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+.voice-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--floor-deep);
+}
+.voice-cap { padding: 7px 9px 8px; border-top: 1px solid var(--stroke); }
+.voice-cap-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+.voice-cap-family {
+  margin-top: 1px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* The right-hand cards would push their preview off the screen. */
+.hud-right .voice-card { left: auto; right: calc(100% + 8px); }
+
 .hud-knob { display: flex; align-items: center; gap: 8px; }
 .hud-knob b {
   font-size: 9px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
@@ -1213,6 +1312,21 @@ kbd {
 [data-theme="velvet"] select,
 [data-theme="velvet"] .hud-select,
 [data-theme="velvet"] kbd { border-radius: 1px; }
+/*
+ * Velvet is the one theme the instrument art cannot be handed to unchanged.
+ * Everything is lit cyan and violet, which inside this theme's brass chrome
+ * reads as a mistake rather than a picture — so the art is regraded to the
+ * brass it sits next to. Cheaper than a second set of thirty-two pictures, and
+ * it tracks the palette if the palette moves.
+ *
+ * The cost is real and worth knowing: a duotone flattens colour differences
+ * *inside* a picture, so Bright Poly's three-coloured slabs come out as three
+ * identical gold ones. It is the only voice whose identity is its colours.
+ */
+[data-theme="velvet"] .voice-art,
+[data-theme="velvet"] .voice-thumb {
+  filter: grayscale(1) sepia(0.85) saturate(2.1) hue-rotate(-12deg) contrast(1.06);
+}
 [data-theme="velvet"] button {
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -1454,6 +1568,29 @@ kbd {
   font-weight: 600;
 }
 [data-theme="toybox"] .hud-select { border-radius: 10px; }
+/*
+ * Toybox panels are cream, so a near-black picture dropped straight onto one
+ * reads as a hole punched in the card rather than a thing sitting on it. The
+ * fix is the theme's own grammar: give the picture a dark well and the same
+ * hard outline every other object here gets, so it becomes another pressable
+ * object instead of an absence.
+ */
+[data-theme="toybox"] .voice-list { border-width: 3px; border-radius: 14px; }
+[data-theme="toybox"] .voice-row { color: var(--void); font-weight: 600; }
+[data-theme="toybox"] .voice-row.active { background: rgba(26, 16, 48, 0.12); }
+[data-theme="toybox"] .voice-row.picked { color: #4a2fa0; }
+[data-theme="toybox"] .voice-card { border-width: 3px; border-radius: 14px; }
+[data-theme="toybox"] .voice-art,
+[data-theme="toybox"] .voice-thumb {
+  border: 2px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--floor-deep);
+}
+/* Toybox's --ink is cream and so is its panel, so the caption has to take the
+   dark ink the rest of this theme's text on cream takes. */
+[data-theme="toybox"] .voice-cap-name { color: var(--void); }
+[data-theme="toybox"] .voice-family,
+[data-theme="toybox"] .voice-cap-family { color: #5a4a95; }
 [data-theme="toybox"] .hud-toggle.on { background: var(--ok); }
 [data-theme="toybox"] .rhythm-bpm,
 [data-theme="toybox"] .card-title,
