@@ -1,7 +1,7 @@
 import { GameLoop } from '../core/loop';
 import { load, save, stored } from '../core/storage';
 import { Stage, backingDensity } from '../render/stage';
-import { LITE_AUDIO_RUNG, MAX_RUNG, rungLabel } from '../render/tiers';
+import { LITE_AUDIO_RUNG, MAX_RUNG, derive, rungLabel } from '../render/tiers';
 import { readDeviceHints, seedRung } from '../render/deviceHint';
 import { PRESET_RUNG, perfSettings, resetPerfSettings, setPerfSettings,
   type GraphicsPreset, type SoundPreset } from '../render/perfSettings';
@@ -94,8 +94,17 @@ export class Shell {
   private refresh = 16.7;
   /** Rungs the machine has climbed to and been pushed back off, and how often. */
   private readonly rungFailures = new Map<number, number>();
-  /** Rung the ladder will not try to climb above again this session. */
-  private rungCeiling = MAX_RUNG;
+  /**
+   * Lowest rung the ladder will try to climb back to this session.
+   *
+   * Raised when a rung has been climbed to and lost twice, so a machine that
+   * cannot hold it stops flickering between two pictures. Deliberately a floor
+   * on *recovery* and not a cap on shedding: an earlier version capped the rung
+   * itself, which meant a machine that had failed to recover to rung 4 could
+   * never afterwards shed past 5 either -- so if the load then grew, the one
+   * thing it needed to do was the one thing it could not.
+   */
+  private rungFloor = 0;
   /** The rung the last climb started from, to notice it being undone. */
   private lastClimbFrom = -1;
   private qualityHeld = 0;
@@ -161,7 +170,20 @@ export class Shell {
    * from a coarse thread count has no business overruling it.
    */
   private seedRung(): void {
-    if (stored('quality') || perfSettings().graphics !== 'auto') return;
+    // Whatever the sound was left on, whether or not the ladder moves below.
+    // It used to be applied only as a side effect of `shedTo`, so a stored
+    // Lite started as Full on a capable machine, and a stored Full started as
+    // Lite on one reporting four threads, until something happened to move the
+    // rung.
+    this.applySoundPreset();
+
+    // A pinned preset is a decision, and it has to be put back on the ladder
+    // at startup or the panel says Low while the picture is High -- the
+    // controller will not move it afterwards, precisely because it is pinned.
+    const preset = perfSettings().graphics;
+    if (preset !== 'auto') { this.shedTo(PRESET_RUNG[preset], 0); return; }
+
+    if (stored('quality')) return;
     const rung = seedRung(readDeviceHints(this.stage.cssW * this.stage.cssH * this.stage.dpr * this.stage.dpr));
     if (rung > 0) this.shedTo(rung, 6);
   }
@@ -398,9 +420,22 @@ export class Shell {
     // default preset: a reset that left the ladder where it was would leave the
     // panel saying one thing and the picture showing another.
     this.rungFailures.clear();
-    this.rungCeiling = MAX_RUNG;
+    this.rungFloor = 0;
     this.lastClimbFrom = -1;
-    this.shedTo(0, 1);
+    this.qualityHeld = 1;
+    // `stage.resetSettings` has already put the rung and the recorded scale
+    // back, so `shedTo` would see no transition and return before doing any of
+    // what a rung change normally carries with it. Both of its side effects are
+    // therefore applied here instead.
+    //
+    // The canvas, or it would sit at 0.85 or 0.72 scale while the panel
+    // reported full quality, until some unrelated window resize corrected it.
+    // Free when the size has not actually changed.
+    this.resize();
+    // And the sound, or a session reset out of Lite would stay lite -- the
+    // preset says Auto, the rung says zero, and the engine went on with the
+    // short hall and single unison voices.
+    this.applySoundPreset();
     this.remapKeys();
     this.applyModeSettings();
     this.refreshStatus(this.input.midi.status);
@@ -553,25 +588,51 @@ ${this.active?.debugLines?.() ?? ''}`
     const workLate = this.frameAvg > 13;
 
     if (wallLate || workLate) {
-      const rung = this.stage.rung;
-      if (rung >= this.rungCeiling) return;
       // Two at a time when the frame is not close -- under 30fps, walking down
       // one rung every three seconds spends half a minute being unplayable.
       const jump = this.wallAvg > 33 ? 2 : 1;
-      this.shedTo(Math.min(this.rungCeiling, rung + jump));
+      let next = this.stage.rung;
+      for (let i = 0; i < jump; i++) next = this.nextEffectiveRung(next);
+      this.shedTo(next);
       return;
     }
 
     const comfortable = this.frameAvg < 7 && this.wallAvg < Math.max(this.refresh * 1.15, 17.5);
-    if (comfortable && this.stage.rung > 0) {
+    if (comfortable && this.stage.rung > this.rungFloor) {
       // One rung back, and slowly. If this rung has already been tried and
       // lost twice, stop offering it: a machine that cannot hold it will
       // otherwise spend the session flickering between two pictures.
       const target = this.stage.rung - 1;
-      if ((this.rungFailures.get(target) ?? 0) >= 2) { this.rungCeiling = this.stage.rung; return; }
+      if ((this.rungFailures.get(target) ?? 0) >= 2) { this.rungFloor = this.stage.rung; return; }
       this.lastClimbFrom = this.stage.rung;
       this.shedTo(target, 8);
     }
+  }
+
+  /**
+   * The next rung down that would actually change what is drawn.
+   *
+   * A rung can be inert for two reasons: the player has already turned that
+   * effect off by hand, or the theme never draws it -- Toybox sets `pool` to
+   * null, so shedding the floor light there gives nothing back. Stepping onto
+   * one of those still costs a three-second hold, during which the frame stays
+   * over budget and the next rung that *would* have helped goes untouched. The
+   * old two-rung pass had a hand-written guard for exactly the Toybox case;
+   * replacing it with a ladder dropped that, and this is it generalised.
+   */
+  private nextEffectiveRung(from: number): number {
+    const pref = this.stage.preferredQuality;
+    const now = derive(pref, from);
+    for (let r = from + 1; r <= MAX_RUNG; r++) {
+      const next = derive(pref, r);
+      if (now.bloom !== next.bloom || now.shadows !== next.shadows
+        || now.roll !== next.roll || now.particles !== next.particles
+        || now.renderScale !== next.renderScale) return r;
+      // These two exist only where the theme draws them.
+      if (now.pools !== next.pools && this.stage.theme.pool !== null) return r;
+      if (now.grade !== next.grade && this.stage.theme.grade) return r;
+    }
+    return MAX_RUNG;
   }
 
   /** What the ladder is currently giving up, for the F3 readout. */
@@ -613,7 +674,7 @@ ${this.active?.debugLines?.() ?? ''}`
   setGraphicsPreset(preset: GraphicsPreset): void {
     setPerfSettings({ graphics: preset });
     this.rungFailures.clear();
-    this.rungCeiling = MAX_RUNG;
+    this.rungFloor = 0;
     this.lastClimbFrom = -1;
     if (preset !== 'auto') this.shedTo(PRESET_RUNG[preset], 0);
     else this.qualityHeld = 1;
