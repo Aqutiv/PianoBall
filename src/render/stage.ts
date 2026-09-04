@@ -312,7 +312,11 @@ export class Stage {
     const ctx = this.ctx;
     const em = this.emissive.canvas;
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, this.shakeX * this.dpr, this.shakeY * this.dpr);
+    // Identity, and deliberately not the shake. `beginFrame` already draws the
+    // emissive layer through a shaken transform, so offsetting this blit too
+    // put every halo, spark and streak at twice the displacement of the thing
+    // it belongs to: on a hard kick the glow tore away from the table.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'lighter';
 
     if (this.quality.bloom) {
