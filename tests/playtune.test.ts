@@ -12,7 +12,9 @@ import {
 import { noteShape } from '../src/modes/playtune/render';
 import { APPROACH_BPM_CAP, Transport } from '../src/modes/playtune/transport';
 import { DEFAULT_PLAYTUNE, LEAD_BEAT_CHOICES } from '../src/modes/playtune/settings';
-import { loadProgress, recordRun, resetProgress, unlockedBy } from '../src/modes/playtune/progress';
+import {
+  loadProgress, passesNeeded, recordRun, resetProgress, type Progress,
+} from '../src/modes/playtune/progress';
 import { SCALES, degreeToNote, inScale } from '../src/audio/music';
 import {
   BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, LEAD_VOICES,
@@ -742,30 +744,66 @@ class MemoryStorage implements Storage {
 }
 
 describe('progression', () => {
-  const order = ['a', 'b', 'c'];
+  // Two longer than the opening set, so there is a tune two passes out to ask
+  // questions about and not merely the frontier.
+  const order = ['a', 'b', 'c', 'd', 'e'];
   const KEY = 'playtune';
+
+  const pass = (p: Progress, id: string) =>
+    recordRun(KEY, p, id, order, { accuracy: 0.9, score: 99, grade: 'A', passed: true });
 
   // Real storage, because half of what this chain promises is about what
   // survives being written down and read back.
   beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
 
-  it('starts with only the first tune open', () => {
+  it('starts with the first three tunes open', () => {
     const p = resetProgress(KEY, order);
-    expect(p.unlocked).toEqual(['a']);
+    expect(p.unlocked).toEqual(['a', 'b', 'c']);
     expect(p.best).toEqual({});
   });
 
-  it('opens exactly the next tune on a pass, and nothing on a fail', () => {
+  it('opens one more tune per pass, and nothing on a fail', () => {
     const p = resetProgress(KEY, order);
     const failed = recordRun(KEY, p, 'a', order, { accuracy: 0.4, score: 10, grade: null, passed: false });
     expect(failed.unlocked).toBeNull();
-    expect(p.unlocked).toEqual(['a']);
+    expect(p.unlocked).toEqual(['a', 'b', 'c']);
 
-    const passed = recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 99, grade: 'A', passed: true });
-    expect(passed.unlocked).toBe('b');
-    expect(p.unlocked).toEqual(['a', 'b']);
-    expect(recordRun(KEY, p, 'a', order, { accuracy: 0.95, score: 120, grade: 'A', passed: true }).unlocked)
+    expect(pass(p, 'a').unlocked).toBe('d');
+    expect(p.unlocked).toEqual(['a', 'b', 'c', 'd']);
+    expect(pass(p, 'b').unlocked).toBe('e');
+    expect(p.unlocked).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  /**
+   * The whole point of opening several at once is that any of them can be
+   * taken, so the last has to pay exactly what the first would — including
+   * when the ones before it have never been touched.
+   */
+  it('pays for any of the open tunes, not only the first', () => {
+    const p = resetProgress(KEY, order);
+    expect(pass(p, 'c').unlocked).toBe('d');
+    expect(p.best.a).toBeUndefined();
+    expect(p.best.b).toBeUndefined();
+    expect(passesNeeded(p, order, 'a')).toBe(0);
+  });
+
+  /** Otherwise the easiest tune in the curve buys the whole library. */
+  it('pays only for a tune the first time it is passed', () => {
+    const p = resetProgress(KEY, order);
+    expect(pass(p, 'a').unlocked).toBe('d');
+    expect(pass(p, 'a').unlocked).toBeNull();
+    expect(recordRun(KEY, p, 'a', order, { accuracy: 0.99, score: 500, grade: 'S', passed: true }).unlocked)
       .toBeNull();
+    expect(p.unlocked).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('does not run off the end of a curve shorter than the opening set', () => {
+    const solo = ['a'];
+    const p = resetProgress(KEY, solo);
+    expect(p.unlocked).toEqual(['a']);
+    expect(recordRun(KEY, p, 'a', solo, { accuracy: 0.9, score: 1, grade: 'A', passed: true }).unlocked)
+      .toBeNull();
+    expect(p.unlocked).toEqual(['a']);
   });
 
   it('only ever improves a best', () => {
@@ -799,7 +837,7 @@ describe('progression', () => {
    */
   it('cannot take back progress made since its view was taken', () => {
     const stale = resetProgress(KEY, order);
-    // Another window passes 'a' and then 'b', opening 'c'.
+    // Another window passes 'a' and then 'b', opening 'd' and then 'e'.
     const fresh = loadProgress(KEY, order);
     recordRun(KEY, fresh, 'a', order, { accuracy: 0.9, score: 900, grade: 'A', passed: true });
     recordRun(KEY, fresh, 'b', order, { accuracy: 0.99, score: 800, grade: 'S', passed: true });
@@ -808,14 +846,14 @@ describe('progression', () => {
     recordRun(KEY, stale, 'a', order, { accuracy: 0.1, score: 5, grade: null, passed: false });
 
     const after = loadProgress(KEY, order);
-    expect(after.unlocked).toEqual(['a', 'b', 'c']);
+    expect(after.unlocked).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect(after.best.a.accuracy).toBe(0.9);
     expect(after.best.a.score).toBe(900);
     expect(after.best.a.grade).toBe('A');
     expect(after.best.b.grade).toBe('S');
     // And the window that wrote it is looking at the whole of it, not its own
     // half — the song list draws from this object.
-    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
+    expect(stale.unlocked).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect(stale.best.a.grade).toBe('A');
   });
 
@@ -828,7 +866,7 @@ describe('progression', () => {
     const stale = resetProgress(KEY, order);
     recordRun(KEY, stale, 'a', order, { accuracy: 0.9, score: 900, grade: 'A', passed: true });
     recordRun(KEY, stale, 'b', order, { accuracy: 0.9, score: 800, grade: 'A', passed: true });
-    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
+    expect(stale.unlocked).toEqual(['a', 'b', 'c', 'd', 'e']);
 
     // Another window resets the chain while this one still holds all of it.
     resetProgress(KEY, order);
@@ -836,16 +874,49 @@ describe('progression', () => {
     recordRun(KEY, stale, 'a', order, { accuracy: 0.3, score: 5, grade: null, passed: false });
 
     const after = loadProgress(KEY, order);
-    expect(after.unlocked).toEqual(['a']);
+    expect(after.unlocked).toEqual(['a', 'b', 'c']);
     expect(after.best.b).toBeUndefined();
     // The run that was being written still counts, on the fresh chain.
     expect(after.best.a).toMatchObject({ accuracy: 0.3, score: 5, plays: 1, passed: false });
-    expect(stale.unlocked).toEqual(['a']);
+    expect(stale.unlocked).toEqual(['a', 'b', 'c']);
   });
 
-  it('names what unlocks a locked tune', () => {
-    expect(unlockedBy(order, 'b')).toBe('a');
-    expect(unlockedBy(order, 'a')).toBeNull();
+  it('counts how many passes a locked tune is waiting on', () => {
+    const p = resetProgress(KEY, order);
+    expect(passesNeeded(p, order, 'a')).toBe(0);
+    expect(passesNeeded(p, order, 'c')).toBe(0);
+    expect(passesNeeded(p, order, 'd')).toBe(1);
+    expect(passesNeeded(p, order, 'e')).toBe(2);
+
+    pass(p, 'a');
+    expect(passesNeeded(p, order, 'd')).toBe(0);
+    expect(passesNeeded(p, order, 'e')).toBe(1);
+  });
+
+  /**
+   * The chain used to open one tune and add one per pass, and those saves have
+   * to arrive where a fresh one would. The order the reader does its two jobs
+   * in is what decides whether they do: the back-fill reads an open tune as
+   * evidence of a pass, so opening the second one first would invent one.
+   */
+  it('tops up a save from the one-at-a-time chain without inventing a pass', () => {
+    // Nothing passed, so the old chain had opened exactly the first tune.
+    localStorage.setItem(`pianoball.${KEY}`, JSON.stringify({ unlocked: ['a'], best: {} }));
+    expect(loadProgress(KEY, order).unlocked).toEqual(['a', 'b', 'c']);
+
+    // Two passed, both recorded before the flag existed: 'b' and 'c' standing
+    // open is the only evidence of it, and it has to survive the top-up.
+    localStorage.setItem(`pianoball.${KEY}`, JSON.stringify({
+      unlocked: ['a', 'b', 'c'],
+      best: {
+        a: { accuracy: 0.8, score: 10, grade: 'B', plays: 1 },
+        b: { accuracy: 0.7, score: 20, grade: null, plays: 1 },
+      },
+    }));
+    const p = loadProgress(KEY, order);
+    expect(p.best.a.passed).toBe(true);
+    expect(p.best.b.passed).toBe(true);
+    expect(p.unlocked).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   it('recovers from unreadable storage', () => {

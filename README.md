@@ -180,8 +180,10 @@ bursts into light, late or early it still counts for less, and one you never
 reach **shatters**. There is no failing — a tune always plays to its last bar,
 because the point is to have played it.
 
-Fourteen tunes, unlocked in order, from three notes on the beat to Bach in
-continuous quavers:
+Fourteen tunes, arriving in order, from three notes on the beat to Bach in
+continuous quavers. **Three are open at any time** — pass any of them and the
+next one joins the list, so a step you cannot take yet is walked around rather
+than stared at:
 
 | | Tune | Teaches |
 |---|---|---|
@@ -222,8 +224,9 @@ a waltz in three, the lilting six of Greensleeves, Bach's nine, the broken left
 hand Für Elise and the Minuet run on — and none of it is a drum machine. There
 are no drums in PlayTune, because a kick under a Gymnopédie is a costume.
 
-Passing a tune (accuracy above its own mark) unlocks the next and records your
-best. **Settings → PlayTune → Note names on the auras** restores the clean board
+Passing a tune (accuracy above its own mark) opens one more and records your
+best. Only the first pass of a tune pays — replaying one you have cleared is for
+the score. **Settings → PlayTune → Note names on the auras** restores the clean board
 when turned off. **Audio offset** exists because output latency is real. You play
 in time with what you *hear*, and what you hear has already happened, so an
 honest player lands late — raise the offset to compensate for that, lower it if

@@ -334,8 +334,9 @@ describe('the two roles', () => {
     recordRun(CHORD_STORE, chords, CHORD_ORDER[0], CHORD_ORDER,
       { accuracy: 0.95, score: 1, grade: 'A', passed: true });
 
-    expect(loadProgress(CHORD_STORE, CHORD_ORDER).unlocked).toHaveLength(2);
-    expect(loadProgress(MELODY_STORE, TUNE_ORDER).unlocked).toEqual([TUNE_ORDER[0]]);
+    expect(loadProgress(CHORD_STORE, CHORD_ORDER).unlocked).toHaveLength(4);
+    expect(loadProgress(MELODY_STORE, TUNE_ORDER).unlocked)
+      .toEqual([TUNE_ORDER[0], TUNE_ORDER[1], TUNE_ORDER[2]]);
   });
 });
 
