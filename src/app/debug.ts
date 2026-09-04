@@ -94,6 +94,11 @@ export function installDebugApi(shell: Shell): void {
     mixBench: async (voices = 8, shots = 12, seconds = 2) => {
       await shell.startAudio();
       shell.play('freestyle');
+      // Pinned, because the mode picks its own. Two runs of this bench were
+      // measuring two different instruments -- one of them short enough that
+      // every note had ended before the window closed -- which is most of why
+      // the numbers would not repeat.
+      shell.audio.setLeadVoice('grand');
       shell.bed.stop();
       shell.audio.hush();
       await new Promise((done) => setTimeout(done, 1600));
@@ -114,7 +119,7 @@ export function installDebugApi(shell: Shell): void {
       const on = await reading;
       for (let i = 0; i < voices; i++) api.noteOff(chord[i % chord.length]! + (i >= chord.length ? 1 : 0));
       return {
-        voices, shots,
+        voices, shots, voice: 'grand',
         peak: on.peak, rms: on.rms,
         reductionPeak: on.reductionPeak, reductionRange: on.reductionRange,
         floorRms: floor.rms,
