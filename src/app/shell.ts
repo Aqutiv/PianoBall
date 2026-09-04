@@ -389,10 +389,16 @@ export class Shell {
       this.qualityHeld = 3;
       // The sound sheds its own expensive effects on the same signal.
       this.audio.setLite(true);
-    } else if (this.frameAvg > 13 && q.pools) {
+    } else if (this.frameAvg > 13 && q.pools && this.stage.theme.pool !== null) {
       // Between bloom and shadows: the floor light costs fill rate rather than
       // geometry, so it is the next thing worth giving back on a machine that
       // is struggling, and the last thing anyone notices going.
+      //
+      // Only where the theme actually draws one, though. Toybox wants no floor
+      // light at all, so turning the flag off there would give nothing back and
+      // still spend a three-second hold doing it — three seconds in which the
+      // frame stays over budget and shadows, the next thing that would really
+      // help, go untouched.
       q.pools = false;
       this.qualityHeld = 3;
       this.audio.setLite(true);
@@ -402,8 +408,17 @@ export class Shell {
       // Bloom may already be off by choice, which makes this the first
       // thing shed: the sound has to follow from here too.
       this.audio.setLite(true);
-    } else if (this.frameAvg < 7
-      && (q.bloom !== want.bloom || q.shadows !== want.shadows || q.pools !== want.pools)) {
+    } else if (this.frameAvg < 7 && (
+      q.bloom !== want.bloom || q.shadows !== want.shadows || q.pools !== want.pools
+      // The budget belongs in the test as much as the flags do. Shedding bloom
+      // drops it to 500, and a player who turns Bloom back on from the panel
+      // before the machine recovers puts `q.bloom` back in step with the
+      // preference by hand — at which point nothing here disagreed any more,
+      // recovery never ran, and the particles stayed capped at 500 for the rest
+      // of the session. Harmless while `budget` was a field nobody read; real
+      // as soon as it was enforced.
+      || this.stage.particles.budget !== want.particles
+    )) {
       q.bloom = want.bloom;
       q.shadows = want.shadows;
       q.pools = want.pools;

@@ -42,8 +42,14 @@ for (const n of names) {
   if (!fs.existsSync(fa)) { console.log(`MISSING  ${a}-${n}.png`); invalid++; continue; }
   if (!fs.existsSync(fb)) { console.log(`MISSING  ${b}-${n}.png`); invalid++; continue; }
   const A = await raw(fa), B = await raw(fb);
-  if (A.data.length !== B.data.length) {
-    console.log(`SIZE     ${n}: ${A.info.width}x${A.info.height} vs ${B.info.width}x${B.info.height}`);
+  // Geometry, not just byte count: 100x200 and 200x100 hold the same number of
+  // bytes, and two flat images of those shapes would have compared equal as
+  // bare arrays and been called identical.
+  if (A.info.width !== B.info.width
+    || A.info.height !== B.info.height
+    || A.info.channels !== B.info.channels) {
+    console.log(`SIZE     ${n}: ${A.info.width}x${A.info.height}x${A.info.channels}`
+      + ` vs ${B.info.width}x${B.info.height}x${B.info.channels}`);
     invalid++;
     continue;
   }
