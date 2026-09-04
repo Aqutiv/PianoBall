@@ -1615,7 +1615,8 @@ export class AudioEngine {
         // A finite rendered string may run out while its key is still held.
         // Preserve that logical key state until the release path has had a
         // chance to handle its damper and sustain/recatch bookkeeping.
-        if (voice.remainingSources === 0 && voice.stopAt !== null) this.retireVoice(voice);
+        const keyWasReleased = voice.stopAt !== null || this.sustained.has(voice.note);
+        if (voice.remainingSources === 0 && keyWasReleased) this.retireVoice(voice);
       }, { once: true });
     }
   }

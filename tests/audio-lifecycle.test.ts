@@ -450,6 +450,27 @@ describe('key voice release tracking', () => {
     expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
   });
 
+  it('retires a finite voice that ends after its key lifts under sustain', () => {
+    const { engine, state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+    state.pedal = 1;
+
+    engine.noteOff(60);
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(state.sustained.has(60)).toBe(true);
+
+    held.sources[0].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
   it('does not let an ended tail retire a newer strike of the same pitch', () => {
     const { state } = harness();
     const oldTail = voice(60);
