@@ -8,6 +8,7 @@ import { PinballHud } from './hud';
 import { pitchHue } from '../../render/palette';
 import { clamp01 } from '../../core/math';
 import { load, save } from '../../core/storage';
+import type { Stat } from '../../ui/scoreboard';
 
 export interface Scores { pinball: number }
 
@@ -314,14 +315,52 @@ export class PinballMode extends ModeBase implements GameMode {
       if (to === 'serve') hud.banner('PRESS A KEY TO DROP', 2.4, 'warn');
       if (to === 'over') {
         hud.banner('GAME OVER', 4);
+        // Read before the save, which is the only order that works: `saveBest`
+        // folds this score into the record, and asking afterwards would hand
+        // back a mark the run has already met. The dial needs where the player
+        // stood before they played.
+        const wasBest = loadScores().pinball;
         saveBest(game.scoring.score);
+        const score = game.scoring.score;
+        // Against the record, or against itself on a first game. A losing run
+        // stops visibly short of the notch; a winning one sweeps past it and
+        // runs on to the end.
+        const reach = Math.max(score, wasBest, 1);
+        // Beating something needs there to have been something. A first game
+        // is not a record broken, however well it went.
+        const beaten = wasBest > 0 && score > wasBest;
+        const stats: Stat[] = [
+          { kind: 'count', label: 'Best combo', value: game.scoring.comboBest },
+          { kind: 'count', label: 'Best ball', value: game.scoring.ballBestScore },
+          { kind: 'count', label: 'Peak multiplier', value: game.scoring.multiplierBest, format: 'multiplier' },
+        ];
+        if (game.objectivesCleared) {
+          stats.push({ kind: 'count', label: 'Objectives', value: game.objectivesCleared });
+        }
+        stats.push(
+          { kind: 'count', label: 'Time on the table', value: game.runTime, format: 'time' },
+          { kind: 'count', label: 'Best ever', value: Math.max(score, wasBest), tone: beaten ? 'good' : 'plain' },
+        );
         this.ctx.setResult({
           title: 'Game over',
-          lines: [
-            { label: 'Score', value: game.scoring.score.toLocaleString() },
-            { label: 'Best combo', value: String(game.scoring.comboBest) },
-          ],
+          subtitle: `${game.scoring.comboBest} at the longest · ${game.objectivesCleared} objective${game.objectivesCleared === 1 ? '' : 's'}`,
+          hero: {
+            value: score / reach,
+            readout: { kind: 'count' },
+            total: score,
+            badge: beaten ? 'NEW' : null,
+            marks: wasBest > 0
+              ? [{ at: wasBest / reach, label: `your best ${wasBest.toLocaleString()}`, kind: 'best' as const }]
+              : [],
+            tone: beaten ? 'good' : 'plain',
+          },
+          stats,
+          banner: beaten ? { text: 'A new best on this table', tone: 'good' } : null,
         });
+        // Placed with the banner rather than with the panel: the table has just
+        // gone quiet under the player's hands, and the fall belongs to that
+        // moment, not to the screen that follows it a beat and a half later.
+        this.audio.gameOver(game.music.root + 48);
         this.overTimer = window.setTimeout(() => this.ctx.openScreen('gameover'), 1400);
       }
     }));
