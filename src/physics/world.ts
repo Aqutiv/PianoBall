@@ -116,6 +116,14 @@ export class World {
   private readonly padBounds: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   /** Scratch for `closestFeature`, which is read and dropped at both callers. */
   private readonly feat: Feature = { dist: 0, nx: 0, ny: 0 };
+  /**
+   * `solidNear` gets its own candidate list and feature. It is called from the
+   * renderer rather than from `step`, and sharing the solver's scratch would
+   * make that an ordering constraint nobody could see.
+   */
+  private readonly probeCand: Collider[] = [];
+  private readonly probeFeat: Feature = { dist: 0, nx: 0, ny: 0 };
+  private readonly probePoint: Vec2 = v2(0, 0);
   private rand: () => number;
   private dirty = true;
 
@@ -151,6 +159,30 @@ export class World {
       this.grid.insert(s);
     }
     this.dirty = false;
+  }
+
+  /**
+   * Is a ball of radius `r`, centred here, touching anything solid?
+   *
+   * A read-only probe for things outside the solver that need to know what the
+   * table is like at a point -- the landing predictor being the one that
+   * matters, which asks a few hundred times a frame. It lives here rather than
+   * on the caller because the broadphase does, and a caller without it has no
+   * choice but to walk every collider on the table for each question.
+   */
+  solidNear(x: number, y: number, r: number): boolean {
+    if (this.dirty) this.reindex();
+    this.grid.query(x - r, y - r, x + r, y + r, this.probeCand);
+    this.probePoint.x = x;
+    this.probePoint.y = y;
+    for (let i = 0; i < this.probeCand.length; i++) {
+      const s = this.probeCand[i];
+      if (!s.enabled || s.sensor) continue;
+      const bb = s.aabb;
+      if (x + r < bb.minX || x - r > bb.maxX || y + r < bb.minY || y - r > bb.maxY) continue;
+      if (closestFeature(s, this.probePoint, this.probeFeat).dist < r) return true;
+    }
+    return false;
   }
 
   addBall(b: Ball): void { this.balls.push(b); }
