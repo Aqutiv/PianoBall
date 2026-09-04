@@ -8,7 +8,10 @@
  *  - `AudioContext.currentTime`, which the beat pulse is clocked by and which
  *    is wall-clock, so an unpinned run lands on a different point of the bar;
  *  - the game loop itself, because `shot` awaits a fetch and every yield lets
- *    requestAnimationFrame step the simulation behind the capture's back.
+ *    requestAnimationFrame step the simulation behind the capture's back;
+ *  - and the musical key, which is drawn at random by default. Every colour on
+ *    the table is derived from pitch, so a differently-drawn key repaints the
+ *    whole board and two runs have nothing to say to each other.
  *
  * The third is the one that hurts: a single-shot run looks perfectly
  * reproducible because its only yield comes after the pixels are read, so the
@@ -34,11 +37,22 @@ export async function install() {
     Object.defineProperty(api.audio, 'now', { get: () => 0, configurable: true });
     const wasRunning = api.loop.running;
     api.loop.stop();
+    // A fixed key, so the pitch hues are the same board every run. Restored
+    // afterwards, since it is a persisted player setting and not ours to keep.
+    //
+    // Guarded, because this rig is pointed at older checkouts to A/B against —
+    // and `setKey` only exists since the key became drawable. Without the
+    // guard the whole capture throws there rather than falling back to
+    // whatever key that build picks for itself.
+    const canPin = typeof api.music.setKey === 'function';
+    const wasMode = api.music.choice, wasKey = api.music.keyChoice;
+    if (canPin) { api.music.setChoice('aeolian'); api.music.setKey(2); }
     // `await`, not a bare return: `fn` is async, and a synchronous try/finally
     // around it puts everything back before the first capture has happened.
     try { return await fn(reseed); } finally {
       Math.random = real;
       delete api.audio.now;
+      if (canPin) { api.music.setChoice(wasMode); api.music.setKey(wasKey); }
       if (wasRunning) api.loop.start();
     }
   }
