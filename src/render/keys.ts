@@ -1,4 +1,4 @@
-import { tracePath, fillPoly } from './geom';
+import { tracePath, fillPoly, silhouette } from './geom';
 import { mix, tone } from './palette';
 import type { Stage } from './stage';
 import type { KeyDeck, KeyLit } from '../game/keys';
@@ -61,12 +61,24 @@ export function drawKeys(
       const hi = g.black
         ? mix(km.blackTop, tone(hue, 70, 30), 0.35 + glow * 0.5)
         : mix(km.whiteTop, tone(hue, 85, 74), glow * 0.75 + held * 0.12);
-      for (let i = 0; i <= 6; i++) {
-        const t = i / 6;
-        fillPoly(ctx, cam, quad, zTop * t, mix(lo, hi, t * t * 0.7 + 0.15));
-      }
 
+      // One fill for the whole wall rather than seven stacked copies of the
+      // key. The stack was the single most expensive thing on the frame —
+      // thirty-two keys times seven full rasterisations — and it banded, since
+      // seven steps over twenty screen pixels is seven steps. The gradient
+      // keeps the same `t * t * 0.7 + 0.15` curve the slices walked.
       const p0 = { x: 0, y: 0 }, p1 = { x: 0, y: 0 };
+      cam.project(g.drawCx, g.drawCy, 0, p0);
+      cam.project(g.drawCx, g.drawCy, zTop, p1);
+      const wall = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        wall.addColorStop(t, mix(lo, hi, t * t * 0.7 + 0.15));
+      }
+      silhouette(ctx, cam, quad, 0, zTop);
+      ctx.fillStyle = wall;
+      ctx.fill();
+
       cam.project(quad[0].x, quad[0].y, zTop, p0);
       cam.project(quad[2].x, quad[2].y, zTop, p1);
       const face = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);

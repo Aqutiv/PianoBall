@@ -48,6 +48,43 @@ export function glowSprite(hue: number, size: number, softness = 1): HTMLCanvasE
   return canvas;
 }
 
+/**
+ * Light landing on the playfield, as opposed to light in the air.
+ *
+ * Deliberately not `glowSprite`. That one ramps to a near-white core because it
+ * is drawn onto the emissive layer, where it is attenuated twice on the way to
+ * the screen — once by the caller's alpha and again by the bloom weights. On
+ * the opaque base layer there is no such attenuation, and the same sprite comes
+ * out as a white disc painted on the table rather than as a pool of light.
+ *
+ * So: no core, a much broader falloff, and the colour kept saturated all the
+ * way out, because what is wanted is the playfield taking a tint rather than
+ * anything that reads as a source.
+ */
+export function poolSprite(hue: number, size: number): HTMLCanvasElement {
+  const theme = getTheme();
+  const shifted = hue + theme.tone.hueShift;
+  const h = Math.round((((shifted % 360) + 360) % 360) / (360 / HUE_STEPS)) * (360 / HUE_STEPS);
+  const s = Math.max(8, Math.round(size));
+  const key = `pool|${h}|${s}|${theme.id}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = s;
+  const ctx = canvas.getContext('2d')!;
+  const r = s / 2;
+  const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+  g.addColorStop(0, `hsl(${h} 82% 58% / 0.5)`);
+  g.addColorStop(0.3, `hsl(${h} 82% 55% / 0.26)`);
+  g.addColorStop(0.62, `hsl(${h} 80% 52% / 0.08)`);
+  g.addColorStop(1, `hsl(${h} 80% 50% / 0)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
+  cache.set(key, canvas);
+  return canvas;
+}
+
 /** Soft shadow blob used under balls and raised parts. */
 export function shadowSprite(size = 96): HTMLCanvasElement {
   const key = `shadow|${size}`;

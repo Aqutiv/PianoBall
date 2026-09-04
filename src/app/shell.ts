@@ -20,6 +20,9 @@ import { FACTORIES, availableModes, type ModeInfo } from './registry';
 import type { GameMode, GameModeId, ModeContext } from './mode';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 
+/** Live particles allowed while the adaptive pass is shedding. */
+const SHED_PARTICLES = 500;
+
 export interface ModeResult {
   title: string;
   lines: { label: string; value: string }[];
@@ -66,6 +69,22 @@ export class Shell {
   private readonly activePointers = new Map<number, number>();
   private frameAvg = 8;
   private qualityHeld = 0;
+  /**
+   * Whether the adaptive pass is holding anything back.
+   *
+   * Recovery used to infer this by comparing what is running against what the
+   * player asked for, which is only sound while nothing else can reconcile the
+   * two. A player who re-enables the very thing that was shed — from the panel,
+   * before the machine recovers — makes preference and reality agree by hand,
+   * and every comparison then reads as "nothing was shed": the budget stayed
+   * capped at 500, and the audio stayed in lite mode with its shorter hall and
+   * fewer voices, for the rest of the session. Twice now, in two different
+   * flags, which is the sign the comparison was the wrong question.
+   *
+   * Recording the fact directly cannot be erased by anything the player does,
+   * and recovery still restores towards whatever the preference says *now*.
+   */
+  private shedding = false;
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, overlayRoot: HTMLElement) {
     this.canvas = canvas;
@@ -376,6 +395,24 @@ export class Shell {
    * manages and shed the expensive effects only when the frame budget is
    * genuinely under pressure.
    */
+  /**
+   * Everything that happens whichever rung of the ladder fires.
+   *
+   * The particle cap used to live in the bloom branch alone, so a session that
+   * already had Bloom off by preference shed pools and then shadows and went on
+   * stepping and drawing all fourteen hundred particles — the one cost on the
+   * list that no quality flag gates, and so the one that is always there to
+   * give back. Capping particles is not a bloom setting; it is what shedding
+   * means, and it belongs where the other three lines already were.
+   */
+  private shed(): void {
+    this.stage.particles.budget = SHED_PARTICLES;
+    this.shedding = true;
+    this.qualityHeld = 3;
+    // The sound sheds its own expensive effects on the same signal.
+    this.audio.setLite(true);
+  }
+
   private adaptQuality(dt: number): void {
     const s = this.loop.stats;
     const q = this.stage.quality;
@@ -385,21 +422,28 @@ export class Shell {
     if (this.qualityHeld > 0) return;
     if (this.frameAvg > 13 && q.bloom) {
       q.bloom = false;
-      this.stage.particles.budget = 500;
-      this.qualityHeld = 3;
-      // The sound sheds its own expensive effects on the same signal.
-      this.audio.setLite(true);
+      this.shed();
+    } else if (this.frameAvg > 13 && q.pools && this.stage.theme.pool !== null) {
+      // Between bloom and shadows: the floor light costs fill rate rather than
+      // geometry, so it is the next thing worth giving back on a machine that
+      // is struggling, and the last thing anyone notices going.
+      //
+      // Only where the theme actually draws one, though. Toybox wants no floor
+      // light at all, so turning the flag off there would give nothing back and
+      // still spend a three-second hold doing it — three seconds in which the
+      // frame stays over budget and shadows, the next thing that would really
+      // help, go untouched.
+      q.pools = false;
+      this.shed();
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
-      this.qualityHeld = 3;
-      // Bloom may already be off by choice, which makes this the first
-      // thing shed: the sound has to follow from here too.
-      this.audio.setLite(true);
-    } else if (this.frameAvg < 7
-      && (q.bloom !== want.bloom || q.shadows !== want.shadows)) {
+      this.shed();
+    } else if (this.frameAvg < 7 && this.shedding) {
       q.bloom = want.bloom;
       q.shadows = want.shadows;
+      q.pools = want.pools;
       this.stage.particles.budget = want.particles;
+      this.shedding = false;
       this.qualityHeld = 6;
       this.audio.setLite(false);
     }

@@ -160,10 +160,33 @@ export interface Theme {
    * material rather than a flag so the width and colour travel together.
    */
   outline: { color: string; width: number } | null;
-  /** Additive bloom strength for the two downscale passes. */
-  bloom: { alphaA: number; alphaB: number };
+  /**
+   * Additive bloom, as a pyramid rather than as two separate taps.
+   *
+   * `spread` is how much of each level folds into the next one up, which sets
+   * how far the glow reaches; `strength` is how much of the combined result
+   * reaches the screen, which sets how hot it is. Two numbers still, but they
+   * are now independent of how many levels the chain happens to have.
+   */
+  bloom: { strength: number; spread: number };
   /** The glow sprite ramp: how a point of light falls off. */
   glow: { coreLight: number; midLight: number; midSat: number; midAlpha: number };
+  /**
+   * How hard a lit thing throws light onto the playfield around it.
+   *
+   * Null for a look that does not want it. Additive light needs somewhere dark
+   * to land, so a theme with a bright playfield saturates to white almost at
+   * once — and a theme whose read depends on hard outlines does not want a
+   * glow softening the ground under them. `radius` is in table units, per unit
+   * of the thing's own radius.
+   */
+  pool: { strength: number; radius: number } | null;
+  /**
+   * A cast over the finished frame: `far` at the top of the screen, `near` at
+   * the bottom, in soft-light. Null for a look that wants its colours left
+   * exactly as it mixed them.
+   */
+  grade: { far: string; near: string; strength: number } | null;
   /** The pane of glass: diagonal sheen tint, and how hard the vignette closes. */
   glass: { sheen: string; vignette: number };
   /** Pushed to CSS as `--font-display` / `--font-ui` / `--font-mono`, and used

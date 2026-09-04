@@ -66,11 +66,48 @@ export function mix(a: string, b: string, t: number): string {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
+/**
+ * An evenly spaced `mix` from `a` to `b`, cached whole.
+ *
+ * The extrusions walk a gradient in fixed steps — a column is ten discs from
+ * its bottom colour to its top — and every one of those steps was re-parsing
+ * two hex strings and building a third. There are only a handful of distinct
+ * (from, to, steps) triples in a theme, and they never change while it is the
+ * theme, so the whole ramp is worth keeping.
+ *
+ * Exact rather than quantised: the returned entries are the same strings
+ * `mix` would have produced at the same `t`, so nothing moves by a single bit.
+ */
+const RAMPS = new Map<string, readonly string[]>();
+
+export function ramp(a: string, b: string, steps: number): readonly string[] {
+  const key = `${a}|${b}|${steps}`;
+  const hit = RAMPS.get(key);
+  if (hit) return hit;
+  const out: string[] = new Array(steps + 1);
+  for (let i = 0; i <= steps; i++) out[i] = mix(a, b, i / steps);
+  RAMPS.set(key, out);
+  return out;
+}
+
+/**
+ * Parsed once per colour.
+ *
+ * Themes name a few dozen colours between them and `mix` was pulling every one
+ * of them apart again on every call — a string replace, sometimes a split and
+ * a join, and a parseInt, a few hundred times a frame.
+ */
+const PARSED = new Map<string, [number, number, number]>();
+
 function parseHex(hex: string): [number, number, number] {
+  const hit = PARSED.get(hex);
+  if (hit) return hit;
   const h = hex.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
   const n = parseInt(full, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const rgb: [number, number, number] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  PARSED.set(hex, rgb);
+  return rgb;
 }
 
 /** Direction the virtual key light comes from, in table space. */

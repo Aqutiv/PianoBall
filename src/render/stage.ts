@@ -1,10 +1,9 @@
 import { TableCamera } from './project';
 import { Particles } from './particles';
-import { circlePoints, fillPoly, tracePath } from './geom';
-import { mix, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
-import { shadowSprite, glowSprite } from './sprites';
+import { ramp, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
+import { shadowSprite, glowSprite, poolSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
-import { clamp01 } from '../core/math';
+import { clamp01, TAU } from '../core/math';
 import { load, save } from '../core/storage';
 
 export interface RenderQuality {
@@ -14,6 +13,8 @@ export interface RenderQuality {
   labels: boolean;
   reducedMotion: boolean;
   colorBlind: boolean;
+  /** Light thrown onto the playfield by lit elements and charged balls. */
+  pools: boolean;
   /** How much of the screen the table takes, 1 being the size it was designed at. */
   tableSize: number;
 }
@@ -37,6 +38,23 @@ export const TABLE_SIZE = { min: 1, max: 1.13, step: 0.01 } as const;
  * this is worth about 95MB of canvas at the ceiling.
  */
 const DEVICE_PIXEL_BUDGET = 3840 * 2160;
+
+/**
+ * The bloom pyramid: where it starts, and how many levels it runs for.
+ *
+ * It starts at a quarter rather than a half because a half-resolution offscreen
+ * layer is four times the pixels to write every frame, and writing offscreen is
+ * the expensive half of this pass — starting one step down measured five times
+ * cheaper for a difference nobody can see at the widest tap. Every step after
+ * the first is an exact halving, which is the part that matters: bilinear only
+ * degenerates into a clean 2x2 box average at exactly 2:1, and it is successive
+ * box filters that make this read as light rather than as a smaller copy of the
+ * picture. The old chain went to a quarter and then to a tenth — a 4x and then
+ * a 2.5x minification through a two-tap filter — which is where its shimmer and
+ * its visible shelf came from.
+ */
+const BLOOM_FIRST = 2;
+const BLOOM_LEVELS = 3;
 
 /** Nothing gains from drawing denser than this, whatever the display claims. */
 const MAX_DENSITY = 3;
@@ -90,6 +108,7 @@ export const DEFAULT_QUALITY: RenderQuality = {
   labels: true,
   reducedMotion: false,
   colorBlind: false,
+  pools: true,
   tableSize: 1,
 };
 
@@ -112,6 +131,10 @@ export interface Layer {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
 }
+
+/** Scratch for `discPath`, which runs a couple of hundred times a frame. */
+const POLE_A = { x: 0, y: 0 };
+const POLE_B = { x: 0, y: 0 };
 
 function makeLayer(w: number, h: number): Layer {
   const canvas = document.createElement('canvas');
@@ -154,8 +177,8 @@ export class Stage {
   /** Projected screen bounds of the table, for laying out the margins. */
   bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
-  private bloomA: Layer = makeLayer(1, 1);
-  private bloomB: Layer = makeLayer(1, 1);
+  /** The bloom pyramid, each level exactly half the one above it. */
+  private blooms: Layer[] = [];
   private bakedFor = '';
   /** What the player asked for, which the adaptive pass restores towards. */
   private qualityPreference: RenderQuality;
@@ -240,8 +263,25 @@ export class Stage {
     const w = this.canvas.width, h = this.canvas.height;
     this.baked = makeLayer(w, h);
     this.emissive = makeLayer(w, h);
-    this.bloomA = makeLayer(Math.ceil(w / 4), Math.ceil(h / 4));
-    this.bloomB = makeLayer(Math.ceil(w / 10), Math.ceil(h / 10));
+    // A halving chain. At exactly 2:1 a bilinear downscale degenerates into an
+    // exact 2x2 box average, and successive box filters are the classic cheap
+    // approximation of a Gaussian — which is the whole reason this reads as
+    // light rather than as a smaller copy of the picture. The old chain went
+    // straight to a quarter and then to a tenth: a 4x and then a 2.5x
+    // minification through a two-tap filter, sampling four of every sixteen
+    // texels and then two of every five, which is where the shimmer came from.
+    //
+    // Three of them, so the widest tap is a sixteenth — wider than the tenth
+    // the old chain stopped at, which is where the reach of the outer glow
+    // comes from. Dropping the last level was measured against keeping it:
+    // within noise on the frame either way, and visibly tighter around a lit
+    // bumper, so it stays.
+    this.blooms = [];
+    for (let i = 0, bw = w >> BLOOM_FIRST, bh = h >> BLOOM_FIRST; i < BLOOM_LEVELS; i++) {
+      this.blooms.push(makeLayer(Math.max(1, bw), Math.max(1, bh)));
+      bw >>= 1;
+      bh >>= 1;
+    }
     this.cam.fit(cssW, cssH);
     this.bakedFor = '';
   }
@@ -312,25 +352,43 @@ export class Stage {
     const ctx = this.ctx;
     const em = this.emissive.canvas;
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, this.shakeX * this.dpr, this.shakeY * this.dpr);
+    // Identity, and deliberately not the shake. `beginFrame` already draws the
+    // emissive layer through a shaken transform, so offsetting this blit too
+    // put every halo, spark and streak at twice the displacement of the thing
+    // it belongs to: on a hard kick the glow tore away from the table.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'lighter';
 
-    if (this.quality.bloom) {
-      const a = this.bloomA, b = this.bloomB;
-      a.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      a.ctx.clearRect(0, 0, a.canvas.width, a.canvas.height);
-      a.ctx.imageSmoothingEnabled = true;
-      a.ctx.drawImage(em, 0, 0, a.canvas.width, a.canvas.height);
+    if (this.quality.bloom && this.blooms.length) {
+      const L = this.blooms;
+      const b = this.theme.bloom;
 
-      b.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      b.ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
-      b.ctx.imageSmoothingEnabled = true;
-      b.ctx.drawImage(a.canvas, 0, 0, b.canvas.width, b.canvas.height);
+      // Down the chain. `copy` rather than clear-then-draw, which is the same
+      // two operations asked for as one.
+      for (let i = 0; i < L.length; i++) {
+        const src = i === 0 ? em : L[i - 1].canvas;
+        const c = L[i].ctx;
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.globalAlpha = 1;
+        c.imageSmoothingEnabled = true;
+        c.clearRect(0, 0, L[i].canvas.width, L[i].canvas.height);
+        c.drawImage(src, 0, 0, L[i].canvas.width, L[i].canvas.height);
+      }
 
-      ctx.globalAlpha = this.theme.bloom.alphaA;
-      ctx.drawImage(a.canvas, 0, 0, em.width, em.height);
-      ctx.globalAlpha = this.theme.bloom.alphaB;
-      ctx.drawImage(b.canvas, 0, 0, em.width, em.height);
+      // And each level straight onto the screen, weight falling off with
+      // width. Folding the levels back up the pyramid instead — which is how
+      // this is usually written, and which touches fewer full-resolution
+      // pixels — measured eight times slower here: a blit into the main canvas
+      // is composited by the GPU and costs nothing measurable, while a blit
+      // between two offscreen canvases costs real time and serialises against
+      // the write that produced it. The cheap structure on this platform is
+      // the one that keeps every accumulation on the screen.
+      let weight = b.strength;
+      for (let i = 0; i < L.length; i++) {
+        ctx.globalAlpha = weight;
+        ctx.drawImage(L[i].canvas, 0, 0, em.width, em.height);
+        weight *= b.spread;
+      }
     }
     ctx.globalAlpha = 1;
     ctx.drawImage(em, 0, 0);
@@ -358,15 +416,51 @@ export class Stage {
     this.bounds = { minX, maxX, minY, maxY };
   }
 
+  /**
+   * Path a table-space disc as the ellipse it actually projects to.
+   *
+   * A circle lying on a plane goes to an ellipse under a pinhole camera —
+   * exactly, not approximately — so tessellating one into thirty-four points
+   * was buying nothing but allocations, and there were two hundred and thirty
+   * of these a frame.
+   *
+   * Two projections describe it. The near and far poles give the vertical
+   * extent, and their midpoint gives where the centre really sits, which is
+   * *not* where the centre of the circle projects to: perspective pushes it
+   * towards the near pole. `scaleAt` gives the horizontal half-width.
+   *
+   * The tilt is left off. The ellipse is only axis-aligned for a disc on the
+   * camera's own x axis, and leans up to nine degrees at the edge of the
+   * table — but those are the same discs that are nearly circular by then, so
+   * an axis-aligned one is within a fifth of a pixel everywhere on Aurora.
+   * Solving the true conic costs an atan2 and two square roots per disc to
+   * move an edge by less than it can be drawn.
+   */
+  discPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
+    const cam = this.cam;
+    cam.project(x, y - r, z, POLE_A);
+    cam.project(x, y + r, z, POLE_B);
+    const cy = (POLE_A.y + POLE_B.y) / 2;
+    const ry = Math.abs(POLE_B.y - POLE_A.y) / 2;
+    cam.project(x, y, z, POLE_A);
+    const rx = r * cam.scaleAt(x, y, z);
+    ctx.beginPath();
+    // `ellipse` throws on a negative radius, and a zero-radius disc is a real
+    // call — the bumper cap shrinks to nothing as one squashes.
+    ctx.ellipse(POLE_A.x, cy, Math.max(0, rx), Math.max(0, ry), 0, 0, TAU);
+  }
+
   fillDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, style: string | CanvasGradient): void {
-    fillPoly(ctx, this.cam, circlePoints(x, y, r, 34), z, style);
+    this.discPath(ctx, x, y, r, z);
+    ctx.fillStyle = style;
+    ctx.fill();
   }
 
   /** Stack of projected discs: reads as a solid extruded cylinder. */
   column(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z0: number, z1: number, lo: string, hi: string, steps = 9): void {
+    const shades = ramp(lo, hi, steps);
     for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      this.fillDisc(ctx, x, y, r, z0 + (z1 - z0) * t, mix(lo, hi, t));
+      this.fillDisc(ctx, x, y, r, z0 + (z1 - z0) * (i / steps), shades[i]);
     }
   }
 
@@ -380,21 +474,56 @@ export class Stage {
   outlineDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
     const o = this.theme.outline;
     if (!o) return;
-    tracePath(ctx, this.cam, circlePoints(x, y, r, 34), z, true);
+    // The same ellipse the fill uses. A 34-gon outline sitting on a smooth
+    // ellipse fill is exactly the mismatch Toybox's whole read would show up.
+    this.discPath(ctx, x, y, r, z);
     ctx.strokeStyle = o.color;
     ctx.lineWidth = Math.max(1, o.width * this.cam.scaleAt(x, y, z));
     ctx.lineJoin = 'round';
     ctx.stroke();
   }
 
+  /**
+   * Light thrown onto the playfield by something lit standing on it.
+   *
+   * Drawn to the *base* layer, not the emissive one, and before anything on the
+   * table — so the surface takes the tint and the object itself then paints
+   * over its own pool. Everything lit used to glow only in the air above the
+   * table, which is most of why the elements read as printed on it.
+   *
+   * `lighter` onto the base context is plain additive: that context is opaque
+   * (`alpha: false`), so there is no alpha to compound.
+   */
+  floorPool(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, hue: number, strength: number): void {
+    const cfg = this.theme.pool;
+    if (!cfg || !this.quality.pools || strength <= 0.004) return;
+    const p = { x: 0, y: 0 };
+    this.cam.project(x, y, 0, p);
+    const size = r * cfg.radius * 2 * this.cam.scaleAt(x, y);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = clamp01(strength * cfg.strength);
+    // Flattened the way the shadow is: this is light lying on a raked plane.
+    ctx.drawImage(poolSprite(hue, 128), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
+    ctx.restore();
+  }
+
+  /**
+   * The contact shadow under something standing on the playfield.
+   *
+   * The spread and the darkness both follow height, which is the whole cue:
+   * a thing sitting on the surface has a tight, dark shadow and a tall one has
+   * a wide, faint one. It used to be the same blob at the same strength for
+   * everything from a rollover button to a post twice its height.
+   */
   groundShadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, strength = 1): void {
     if (!this.quality.shadows) return;
     const p = { x: 0, y: 0 };
     const sx = x + LIGHT.x * z * 0.8, sy = y - LIGHT.y * z * 0.5;
     this.cam.project(sx, sy, 0, p);
     const scale = this.cam.scaleAt(sx, sy);
-    const size = r * 2.9 * scale;
-    ctx.globalAlpha = 0.55 * strength;
+    const size = r * (2.55 + z * 0.018) * scale;
+    ctx.globalAlpha = (0.66 / (1 + z / 60)) * strength;
     ctx.drawImage(shadowSprite(), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
     ctx.globalAlpha = 1;
   }
@@ -419,7 +548,11 @@ export class Stage {
     const p = { x: 0, y: 0 };
     this.cam.project(x, y, z, p);
     const scale = this.cam.scaleAt(x, y, z);
-    const px = Math.max(style.minSize ?? 10, size * scale);
+    // Rounded, because `scale` is a continuous float that changes with the
+    // label's position every frame. An unrounded size means a font string no
+    // two frames share, which misses the parsed-font cache, then misses the
+    // glyph raster cache, and re-shapes the text from scratch every time.
+    const px = Math.round(Math.max(style.minSize ?? 10, size * scale));
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
@@ -474,6 +607,39 @@ export class Stage {
     vig.addColorStop(1, withAlpha(this.palette.void, this.theme.glass.vignette));
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
+
+    this.drawGrade();
+  }
+
+  /**
+   * The grade: cool at the far end of the table, warm at the near.
+   *
+   * Not a split tone by luminance — Canvas 2D has no way to mask on brightness
+   * without reading the frame back, which costs more than the whole rest of the
+   * pass. This is aerial perspective instead, and on this table the two amount
+   * to nearly the same picture: the far end is the dark end, the keys at the
+   * near edge are the bright end, and warming one while cooling the other is
+   * both what distance does to colour and what a grade would have done anyway.
+   *
+   * `soft-light` rather than `lighter`, because this has to tint what is
+   * already there rather than add to it — the point is a cast over the whole
+   * frame, not another light source in it.
+   */
+  private drawGrade(): void {
+    const g = this.theme.grade;
+    if (!g) return;
+    const ctx = this.ctx;
+    const w = this.cssW, h = this.cssH;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, g.far);
+    grad.addColorStop(0.55, g.far);
+    grad.addColorStop(1, g.near);
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = g.strength;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
 
   // --------------------------------------------------------- piano roll ---

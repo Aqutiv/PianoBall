@@ -33,6 +33,9 @@ export interface DrawHints {
   beat: BeatHint | null;
 }
 
+/** Scratch for the ball's motion-blur ghosts. */
+const GHOST = { x: 0, y: 0 };
+
 /** The centre of the bumper nest, which is where the table's pulse is drawn from. */
 export function nestOf(game: Game): { x: number; y: number } {
   let x = 0, y = 0, n = 0;
@@ -186,6 +189,21 @@ export class PinballRenderer {
       ctx.fillRect(p.x, p.y, 1.2, 1.2);
     }
     ctx.globalAlpha = 1;
+
+    // Depth haze, inside the clip so it stays on the playfield and off the
+    // cabinet. The far end of the table is a long way away and was lit exactly
+    // like the near end, leaving foreshortening as the only thing saying so.
+    // Air between the eye and the far edge says it as well, and says it for
+    // nothing: this is painted into the static layer once.
+    const nearH = { x: 0, y: 0 }, farH = { x: 0, y: 0 };
+    this.cam.project(game.def.width / 2, 0, 0, nearH);
+    this.cam.project(game.def.width / 2, H, 0, farH);
+    const haze = ctx.createLinearGradient(nearH.x, nearH.y, farH.x, farH.y);
+    haze.addColorStop(0, withAlpha(pal.void, 0));
+    haze.addColorStop(0.5, withAlpha(pal.void, 0.08));
+    haze.addColorStop(1, withAlpha(pal.void, 0.4));
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, this.cssW, this.cssH);
     ctx.restore();
 
     // --- Walls ---
@@ -225,7 +243,7 @@ export class PinballRenderer {
    */
   private bakeCabinet(ctx: CanvasRenderingContext2D): void {
     const pal = this.stage.palette;
-    const { minX, maxX } = this.bounds;
+    const { minX, maxX, minY } = this.bounds;
     const w = this.cssW, h = this.cssH;
 
     const bg = ctx.createLinearGradient(0, 0, 0, h);
@@ -234,6 +252,26 @@ export class PinballRenderer {
     bg.addColorStop(1, mix(pal.void, '#000000', 0.5));
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
+
+    // The backbox. A real machine has a lit panel standing behind the glass,
+    // and this table simply stopped at its far edge with cabinet above it —
+    // which is why the top of the frame read as the end of the picture rather
+    // than as the back of a box. A wash of the theme's own neon, baked, so it
+    // costs nothing and sits under everything.
+    if (minY > 8) {
+      const box = ctx.createLinearGradient(0, 0, 0, minY);
+      box.addColorStop(0, withAlpha(pal.neon, 0.16));
+      box.addColorStop(0.55, withAlpha(pal.neon2, 0.06));
+      box.addColorStop(1, withAlpha(pal.neon, 0));
+      ctx.fillStyle = box;
+      ctx.fillRect(0, 0, w, minY);
+      // The lip the playfield meets it at.
+      const lip = ctx.createLinearGradient(0, minY - 10, 0, minY);
+      lip.addColorStop(0, withAlpha(pal.railTop, 0));
+      lip.addColorStop(1, withAlpha(pal.railTop, 0.22));
+      ctx.fillStyle = lip;
+      ctx.fillRect(0, minY - 10, w, 10);
+    }
 
     for (const [x0, x1, dir] of [[0, minX, 1], [maxX, w, -1]] as const) {
       const span = x1 - x0;
@@ -335,8 +373,8 @@ export class PinballRenderer {
     const beat = hints?.beat ?? null;
     const env = beat ? Math.pow(1 - beat.phase, 4) * (beat.beat === 0 ? 1 : 0.55) : 0;
 
-    const sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
-    for (const el of sorted) this.drawElement(ctx, em, game, el, env);
+    this.drawFloorLights(ctx, game, env, alpha);
+    for (const el of this.depthSorted(game)) this.drawElement(ctx, em, game, el, env);
     this.drawPulse(em, game, env);
 
     drawKeys(ctx, em, stage, game.keybed, hints ? { highlight: hints.highlight } : {});
@@ -352,6 +390,99 @@ export class PinballRenderer {
     this.drawPops(ctx, game);
     stage.drawGlass();
     stage.endFrame();
+  }
+
+  /**
+   * The light every lit thing throws down onto the playfield.
+   *
+   * Runs before the elements and the balls, so each of them paints over its own
+   * pool and sits *in* its light rather than under a smear of it. Everything
+   * emissive on this table used to glow in the air only, which is most of why
+   * the elements read as printed on the surface rather than standing on it.
+   *
+   * Under reduced motion the light still varies — a brightness that changes is
+   * not motion — but the throbbing term is halved, the way `drawPulse` does it.
+   */
+  private drawFloorLights(ctx: CanvasRenderingContext2D, game: Game, env: number, alpha: number): void {
+    if (!this.stage.theme.pool || !this.quality.pools) return;
+    const still = this.quality.reducedMotion;
+
+    // Clipped to the playfield, the way everything else painted onto the
+    // surface is. These pools are wide — three and a half times the radius of
+    // the thing throwing them, so the left-orbit spinner's reaches ten units
+    // past the outline — and unclipped they laid light across the rails and up
+    // onto the cabinet, which are not the floor and are not lit by something
+    // standing on it. Measured on Aurora under Neon Rush by counting lit pixels
+    // falling outside the outline polygon: 1,921 of them before, 89 after, and
+    // those 89 are the antialiased fringe of the clip edge itself.
+    ctx.save();
+    tracePath(ctx, this.cam, game.def.outline, 0, true);
+    ctx.clip();
+
+    for (const el of game.table.elements) {
+      const energised = el.energisedUntil > game.time;
+      let lit = el.flash;
+      if (el.kind === 'bumper') {
+        const throb = energised ? 0.5 + Math.sin(this.t * 12) * (still ? 0 : 0.2) : 0;
+        lit = Math.max(lit, throb * 0.7 + env * (still ? 0.1 : 0.2));
+      } else if (el.kind === 'rollover') {
+        // Nothing at all when it is not lit. A rollover exists to say whether
+        // it has been taken, and a pool under an untaken one spends the very
+        // signal the light is supposed to be carrying.
+        lit = Math.max(lit, el.down ? 0.5 : 0);
+      } else if (el.kind === 'target' && el.down) {
+        // `down` means the opposite of what it means on a rollover. A dropped
+        // target is gone, and `drawElement` paints it as a bare line on the
+        // playfield — but `refreshEnergised` goes on extending its energy for
+        // as long as the player holds a key of its pitch class, which is what
+        // put a lit pool under a target that was no longer standing there.
+        continue;
+      } else if (energised) {
+        lit = Math.max(lit, 0.32);
+      }
+      if (lit <= 0.02) continue;
+      const hue = el.note !== null ? this.hue(el.note) : 205;
+      this.stage.floorPool(ctx, el.x, el.y, el.r || 26, hue, lit * 0.8);
+    }
+
+    // A ball carries the note of the key that threw it, so the light it drags
+    // across the table is the colour it is going to sound as.
+    //
+    // Interpolated with the same `alpha` the body is drawn at, and for the same
+    // reason: the simulation runs at 240Hz and the frame lands somewhere
+    // between two steps. Lighting the ball at `p` while drawing it between
+    // `prev` and `p` puts its own light ahead of it by up to a full step, which
+    // at full speed is most of the ball's width.
+    for (const ball of game.balls) {
+      if (ball.note === null) continue;
+      const speed = Math.hypot(ball.v.x, ball.v.y);
+      this.stage.floorPool(
+        ctx,
+        ball.prev.x + (ball.p.x - ball.prev.x) * alpha,
+        ball.prev.y + (ball.p.y - ball.prev.y) * alpha,
+        ball.r, this.hue(ball.note),
+        0.3 + Math.min(0.3, speed / 3200),
+      );
+    }
+    ctx.restore();
+  }
+
+  private sorted: Game['table']['elements'] = [];
+  private sortedFor: unknown = null;
+
+  /**
+   * The table's elements, furthest first.
+   *
+   * Elements do not move, so this order is a fact about the table rather than
+   * about the frame — and it was being recomputed, with a fresh array, sixty
+   * times a second. Keyed on the array itself so a rebuilt table re-sorts.
+   */
+  private depthSorted(game: Game): Game['table']['elements'] {
+    if (this.sortedFor !== game.table.elements) {
+      this.sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
+      this.sortedFor = game.table.elements;
+    }
+    return this.sorted;
   }
 
   /**
@@ -389,6 +520,10 @@ export class PinballRenderer {
       stage.halo(em, L.x, L.y, 6, hue, 40, 0.5 * near);
       const k = game.keybed.keys[L.lane];
       if (!k) continue;
+      // Gated like every other note name. This one was not, so turning the
+      // labels off left the landing hints still spelling out the key — the
+      // setting removed most of the writing on the table but not all of it.
+      if (!this.quality.labels) continue;
       const g = k.geom;
       this.queueLabel(
         g.drawCx + g.nx * 12, g.drawCy + g.ny * 12, g.z + 18,
@@ -422,7 +557,10 @@ export class PinballRenderer {
     em.strokeStyle = tone(hue, 80, 62, alpha);
     em.lineCap = 'round';
     em.lineWidth = Math.max(1, (2 + breathe * 3) * this.cam.scaleAt(nest.x, nest.y));
-    tracePath(em, this.cam, circlePoints(nest.x, nest.y, 250 * (1 + breathe * 0.08)), 2, true);
+    // The one ring big enough for the tessellation to show: at 250 units the
+    // forty-gon this used to be sat nearly four pixels inside the circle it was
+    // drawing at its flattest point.
+    this.stage.discPath(em, nest.x, nest.y, 250 * (1 + breathe * 0.08), 2);
     em.stroke();
 
     // Along the keybed, following its crown, just up the table from the lip.
@@ -571,6 +709,7 @@ export class PinballRenderer {
   private trails = new Map<number, { x: number; y: number }[]>();
 
   private drawBalls(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, alpha: number): void {
+    const pal = this.stage.palette;
     const live = new Set<number>();
     const p = { x: 0, y: 0 };
 
@@ -620,6 +759,40 @@ export class PinballRenderer {
       this.stage.groundShadow(ctx, x, y, ball.r, ball.r, 1);
       this.cam.project(x, y, ball.r, p);
 
+      // Motion blur: the ball's own body smeared back along where it has just
+      // been. The additive streak above says which note the ball is carrying
+      // and has to stay, but a streak alone reads as a comet with a solid head;
+      // what fast motion actually looks like is the thing itself, in several
+      // places at once. Frozen under reduced motion, where a smear is the one
+      // thing that would still read as movement.
+      if (speed > 900 && !this.quality.reducedMotion) {
+        // Backwards along the step the ball actually travelled, not along its
+        // velocity. After a bounce `v` is the *outgoing* velocity, so stepping
+        // back down it walks into the half-plane the ball never occupied —
+        // mirrored across the collision normal, and straight through whatever
+        // it just hit. The displacement from `prev` to `p` is the last piece of
+        // real travel there is, so the smear follows it and simply stops being
+        // drawn on the frame a ball reverses.
+        const stepX = ball.p.x - ball.prev.x, stepY = ball.p.y - ball.prev.y;
+        const stepLen = Math.hypot(stepX, stepY);
+        // How far back the smear reaches, unchanged; only its direction moves
+        // from the velocity to the travel. Taking the unit vector rather than
+        // scaling the step keeps this independent of the simulation rate.
+        const reach = speed * Math.min(0.024, speed / 150000);
+        const dx = stepLen > 1e-4 ? (stepX / stepLen) * reach : 0;
+        const dy = stepLen > 1e-4 ? (stepY / stepLen) * reach : 0;
+        ctx.fillStyle = this.stage.theme.ball.body[3];
+        for (let i = 1; i <= 3; i++) {
+          const f = i / 3;
+          this.cam.project(x - dx * f, y - dy * f, ball.r, GHOST);
+          ctx.globalAlpha = 0.2 * (1 - f) * Math.min(1, (speed - 900) / 1400);
+          ctx.beginPath();
+          ctx.ellipse(GHOST.x, GHOST.y, r * (1 - f * 0.18), r * (1 - f * 0.18), 0, 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       // Chrome: dark limb, bright lit side, a hard specular and a rim kick.
       const lx = p.x - r * 0.42, ly = p.y - r * 0.5;
       const body = ctx.createRadialGradient(lx, ly, r * 0.06, p.x, p.y, r * 1.08);
@@ -642,11 +815,29 @@ export class PinballRenderer {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Equator band rotates with the ball so spin is readable.
+      // Inside one clip: the room the ball is standing in, and then its equator.
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, r, r, 0, 0, TAU);
       ctx.clip();
+
+      // A chrome ball reflects what is around it, and this one reflected
+      // nothing — six gradient stops lit from the upper left, which is a shaded
+      // circle rather than metal. The top half takes the cabinet above it and
+      // the bottom half the playfield it is rolling over, with a hard break
+      // between them at the horizon. That break is the whole cue: a smooth
+      // ramp reads as shading, and only an edge reads as a reflection.
+      const env = ctx.createLinearGradient(p.x, p.y - r, p.x, p.y + r);
+      env.addColorStop(0, withAlpha(pal.railTop, 0.5));
+      env.addColorStop(0.42, withAlpha(pal.railTop, 0.16));
+      env.addColorStop(0.47, withAlpha(pal.floorFar, 0.34));
+      env.addColorStop(1, withAlpha(pal.floorNear, 0.5));
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = env;
+      ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+      ctx.globalCompositeOperation = 'source-over';
+
+      // Equator band rotates with the ball so spin is readable.
       ctx.globalAlpha = 0.35;
       ctx.strokeStyle = chrome.seam;
       ctx.lineWidth = r * 0.3;
@@ -696,12 +887,15 @@ export class PinballRenderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = tone(pop.tone * 360, 92, 78);
-      ctx.font = `700 ${Math.max(11, (pop.label ? 20 : 17) * scale)}px ui-sans-serif, system-ui, sans-serif`;
+      // Rounded for the same reason `Stage.label` rounds: a pop rises through
+      // a continuum of scales, and these are the calls that spike hardest —
+      // there can be dozens of them in a frame mid-combo.
+      ctx.font = `700 ${Math.round(Math.max(11, (pop.label ? 20 : 17) * scale))}px ui-sans-serif, system-ui, sans-serif`;
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 8;
       ctx.fillText(pop.label || pop.amount.toLocaleString(), p.x, p.y);
       if (pop.label) {
-        ctx.font = `600 ${Math.max(9, 13 * scale)}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.font = `600 ${Math.round(Math.max(9, 13 * scale))}px ui-sans-serif, system-ui, sans-serif`;
         ctx.fillText(pop.amount.toLocaleString(), p.x, p.y + 18 * scale);
       }
       ctx.restore();
