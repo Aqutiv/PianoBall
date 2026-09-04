@@ -21,3 +21,15 @@ export function save<T>(key: string, value: T): void {
 export function remove(key: string): void {
   try { localStorage.removeItem(PREFIX + key); } catch { /* ignore */ }
 }
+
+/**
+ * Whether anything has ever been written under this key.
+ *
+ * `load` cannot answer that: a stored value merged over its fallback is
+ * indistinguishable from the fallback alone. The one caller that needs the
+ * difference is the first-run guess at what this machine can draw, which must
+ * not overrule a returning player who has since chosen for themselves.
+ */
+export function stored(key: string): boolean {
+  try { return localStorage.getItem(PREFIX + key) !== null; } catch { return false; }
+}

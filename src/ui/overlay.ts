@@ -17,6 +17,7 @@ import { findBedVoice, findLeadVoice } from '../audio/voices';
 import { THEMES } from '../render/theme';
 import { TABLE_SIZE } from '../render/stage';
 import { themeSettings } from '../render/themeSettings';
+import type { GraphicsPreset, SoundPreset } from '../render/perfSettings';
 import { buildLine } from '../app/build';
 import { updates } from '../app/updates';
 
@@ -38,6 +39,20 @@ export type Screen =
  * octave, bend and sustain controls actually transmit, and this is where that
  * gets discovered rather than assumed.
  */
+/** The graphics presets, in the order they are offered. */
+const GRAPHICS_PRESETS: readonly (readonly [string, string])[] = [
+  ['auto', 'Auto'],
+  ['high', 'High'],
+  ['balanced', 'Balanced'],
+  ['low', 'Low'],
+];
+
+const SOUND_PRESETS: readonly (readonly [string, string])[] = [
+  ['auto', 'Auto'],
+  ['full', 'Full'],
+  ['lite', 'Lite'],
+];
+
 export class Overlay {
   screen: Screen = 'home';
   private body!: HTMLElement;
@@ -530,6 +545,10 @@ export class Overlay {
     const { input, audio, stage, music } = this.shell;
     const tune = playTuneSettings();
     const midi = input.midi;
+    // Everything in Display shows what was *asked for*. What is actually on
+    // screen is that minus whatever the ladder has shed, and the panel is not
+    // the place to conflate the two.
+    const want = stage.preferredQuality;
     const opts = midi.devices.map((dv) =>
       `<option value="${dv.id}" ${dv.id === midi.selectedId ? 'selected' : ''}>${dv.name}</option>`).join('');
     const curves: CurveName[] = ['soft', 'linear', 'hard', 'gamma', 'fixed'];
@@ -649,17 +668,34 @@ export class Overlay {
         Resetting one leaves the other where it is.</p>
 
       <h2>Display</h2>
-      <div class="row"><label>Bloom</label><button id="q-bloom">${stage.quality.bloom ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Playfield light</label><button id="q-pools">${stage.quality.pools ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Note labels</label><button id="q-labels">${stage.quality.labels ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Graphics</label>
+        <select id="q-preset">
+          ${GRAPHICS_PRESETS.map(([id, label]) =>
+            `<option value="${id}" ${this.shell.graphicsPreset === id ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></div>
+      <p class="diag">Auto watches how long each frame actually takes and gives up
+        the most expensive effects, one at a time, only on a machine that cannot
+        keep up &mdash; then takes them back when it can. The others hold a fixed
+        level whatever the frame is doing. Right now: <span id="q-now"></span>.</p>
+      <div class="row"><label>Sound quality</label>
+        <select id="q-sound">
+          ${SOUND_PRESETS.map(([id, label]) =>
+            `<option value="${id}" ${this.shell.soundPreset === id ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></div>
+      <p class="diag">Lite shortens the hall, drops the unison voices and allows
+        fewer sounds at once. Auto follows the graphics: the sound only gives
+        anything up once the picture already has.</p>
+      <div class="row"><label>Bloom</label><button id="q-bloom">${want.bloom ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Playfield light</label><button id="q-pools">${want.pools ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Note labels</label><button id="q-labels">${want.labels ? 'On' : 'Off'}</button></div>
       <p class="diag">The C marked on each octave of the keys, the note names on a
         table's bumpers and targets, and the key a falling ball is named for.
         PlayTune's falling auras carry their own names, switched separately
         under PlayTune.</p>
-      <div class="row"><label>Reduced motion</label><button id="q-motion">${stage.quality.reducedMotion ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Colour-blind palette</label><button id="q-cb">${stage.quality.colorBlind ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Reduced motion</label><button id="q-motion">${want.reducedMotion ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Colour-blind palette</label><button id="q-cb">${want.colorBlind ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Table size</label>
-        <span><input type="range" id="q-size" min="${TABLE_SIZE.min}" max="${TABLE_SIZE.max}" step="${TABLE_SIZE.step}" value="${stage.quality.tableSize}">
+        <span><input type="range" id="q-size" min="${TABLE_SIZE.min}" max="${TABLE_SIZE.max}" step="${TABLE_SIZE.step}" value="${want.tableSize}">
         <span class="diag" id="q-size-now"></span></span></div>
       <p class="diag">How much of the screen the playfield takes. A landscape display
         leaves the table plenty of room sideways and none at all lengthways, so a
@@ -749,10 +785,32 @@ export class Overlay {
       this.shell.applyModeSettings();
     });
     const quality = (sel: string, key: 'bloom' | 'pools' | 'labels' | 'reducedMotion' | 'colorBlind') => {
-      // Through setQuality, so the choice is remembered as a *preference* and
-      // the adaptive-quality pass knows what to restore to.
-      toggle(sel, () => stage.quality[key], (v) => stage.setQuality({ [key]: v }));
+      // Read and written against the *preference*, never against what is on
+      // screen this second. The ladder derives the running quality from the
+      // preference and a rung, so an effect the machine has shed would
+      // otherwise show here as one the player had switched off -- and the next
+      // click would then "turn on" something that was already on.
+      toggle(sel, () => stage.preferredQuality[key], (v) => stage.setQuality({ [key]: v }));
     };
+    const presetEl = $<HTMLSelectElement>('#q-preset');
+    const nowEl = $('#q-now');
+    const showNow = () => {
+      const auto = this.shell.graphicsPreset === 'auto';
+      const giving = this.shell.qualitySummary;
+      nowEl.textContent = giving === 'full'
+        ? (auto ? 'everything on' : 'everything on, held there')
+        : `${auto ? 'shedding' : 'holding'} ${giving}`;
+    };
+    showNow();
+    presetEl.addEventListener('change', () => {
+      this.shell.setGraphicsPreset(presetEl.value as GraphicsPreset);
+      showNow();
+    });
+    const soundEl = $<HTMLSelectElement>('#q-sound');
+    soundEl.addEventListener('change', () => {
+      this.shell.setSoundPreset(soundEl.value as SoundPreset);
+    });
+
     quality('#q-bloom', 'bloom');
     quality('#q-pools', 'pools');
     quality('#q-labels', 'labels');

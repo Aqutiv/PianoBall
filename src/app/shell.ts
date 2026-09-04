@@ -1,7 +1,10 @@
 import { GameLoop } from '../core/loop';
-import { load, save } from '../core/storage';
+import { load, save, stored } from '../core/storage';
 import { Stage, backingDensity } from '../render/stage';
 import { LITE_AUDIO_RUNG, MAX_RUNG, rungLabel } from '../render/tiers';
+import { readDeviceHints, seedRung } from '../render/deviceHint';
+import { PRESET_RUNG, perfSettings, resetPerfSettings, setPerfSettings,
+  type GraphicsPreset, type SoundPreset } from '../render/perfSettings';
 import { applyTheme, type Theme } from '../render/theme';
 import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSettings';
 import { InputHub } from '../midi/inputHub';
@@ -135,11 +138,32 @@ export class Shell {
     });
 
     this.resize();
+    this.seedRung();
     window.addEventListener('resize', () => this.queueResize());
     this.wireAudioUnlock();
     this.wirePointer();
     this.wireKeys();
     this.input.keyboard.attach(window);
+  }
+
+  /**
+   * Where to start the ladder on a machine that has never run this before.
+   *
+   * The measured controller is the real answer and is only a few seconds
+   * behind; this exists so a weak machine does not spend those seconds
+   * stuttering through the home screen before anything has been shed. It is
+   * capped well short of the resolution rungs, because guessing a capable
+   * machine into a soft picture is a worse first impression than the stutter.
+   *
+   * Only ever on a genuinely first run. Once the player has a stored quality
+   * setting -- which they get the moment they touch anything in Display, and
+   * which the controller does not write -- their choice stands, and a guess
+   * from a coarse thread count has no business overruling it.
+   */
+  private seedRung(): void {
+    if (stored('quality') || perfSettings().graphics !== 'auto') return;
+    const rung = seedRung(readDeviceHints(this.stage.cssW * this.stage.cssH * this.stage.dpr * this.stage.dpr));
+    if (rung > 0) this.shedTo(rung, 6);
   }
 
   // ---------------------------------------------------------------- boot ---
@@ -368,7 +392,15 @@ export class Shell {
     resetPinballSettings();
     resetThemeSettings();
     this.setTheme(currentTheme());
+    resetPerfSettings();
     this.stage.resetSettings();
+    // Back to rung zero and back to being measured, not merely back to the
+    // default preset: a reset that left the ladder where it was would leave the
+    // panel saying one thing and the picture showing another.
+    this.rungFailures.clear();
+    this.rungCeiling = MAX_RUNG;
+    this.lastClimbFrom = -1;
+    this.shedTo(0, 1);
     this.remapKeys();
     this.applyModeSettings();
     this.refreshStatus(this.input.midi.status);
@@ -505,6 +537,9 @@ ${this.active?.debugLines?.() ?? ''}`
     // deliberately throttled there, so `frameMs` measures the throttle.
     this.qualityHeld -= dt;
     if (this.overlay.visible || this.qualityHeld > 0) return;
+    // A pinned preset means the player has decided. A setting that then drifts
+    // is not a setting.
+    if (perfSettings().graphics !== 'auto') return;
 
     // Late by the wall clock, which needs the display's own rate to mean
     // anything -- 2.4x baseline on a 144Hz panel is still 60fps and perfectly
@@ -553,10 +588,41 @@ ${this.active?.debugLines?.() ?? ''}`
     if (!rescale && from === this.stage.rung) return;
     if (rescale) this.resize();
     this.qualityHeld = hold;
-    // The sound sheds its own expensive effects once the picture has given up
-    // enough that the machine is clearly the problem.
-    this.audio.setLite(this.stage.rung >= LITE_AUDIO_RUNG);
+    this.applySoundPreset();
   }
+
+  /**
+   * Whether the sound is running lite.
+   *
+   * On `auto` it follows the ladder: the sound gives up its long hall and its
+   * unison voices once the picture has already given up enough that the
+   * machine is clearly the problem. Pinned either way, the player has said,
+   * and a player who would rather keep the hall and lose frames is entitled to.
+   */
+  private applySoundPreset(): void {
+    const pref = perfSettings().sound;
+    this.audio.setLite(pref === 'lite' || (pref === 'auto' && this.stage.rung >= LITE_AUDIO_RUNG));
+  }
+
+  /** Apply a graphics preset: pin the ladder, or hand it back to the measurement. */
+  setGraphicsPreset(preset: GraphicsPreset): void {
+    setPerfSettings({ graphics: preset });
+    this.rungFailures.clear();
+    this.rungCeiling = MAX_RUNG;
+    this.lastClimbFrom = -1;
+    if (preset !== 'auto') this.shedTo(PRESET_RUNG[preset], 0);
+    else this.qualityHeld = 1;
+  }
+
+  setSoundPreset(preset: SoundPreset): void {
+    setPerfSettings({ sound: preset });
+    this.applySoundPreset();
+  }
+
+  get graphicsPreset(): GraphicsPreset { return perfSettings().graphics; }
+  get soundPreset(): SoundPreset { return perfSettings().sound; }
+  /** What the ladder is giving up right now, for the settings panel. */
+  get qualitySummary(): string { return rungLabel(this.stage.rung); }
 
   /** True while the keyboard belongs to an on-screen control rather than the piano. */
   private hudHasFocus(): boolean {
