@@ -5,6 +5,7 @@ import { shadowSprite, glowSprite, poolSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
 import { clamp01, TAU } from '../core/math';
 import { load, save } from '../core/storage';
+import { clampRung, derive } from './tiers';
 
 export interface RenderQuality {
   bloom: boolean;
@@ -15,6 +16,19 @@ export interface RenderQuality {
   colorBlind: boolean;
   /** Light thrown onto the playfield by lit elements and charged balls. */
   pools: boolean;
+  /** The warm/cool cast over the whole frame. One full-frame `soft-light` fill. */
+  grade: boolean;
+  /** The piano roll of your own playing, up the margins. */
+  roll: boolean;
+  /**
+   * Backing-store scale, on top of the density the display asks for.
+   *
+   * The one thing that makes every full-frame pass cheaper at once -- the void
+   * fill, the baked blit, the emissive clear, the bloom pyramid and the three
+   * additive composites all cost what the backing store costs. Last on the
+   * ladder because it is the most visible loss.
+   */
+  renderScale: number;
   /** How much of the screen the table takes, 1 being the size it was designed at. */
   tableSize: number;
 }
@@ -109,6 +123,9 @@ export const DEFAULT_QUALITY: RenderQuality = {
   reducedMotion: false,
   colorBlind: false,
   pools: true,
+  grade: true,
+  roll: true,
+  renderScale: 1,
   tableSize: 1,
 };
 
@@ -201,6 +218,12 @@ export class Stage {
   private bakedFor = '';
   /** What the player asked for, which the adaptive pass restores towards. */
   private qualityPreference: RenderQuality;
+  /**
+   * How far down the ladder the machine has been pushed. Zero is everything the
+   * player asked for; `quality` is derived from the two together, so restoring
+   * is a matter of moving this back rather than of remembering what was taken.
+   */
+  private shedRung = 0;
   private shake = 0;
   private shakeX = 0;
   private shakeY = 0;
@@ -212,7 +235,7 @@ export class Stage {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
     this.qualityPreference.tableSize = clampTableSize(this.qualityPreference.tableSize);
-    this.quality = { ...this.qualityPreference };
+    this.quality = derive(this.qualityPreference, 0);
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
     this.applyTableSize();
@@ -237,25 +260,50 @@ export class Stage {
 
   get preferredQuality(): Readonly<RenderQuality> { return this.qualityPreference; }
 
+  /** How far down the ladder the running quality currently sits. */
+  get rung(): number { return this.shedRung; }
+
+  /**
+   * Move the ladder.
+   *
+   * Returns whether the backing-store scale changed, which is the one rung
+   * effect the stage cannot apply on its own: only the shell knows the
+   * viewport and the display density to multiply it by.
+   */
+  setRung(rung: number): boolean {
+    const next = clampRung(rung);
+    if (next === this.shedRung) return false;
+    const before = this.quality.renderScale;
+    this.shedRung = next;
+    this.applyQuality();
+    return this.quality.renderScale !== before;
+  }
+
+  /** Rebuild the running quality from the preference and the current rung. */
+  private applyQuality(): void {
+    this.quality = derive(this.qualityPreference, this.shedRung);
+    this.particles.budget = this.quality.particles;
+    this.publishMotionPreference();
+    this.applyTableSize();
+    this.invalidate();
+  }
+
   /** Change what the player asked for, and remember it. */
   setQuality(patch: Partial<RenderQuality>): void {
     if (patch.tableSize !== undefined) patch = { ...patch, tableSize: clampTableSize(patch.tableSize) };
     this.qualityPreference = { ...this.qualityPreference, ...patch };
-    this.quality = { ...this.quality, ...patch };
-    if (patch.particles !== undefined) this.particles.budget = patch.particles;
-    if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
-    if (patch.reducedMotion !== undefined) this.publishMotionPreference();
-    if (patch.tableSize !== undefined) { this.applyTableSize(); this.invalidate(); }
+    // Through the same derivation as everything else. A player turning an
+    // effect back on while the ladder has it shed is asking about the
+    // preference, not about what is on screen this second -- and they get it
+    // the moment the ladder climbs back past that rung.
+    this.applyQuality();
     save('quality', this.qualityPreference);
   }
 
   resetSettings(): void {
     this.qualityPreference = defaultQuality();
-    this.quality = { ...this.qualityPreference };
-    this.particles.budget = this.quality.particles;
-    this.publishMotionPreference();
-    this.applyTableSize();
-    this.invalidate();
+    this.shedRung = 0;
+    this.applyQuality();
     save('quality', this.qualityPreference);
   }
 
@@ -699,7 +747,7 @@ export class Stage {
    */
   private drawGrade(): void {
     const g = this.theme.grade;
-    if (!g || !this.gradeGrad) return;
+    if (!g || !this.gradeGrad || !this.quality.grade) return;
     const ctx = this.ctx;
     ctx.save();
     ctx.globalCompositeOperation = 'soft-light';
@@ -737,8 +785,11 @@ export class Stage {
     const pad = 14;
     if (Math.min(left, right) < 78) return;
 
-    // Drop anything that has scrolled off the top.
+    // Drop anything that has scrolled off the top. Ahead of the quality gate,
+    // so a roll switched off does not quietly accumulate notes it will have to
+    // catch up on the moment it comes back.
     while (this.roll.length && this.t - this.roll[0].at > WINDOW + 1) this.roll.shift();
+    if (!this.quality.roll) return;
 
     this.ensureGradients();
     const { low, high } = this.rollRange;
