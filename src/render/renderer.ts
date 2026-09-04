@@ -335,8 +335,7 @@ export class PinballRenderer {
     const beat = hints?.beat ?? null;
     const env = beat ? Math.pow(1 - beat.phase, 4) * (beat.beat === 0 ? 1 : 0.55) : 0;
 
-    const sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
-    for (const el of sorted) this.drawElement(ctx, em, game, el, env);
+    for (const el of this.depthSorted(game)) this.drawElement(ctx, em, game, el, env);
     this.drawPulse(em, game, env);
 
     drawKeys(ctx, em, stage, game.keybed, hints ? { highlight: hints.highlight } : {});
@@ -352,6 +351,24 @@ export class PinballRenderer {
     this.drawPops(ctx, game);
     stage.drawGlass();
     stage.endFrame();
+  }
+
+  private sorted: Game['table']['elements'] = [];
+  private sortedFor: unknown = null;
+
+  /**
+   * The table's elements, furthest first.
+   *
+   * Elements do not move, so this order is a fact about the table rather than
+   * about the frame — and it was being recomputed, with a fresh array, sixty
+   * times a second. Keyed on the array itself so a rebuilt table re-sorts.
+   */
+  private depthSorted(game: Game): Game['table']['elements'] {
+    if (this.sortedFor !== game.table.elements) {
+      this.sorted = [...game.table.elements].sort((a, b) => b.y - a.y);
+      this.sortedFor = game.table.elements;
+    }
+    return this.sorted;
   }
 
   /**
@@ -699,12 +716,15 @@ export class PinballRenderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = tone(pop.tone * 360, 92, 78);
-      ctx.font = `700 ${Math.max(11, (pop.label ? 20 : 17) * scale)}px ui-sans-serif, system-ui, sans-serif`;
+      // Rounded for the same reason `Stage.label` rounds: a pop rises through
+      // a continuum of scales, and these are the calls that spike hardest —
+      // there can be dozens of them in a frame mid-combo.
+      ctx.font = `700 ${Math.round(Math.max(11, (pop.label ? 20 : 17) * scale))}px ui-sans-serif, system-ui, sans-serif`;
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 8;
       ctx.fillText(pop.label || pop.amount.toLocaleString(), p.x, p.y);
       if (pop.label) {
-        ctx.font = `600 ${Math.max(9, 13 * scale)}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.font = `600 ${Math.round(Math.max(9, 13 * scale))}px ui-sans-serif, system-ui, sans-serif`;
         ctx.fillText(pop.amount.toLocaleString(), p.x, p.y + 18 * scale);
       }
       ctx.restore();

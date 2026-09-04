@@ -1,6 +1,6 @@
 import { TableCamera } from './project';
 import { Particles } from './particles';
-import { mix, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
+import { ramp, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
 import { shadowSprite, glowSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
 import { clamp01, TAU } from '../core/math';
@@ -407,9 +407,9 @@ export class Stage {
 
   /** Stack of projected discs: reads as a solid extruded cylinder. */
   column(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z0: number, z1: number, lo: string, hi: string, steps = 9): void {
+    const shades = ramp(lo, hi, steps);
     for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      this.fillDisc(ctx, x, y, r, z0 + (z1 - z0) * t, mix(lo, hi, t));
+      this.fillDisc(ctx, x, y, r, z0 + (z1 - z0) * (i / steps), shades[i]);
     }
   }
 
@@ -464,7 +464,11 @@ export class Stage {
     const p = { x: 0, y: 0 };
     this.cam.project(x, y, z, p);
     const scale = this.cam.scaleAt(x, y, z);
-    const px = Math.max(style.minSize ?? 10, size * scale);
+    // Rounded, because `scale` is a continuous float that changes with the
+    // label's position every frame. An unrounded size means a font string no
+    // two frames share, which misses the parsed-font cache, then misses the
+    // glyph raster cache, and re-shapes the text from scratch every time.
+    const px = Math.round(Math.max(style.minSize ?? 10, size * scale));
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
