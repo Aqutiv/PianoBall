@@ -1,6 +1,6 @@
 import { chordNotes, degreeToNote } from '../src/audio/music';
 import { describe, expect, it } from 'vitest';
-import { AudioEngine, DEFAULT_AUDIO, softClip } from '../src/audio/engine';
+import { AudioEngine, DEFAULT_AUDIO, softClip, unisonPhases } from '../src/audio/engine';
 import { wireGlobalControls } from '../src/audio/controls';
 import { InputHub } from '../src/midi/inputHub';
 import { ChordBed } from '../src/audio/bed';
@@ -448,5 +448,72 @@ describe('the soft clipper', () => {
       expect(Math.abs(curve[i])).toBeLessThanOrEqual(1);
       if (i > 0) expect(Math.abs(slopes[i] - slopes[i - 1])).toBeLessThan(steepest * 0.02);
     }
+  });
+});
+
+/**
+ * Unison phases.
+ *
+ * Three strings under one hammer are three strings. The engine scales each
+ * copy by the number of copies to a power near a half, which is what sources
+ * at independent phases sum to — so the phases have to actually be
+ * independent, partial by partial. They were not once: a single shift in time
+ * per copy moves partial *k* by *k* times one angle, which is a comb, and a
+ * comb has notches. That is what these guard.
+ */
+describe('unison phases', () => {
+  /** How much of one oscillator's partial `k` survives when `copies` are summed. */
+  const sum = (copies: number, k: number): number => {
+    const table = unisonPhases(copies);
+    let re = 0;
+    let im = 0;
+    for (let j = 0; j < copies; j++) {
+      re += Math.cos(table[j][k]);
+      im += Math.sin(table[j][k]);
+    }
+    return Math.hypot(re, im);
+  };
+
+  it('leaves the spectrum exactly as written for the first copy', () => {
+    // A voice with no unison at all must be untouched by any of this.
+    for (const copies of [1, 2, 3]) {
+      for (const a of unisonPhases(copies)[0]) expect(a).toBe(0);
+    }
+  });
+
+  it('gives one copy the same phases every time it is asked', () => {
+    expect(unisonPhases(3)[1]).toEqual(unisonPhases(3)[1]);
+    expect(unisonPhases(3)[2][7]).toBe(unisonPhases(3)[2][7]);
+  });
+
+  it('never lets a partial cancel', () => {
+    // The failure this replaced: three copies a golden ratio apart summed
+    // their fundamentals to 0.47 where independent sources give about 1.73 —
+    // eleven decibels of hollow on the attack. And drawing at random alone is
+    // not enough either; it buries whichever partial lands in a null.
+    for (const copies of [2, 3]) {
+      for (let k = 1; k < 64; k++) {
+        expect(sum(copies, k), `${copies} copies, partial ${k}`)
+          .toBeGreaterThan(Math.sqrt(copies) * 0.7);
+      }
+    }
+  });
+
+  it('sums to what the level scaling assumes, partial by partial', () => {
+    for (const copies of [2, 3]) {
+      for (let k = 1; k < 64; k++) {
+        expect(sum(copies, k), `${copies} copies, partial ${k}`)
+          .toBeLessThan(Math.sqrt(copies) * 1.3);
+      }
+    }
+  });
+
+  it('scatters differently for each partial, or the sum would be peaky again', () => {
+    // Every partial landing on the same phases would make the copies sum to a
+    // scaled version of the original waveform — the same crest, and no
+    // headroom won at all. The variety across partials is the point.
+    const angles = unisonPhases(3)[1].slice(1, 64);
+    const spread = new Set(angles.map((a) => Math.round(a * 8)));
+    expect(spread.size).toBeGreaterThan(8);
   });
 });

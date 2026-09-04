@@ -153,26 +153,33 @@ const CLIP_POINTS = 4096;
 const RUMBLE_HZ = 28;
 
 /**
- * How far each unison copy is turned in its own cycle, in turns.
- *
- * The golden ratio rather than an even share of one: an even third puts every
- * third partial back in step, and the partials are where the energy is.
+ * The unison phase tables: one fixed seed so a voice sounds the same on every
+ * load, how many partials are placed, how hard a partial is retried before its
+ * best draw is taken, and how near the target a draw has to land to be kept.
+ * See `unisonPhases`.
  */
-const UNISON_TURN = 0.6180339887498949;
+const UNISON_SEED = 0x9e37;
+const UNISON_PARTIALS = 64;
+const UNISON_TRIES = 24;
+const UNISON_TOLERANCE = 0.12;
+
+/** Phase tables by copy count, built on first use and kept. */
+const unisonTables = new Map<number, number[][]>();
 
 /**
  * How a unison copy's level is scaled back against the number of copies:
  * `level / copies ^ this`.
  *
- * A square root is what copies at independent phases *ought* to want, since
- * independent sources sum in power — but the copies were never independent.
- * Starting them all at phase zero made them one loud oscillator at the strike,
- * and a square root left that four decibels hot; turning them apart
- * (`rotatePhase`) fixed the peak and took the loudness the voices were tuned
- * around with it. This is the number that puts the loudness back without the
- * peak, and it is set by measurement rather than by theory: what a listener
- * hears is the power sum, what the ceiling sees is the crest, and the two do
- * not move together.
+ * A square root is what copies at independent phases want, since independent
+ * sources sum in power — but the copies were never independent. Every
+ * oscillator starts at phase zero and a spectrum's partials are all written in
+ * the same phase, so at the strike they were one loud oscillator and the
+ * square root left that four decibels hot. `unisonPhase` makes them
+ * independent for real, which is what the square root was always assuming.
+ *
+ * It is still set slightly under a half, by measurement rather than by theory:
+ * what a listener hears is the power sum and what the ceiling sees is the
+ * crest, and the two do not move together.
  */
 const UNISON_SPREAD = 0.33;
 
@@ -1266,7 +1273,9 @@ export class AudioEngine {
         osc = src;
       } else {
         const o = ctx.createOscillator();
-        if (layer.type === 'spectrum') o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register, j));
+        if (layer.type === 'spectrum') {
+          o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register, j, detunes.length));
+        }
         else if (layer.type !== 'string') o.type = layer.type;
         if (glide) {
           o.frequency.setValueAtTime(glide.from * layer.ratio, t);
@@ -1431,28 +1440,29 @@ export class AudioEngine {
 
   /**
    * The wave for a spectrum layer in a register: built on the first request,
-   * kept after. `phase` is which unison copy is asking, and each copy gets the
-   * same table turned to a different place in its cycle — see `rotatePhase`.
+   * kept after. `copy` is which unison copy is asking, out of `copies`, and
+   * each gets the same partials with their own phases — see `unisonPhases`.
    */
-  private wave(ref: SpectrumRef, register: Register, phase = 0): PeriodicWave {
+  private wave(ref: SpectrumRef, register: Register, copy = 0, copies = 1): PeriodicWave {
     const base = spectrumKey(ref, register);
-    const key = `${base}:${phase}`;
+    const key = `${base}:${copies}:${copy}`;
     let w = this.waves.get(key);
     if (!w) {
       const ctx = this.ctx!;
       const partials = spectrum(ref, register, ctx.sampleRate);
-      // Turning a waveform does not change how loud it is, only where its
-      // peak falls — but `createPeriodicWave` normalises whatever it is
-      // handed to a peak of one, which would scale each copy differently and
-      // turn a phase shift into a level change. So every turn of one spectrum
-      // is scaled by the *same* number, the one its unturned form would have
-      // been given, and the normalisation is done here instead.
+      // Moving a partial's phase does not change how loud it is, only where
+      // the waveform's peak falls — but `createPeriodicWave` normalises
+      // whatever it is handed to a peak of one, which would scale each copy
+      // differently and turn a phase change into a level change. So every
+      // copy of one spectrum is scaled by the *same* number, the one the
+      // spectrum as written would have been given, worked out here instead.
       let peak = this.wavePeaks.get(base);
       if (peak === undefined) {
         peak = wavePeak(partials);
         this.wavePeaks.set(base, peak);
       }
-      const turned = rotatePhase(partials, phase * UNISON_TURN * 2 * Math.PI, 1 / peak);
+      const angles = unisonPhases(copies)[copy] ?? [];
+      const turned = shapePhase(partials, (k) => angles[k] ?? 0, 1 / peak);
       w = ctx.createPeriodicWave(turned.real, turned.imag, { disableNormalization: true });
       this.waves.set(key, w);
     }
@@ -1471,7 +1481,7 @@ export class AudioEngine {
     for (const layer of spec.layers) {
       if (layer.type !== 'spectrum') continue;
       for (const r of REGISTERS) {
-        for (let j = 0; j < copies; j++) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r, j);
+        for (let j = 0; j < copies; j++) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r, j, copies);
       }
     }
   }
@@ -2301,16 +2311,75 @@ export function softClip(points: number): Float32Array<ArrayBuffer> {
  * Shifting a waveform by `angle` turns partial *k* by *k · angle*, which is
  * the rotation below.
  */
-function rotatePhase({ real, imag }: Partials, angle: number, scale: number): Partials {
+function shapePhase({ real, imag }: Partials, angle: (k: number) => number, scale: number): Partials {
   const r = new Float32Array(real.length);
   const m = new Float32Array(imag.length);
   for (let k = 0; k < real.length; k++) {
-    const c = Math.cos(k * angle) * scale;
-    const s = Math.sin(k * angle) * scale;
+    const a = angle(k);
+    const c = Math.cos(a) * scale;
+    const s = Math.sin(a) * scale;
     r[k] = real[k] * c + imag[k] * s;
     m[k] = imag[k] * c - real[k] * s;
   }
   return { real: r, imag: m };
+}
+
+/**
+ * Where every partial of every unison copy starts in its own cycle.
+ *
+ * The engine scales each copy by the copy count to a power near a half, which
+ * is what sources at independent phases sum to. So the phases have to actually
+ * be independent — and this is the part that is easy to get wrong.
+ *
+ * Sliding a whole waveform in time does not do it. A shift of one angle moves
+ * partial *k* by *k* times that angle, which is a rigid comb rather than a
+ * scatter: whatever angle is chosen, some partials come back into step and
+ * reinforce while others land opposite and cancel outright. A golden-ratio
+ * shift, about as non-resonant as one angle gets, still left three copies'
+ * fundamentals summing to 0.47 where independent sources give 1.73 — eleven
+ * decibels of hollow, on the attack, on the default piano.
+ *
+ * Nor does drawing every phase at random, which scatters correctly on average
+ * and still buries the odd partial in a null it happened to land in.
+ *
+ * So each partial's phases are drawn and then *checked*: kept when the copies
+ * sum to about the square root of their number, redrawn when they do not. The
+ * result is a different scatter for every partial — which is what keeps the
+ * summed waveform from being peaky, and is the whole headroom argument — with
+ * no partial anywhere near a null. Three strings under one hammer are three
+ * strings, not one string heard three times a moment apart.
+ *
+ * Seeded and built once, so a note sounds the same every time it is played.
+ * The variation that makes a repeated note human is `humanize`'s, not this.
+ */
+export function unisonPhases(copies: number): readonly (readonly number[])[] {
+  const found = unisonTables.get(copies);
+  if (found) return found;
+  const table: number[][] = [];
+  for (let j = 0; j < copies; j++) table.push(new Array<number>(UNISON_PARTIALS).fill(0));
+  if (copies > 1) {
+    const rng = makeRng(UNISON_SEED + copies);
+    const target = Math.sqrt(copies);
+    for (let k = 0; k < UNISON_PARTIALS; k++) {
+      // The first copy holds the spectrum as written, so a voice with no
+      // unison is untouched and the others are placed against something.
+      let best = [0];
+      let bestErr = Infinity;
+      for (let tries = 0; tries < UNISON_TRIES; tries++) {
+        const angles = [0];
+        for (let j = 1; j < copies; j++) angles.push(rng() * 2 * Math.PI);
+        let re = 0;
+        let im = 0;
+        for (const a of angles) { re += Math.cos(a); im += Math.sin(a); }
+        const err = Math.abs(Math.hypot(re, im) - target);
+        if (err < bestErr) { bestErr = err; best = angles; }
+        if (err < target * UNISON_TOLERANCE) break;
+      }
+      for (let j = 0; j < copies; j++) table[j][k] = best[j];
+    }
+  }
+  unisonTables.set(copies, table);
+  return table;
 }
 
 /**
