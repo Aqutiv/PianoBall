@@ -13,6 +13,7 @@ export type AfterCadence = 'restart' | 'resume';
 import {
   compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
 } from './comp';
+import { findBedVoice } from './voices';
 
 /**
  * The hand on the bed, in the units a hand moves by: seconds and fractions.
@@ -515,9 +516,14 @@ export class ChordBed {
   /** Hand the engine everything now due, and drop whatever the tab slept past. */
   private flush(now: number, beat: number): void {
     let keep = 0;
+    const plucked = findBedVoice(this.engine.bedVoice).spec.pluck !== undefined;
     for (const p of this.pending) {
       if (p.at > now + LOOKAHEAD) { this.pending[keep++] = p; continue; }
       if (p.at < now - LATE) continue;
+      // A plucked stab already rings across the following beats. Starting the
+      // generic wash beside it would launch the same rendered string again at
+      // the same pitch and moment, producing a loud, phase-locked transient.
+      if (plucked && p.ev.part === 'wash') continue;
       this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
     }
     this.pending.length = keep;

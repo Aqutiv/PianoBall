@@ -2131,11 +2131,12 @@ export class AudioEngine {
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     const rise = clamp(attack, 0.004, seconds * 0.9);
     const spec = this.bedSpec;
-    // The caller uses the attack to distinguish a quiet wash from an actual
-    // strike. Preserve a plucked voice's decay for stabs and bass notes, but
-    // let a slow wash stay a swell instead of adding another attack transient.
-    const struck = rise < seconds * 0.2;
-    const fall = struck && spec.pluck ? Math.max(0.02, Math.min(spec.pluck, seconds)) : 0;
+    // A plucked thing is struck by definition, whatever attack it was handed:
+    // the string is already moving before the pad it replaced had begun.
+    const fall = spec.pluck ? Math.max(0.02, Math.min(spec.pluck, seconds)) : 0;
+    // A struck chord opens brighter and faster than a swell; without this the
+    // filter is still on its way up by the time a short stab has gone.
+    const struck = fall > 0 || rise < seconds * 0.2;
     const cut = spec.filter;
     const share = (gain / notes.length) * spec.gain;
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);

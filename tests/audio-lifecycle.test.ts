@@ -196,23 +196,23 @@ describe('voice attack envelopes', () => {
     expect(gainAtSourceStart.every((value) => value === 0.0001)).toBe(true);
   });
 
-  it('honours a slow wash attack for a plucked bed voice', () => {
+  it('keeps a slow plucked pad on its finite pluck envelope', () => {
     const spec = findBedVoice('nylon-guitar').spec;
     const { engine, state, gains, filters } = graphHarness(1, { bed: 'nylon-guitar' });
     state.addLayer = vi.fn(() => [{ stop: vi.fn() }]);
 
-    engine.pad([60], 2, 0.1, 5, 0.8);
+    engine.pad([60], 5, 0.1, 5, 1.75);
 
     const gain = gains[0]!.gain;
     expect(gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 5);
-    expect(gain.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.1 * spec.gain, 5.8);
-    expect(gain.linearRampToValueAtTime).toHaveBeenNthCalledWith(2, 0.0001, 7);
-    expect(gain.exponentialRampToValueAtTime).not.toHaveBeenCalled();
+    expect(gain.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.1 * spec.gain, 5.006);
+    expect(gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(2, 0.0001, 5 + spec.pluck!);
 
     const frequency = filters[0]!.frequency;
-    expect(frequency.setValueAtTime).toHaveBeenCalledWith(spec.filter.start, 5);
-    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, spec.filter.peak, 6);
-    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(2, spec.filter.end, 7);
+    expect(frequency.setValueAtTime).toHaveBeenCalledWith(spec.filter.startStruck, 5);
+    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(1, spec.filter.peakStruck, 5.02);
+    expect(frequency.linearRampToValueAtTime).toHaveBeenNthCalledWith(2, spec.filter.end, 5 + spec.pluck!);
   });
 
   it('keeps short plucked comp events struck', () => {
