@@ -856,12 +856,32 @@ describe('polyphony on the lead bus', () => {
     // The pedal touches the soundboard send on its way through.
     (h.state as unknown as { bodyWet: unknown }).bodyWet = connectable({ gain: param(0.35) });
     const log: number[] = [];
+    // A small model of the parameter's own timeline, because one of these
+    // faults is not about which call was made but about which of two events
+    // runs last. Events carry a time, and a cancellation drops everything from
+    // its own time onwards, exactly as the real parameter does.
+    const timeline: { time: number; value: number; tc?: number }[] = [];
+    const drop = (from: number) => {
+      for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i]!.time >= from) timeline.splice(i, 1);
+    };
     const gain = h.state.leadOut.dry.gain;
-    gain.linearRampToValueAtTime = vi.fn((v: number) => { log.push(v); });
-    gain.setTargetAtTime = vi.fn((v: number) => { log.push(v); });
-    return { ...h, log };
+    gain.linearRampToValueAtTime = vi.fn((v: number, time: number) => {
+      log.push(v); timeline.push({ time, value: v });
+    });
+    gain.setTargetAtTime = vi.fn((v: number, time: number, tc: number) => {
+      log.push(v); timeline.push({ time, value: v, tc });
+    });
+    gain.cancelAndHoldAtTime = vi.fn((from: number) => { drop(from); });
+    gain.cancelScheduledValues = vi.fn((from: number) => { drop(from); });
+    // The pin `holdAtTime` writes afterwards is not a destination, so it must
+    // not be mistaken for one when the last event is read back.
+    gain.setValueAtTime = vi.fn(() => {});
+    return { ...h, log, timeline };
   };
   const busLevel = (h: { log: number[] }) => h.log.at(-1) as number;
+  /** Where the timeline actually leaves the bus, once every event has run. */
+  const settlesAt = (h: { timeline: { time: number; value: number }[] }) =>
+    [...h.timeline].sort((a, b) => a.time - b.time).at(-1)?.value;
 
   it('pulls the bus down as more notes are held', () => {
     const h = rig();
@@ -922,6 +942,56 @@ describe('polyphony on the lead bus', () => {
     // Pedal straight back down catches them, so they count again.
     h.engine.setSustain(1);
     expect(busLevel(h)).toBeCloseTo(four, 6);
+  });
+
+  it('does not leave a stale ramp behind when a note is shorter than its onset', () => {
+    // The note path schedules the bus to arrive at a future onset. A note
+    // released before that onset used to write its target curve *underneath*
+    // that pending ramp rather than cancelling it -- and a target does not
+    // displace a later ramp. Both ran, the ramp ran last, and it landed the
+    // bus on the level that counted the note that had already gone. Nothing
+    // was scheduled after it, so it stayed there: an instrument left quiet
+    // until some unrelated thing recomputed the bus.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const alone = settlesAt(h);
+
+    h.engine.noteOn(64, 0.5);
+    const onset = h.state.active[1]!.startedAt;
+    // The clock has not reached the onset, so the second note's ramp is still
+    // in the future when the key comes back up. That is the whole scenario.
+    expect(onset).toBeGreaterThan(h.ctx.currentTime);
+    h.engine.noteOff(64);
+
+    // One note is held, so the bus belongs back where one note left it.
+    expect(settlesAt(h)).toBeCloseTo(alone as number, 6);
+  });
+
+  it('gives the bus back slowly, because the notes it gave it back for are still sounding', () => {
+    // Attenuation has to beat a note to the compressor. Recovery has the
+    // opposite problem: a half-pedalled release runs for nearly three seconds,
+    // and racing the bus back up in seventy-five milliseconds while every one
+    // of those tails is still near full amplitude is an audible swell on
+    // key-up -- with a second helping of compression behind it.
+    const h = rig();
+    for (const n of [60, 64, 67, 72]) h.engine.noteOn(n, 0.5);
+    const held = h.timeline.at(-1)!;
+
+    // Half pedal: the releases are the stretched ones, and the tails outlive
+    // the key-up by seconds rather than milliseconds.
+    h.engine.setSustain(0.5);
+    for (const n of [60, 64, 67, 72]) h.engine.noteOff(n);
+    const letGo = h.timeline.at(-1)!;
+    expect(letGo.value).toBeGreaterThan(held.value);
+    expect(letGo.tc).toBeGreaterThanOrEqual(0.4);
+
+    // The other direction keeps its hurry. The pedal going down catches those
+    // notes, so they count again and the bus goes back *down* -- and down is
+    // the direction a transient is waiting on.
+    h.engine.setSustain(1);
+    const caught = h.timeline.at(-1)!;
+    expect(caught.value).toBeLessThan(letGo.value);
+    expect(caught.tc).toBeLessThanOrEqual(0.05);
   });
 
   it('does not count a note that is already on its way out', () => {

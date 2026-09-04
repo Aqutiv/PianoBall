@@ -159,6 +159,26 @@ const LEAD_MAX = 2;
  * only thing standing between a two-handed chord and the ceiling.
  */
 const POLY_EXPONENT = 0.25;
+/** Following the bus somewhere it is going anyway: a fader, or a note arriving. */
+const BUS_SMOOTH = 0.025;
+/**
+ * Giving the bus back after a note has been let go.
+ *
+ * Much slower than it is taken away, and deliberately asymmetric. Attenuation
+ * has to arrive before a note does, because the transient is what the
+ * compressor hears. Recovery has the opposite problem: the notes it stops
+ * sharing the bus with are still *sounding*. A half-pedalled release stretches
+ * to nearly three seconds (`HALF_PEDAL_STRETCH`), so lifting sixteen keys used
+ * to raise the bus from 0.5 towards 1 inside about seventy-five milliseconds
+ * while every one of those tails was still near full amplitude -- an audible
+ * swell on key-up, and a second helping of compression to go with it.
+ *
+ * The target is still counted over held voices only: a tail should not drag
+ * down the notes under the player's fingers. It is the approach that is slow,
+ * so the recovery is spread across the tail's own decay instead of racing it.
+ * Costing nothing when a new note arrives, because that path ramps outright.
+ */
+const BUS_RECOVER = 0.5;
 
 /**
  * How far a played note is allowed towards either speaker.
@@ -1113,7 +1133,7 @@ export class AudioEngine {
    * Move the instrument's fader. Every way out carries the same value, and a
    * ramp rather than a set, so a drag reaches a held chord without zippering.
    */
-  private applyLeadGain(at = 0): void {
+  private applyLeadGain(at = 0, easing = false): void {
     // `leadOut` as well as `ready`: this is now reached from the note path, and
     // a note can arrive against an engine whose context has been handed to it
     // without the graph having been built -- which is exactly what the tests do.
@@ -1121,6 +1141,16 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const level = this.leadGain * this.polyScale;
     for (const g of Object.values(this.leadOut)) {
+      // Unconditionally, and before anything else is written.
+      //
+      // A note shorter than its own onset margin releases while the ramp the
+      // note path scheduled is still in the future. A target curve does not
+      // displace a later ramp -- both stay on the timeline, and the ramp runs
+      // afterwards and lands the bus on the level that counted the note that
+      // has already gone. Nothing is scheduled after it, so it stays there:
+      // the instrument is left quiet until the next note or a settings change
+      // happens to recompute the bus.
+      holdAtTime(g.gain, t);
       if (at > t) {
         // Arriving *by* the onset, not heading towards it.
         //
@@ -1131,12 +1161,11 @@ export class AudioEngine {
         // the compressor at very nearly the old level. The transient is the
         // whole point: it is what the compressor reacts to, and reacting to it
         // is what the pumping was.
-        holdAtTime(g.gain, t);
         g.gain.linearRampToValueAtTime(level, at);
       } else {
         // No onset to meet -- a fader drag, or a note leaving. Smoothed, or a
         // slider becomes a staircase in the waveform.
-        g.gain.setTargetAtTime(level, t, 0.025);
+        g.gain.setTargetAtTime(level, t, easing ? BUS_RECOVER : BUS_SMOOTH);
       }
     }
   }
@@ -2044,8 +2073,9 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const firstRelease = !voice.releasing;
     voice.releasing = true;
-    // One fewer note held is one fewer note to share the bus with.
-    if (firstRelease) this.applyLeadGain();
+    // One fewer note held is one fewer note to share the bus with -- eased,
+    // because this note is on its way out rather than gone.
+    if (firstRelease) this.applyLeadGain(0, true);
     const requestedStop = t + seconds + RELEASE_STOP_PAD + reprieve;
     const previousStop = voice.stopAt;
     // A voice already on a quicker fade needs no new automation. Holding and
