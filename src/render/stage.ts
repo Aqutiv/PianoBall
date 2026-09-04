@@ -14,6 +14,50 @@ export interface RenderQuality {
   labels: boolean;
   reducedMotion: boolean;
   colorBlind: boolean;
+  /** How much of the screen the table takes, 1 being the size it was designed at. */
+  tableSize: number;
+}
+
+/**
+ * The range the table-size control offers.
+ *
+ * The top of it is exactly where the rake runs out. A landscape fit is bound by
+ * height, so the most raking can buy is the ratio of the two vertical spans, and
+ * that ratio does not depend on the viewport: asking for more than this would
+ * leave the last steps of the control doing nothing.
+ */
+export const TABLE_SIZE = { min: 1, max: 1.13, step: 0.01 } as const;
+
+/**
+ * Ceiling on the canvas backing store, in device pixels.
+ *
+ * A 4K budget is the line that lets every 4K panel draw at its native
+ * resolution whatever the OS scaling is set to, and stops short of anything
+ * larger. `resize` allocates two full-size layers besides the canvas itself, so
+ * this is worth about 95MB of canvas at the ceiling.
+ */
+const DEVICE_PIXEL_BUDGET = 3840 * 2160;
+
+/** Nothing gains from drawing denser than this, whatever the display claims. */
+const MAX_DENSITY = 3;
+
+/**
+ * Backing-store density for a viewport.
+ *
+ * The bound is on total device pixels rather than on the ratio alone, because
+ * what has to be afforded is the layers and not the sharpness. It has to be
+ * free to come out below 1: zooming the browser out shrinks the reported ratio
+ * and grows the viewport in step, so a 4K display at 50% zoom asks for a
+ * 7680x4320 viewport at a ratio of 0.5 — still 4K of real pixels, but four
+ * times the budget if the density is floored at 1 on the way through.
+ */
+export function backingDensity(cssW: number, cssH: number, devicePixelRatio: number): number {
+  const budget = Math.sqrt(DEVICE_PIXEL_BUDGET / Math.max(1, cssW * cssH));
+  return Math.min(MAX_DENSITY, devicePixelRatio || 1, budget);
+}
+
+function clampTableSize(v: number): number {
+  return Number.isFinite(v) ? Math.min(TABLE_SIZE.max, Math.max(TABLE_SIZE.min, v)) : TABLE_SIZE.min;
 }
 
 export const DEFAULT_QUALITY: RenderQuality = {
@@ -23,6 +67,7 @@ export const DEFAULT_QUALITY: RenderQuality = {
   labels: true,
   reducedMotion: false,
   colorBlind: false,
+  tableSize: 1,
 };
 
 /**
@@ -101,9 +146,11 @@ export class Stage {
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.qualityPreference = { ...defaultQuality(), ...load<Partial<RenderQuality>>('quality', {}) };
+    this.qualityPreference.tableSize = clampTableSize(this.qualityPreference.tableSize);
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
+    this.applyTableSize();
   }
 
   /**
@@ -127,11 +174,13 @@ export class Stage {
 
   /** Change what the player asked for, and remember it. */
   setQuality(patch: Partial<RenderQuality>): void {
+    if (patch.tableSize !== undefined) patch = { ...patch, tableSize: clampTableSize(patch.tableSize) };
     this.qualityPreference = { ...this.qualityPreference, ...patch };
     this.quality = { ...this.quality, ...patch };
     if (patch.particles !== undefined) this.particles.budget = patch.particles;
     if (patch.colorBlind !== undefined || patch.labels !== undefined) this.invalidate();
     if (patch.reducedMotion !== undefined) this.publishMotionPreference();
+    if (patch.tableSize !== undefined) { this.applyTableSize(); this.invalidate(); }
     save('quality', this.qualityPreference);
   }
 
@@ -140,8 +189,20 @@ export class Stage {
     this.quality = { ...this.qualityPreference };
     this.particles.budget = this.quality.particles;
     this.publishMotionPreference();
+    this.applyTableSize();
     this.invalidate();
     save('quality', this.qualityPreference);
+  }
+
+  /**
+   * Push the size preference onto the camera.
+   *
+   * Nothing else has to know about it: the camera pays for it in rake, and every
+   * stroke, label and sprite is already sized through `scaleAt`. The bake key
+   * does not cover camera state, so callers invalidate alongside this.
+   */
+  private applyTableSize(): void {
+    this.cam.configure({ magnify: this.quality.tableSize });
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {

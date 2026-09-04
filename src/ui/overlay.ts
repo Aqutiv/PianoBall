@@ -15,6 +15,7 @@ import type { PlayTuneMode } from '../modes/playtune/playtune';
 import type { Tune } from '../modes/playtune/chart';
 import { findBedVoice, findLeadVoice } from '../audio/voices';
 import { THEMES } from '../render/theme';
+import { TABLE_SIZE } from '../render/stage';
 import { themeSettings } from '../render/themeSettings';
 
 export type Screen =
@@ -523,6 +524,13 @@ export class Overlay {
       <div class="row"><label>Note labels</label><button id="q-labels">${stage.quality.labels ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Reduced motion</label><button id="q-motion">${stage.quality.reducedMotion ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Colour-blind palette</label><button id="q-cb">${stage.quality.colorBlind ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Table size</label>
+        <span><input type="range" id="q-size" min="${TABLE_SIZE.min}" max="${TABLE_SIZE.max}" step="${TABLE_SIZE.step}" value="${stage.quality.tableSize}">
+        <span class="diag" id="q-size-now"></span></span></div>
+      <p class="diag">How much of the screen the playfield takes. A landscape display
+        leaves the table plenty of room sideways and none at all lengthways, so a
+        larger setting buys the size by raking the table a little further towards you
+        rather than by cropping the keyboard off the bottom.</p>
 
       <h2>MIDI monitor</h2>
       <p class="diag">Raw messages from your controller. Use this to see what the octave,
@@ -615,6 +623,20 @@ export class Overlay {
     quality('#q-labels', 'labels');
     quality('#q-motion', 'reducedMotion');
     quality('#q-cb', 'colorBlind');
+
+    const sizeEl = $<HTMLInputElement>('#q-size');
+    const sizeNow = $('#q-size-now');
+    const paintSize = () => {
+      const v = Number(sizeEl.value);
+      const t = (v - TABLE_SIZE.min) / (TABLE_SIZE.max - TABLE_SIZE.min);
+      sizeEl.style.setProperty('--fill', `${t * 100}%`);
+      sizeNow.textContent = `${Math.round(v * 100)}%`;
+    };
+    sizeEl.addEventListener('input', () => {
+      stage.setQuality({ tableSize: Number(sizeEl.value) });
+      paintSize();
+    });
+    paintSize();
     $<HTMLSelectElement>('#bend-range').addEventListener('change', (e) =>
       audio.setSettings({ bendRange: Number((e.target as HTMLSelectElement).value) }));
     $<HTMLSelectElement>('#mod-target').addEventListener('change', (e) =>

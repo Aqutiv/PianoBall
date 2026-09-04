@@ -1,6 +1,6 @@
 import { GameLoop } from '../core/loop';
 import { load, save } from '../core/storage';
-import { Stage } from '../render/stage';
+import { Stage, backingDensity } from '../render/stage';
 import { applyTheme, type Theme } from '../render/theme';
 import { currentTheme, resetThemeSettings, setThemeId } from '../render/themeSettings';
 import { InputHub } from '../midi/inputHub';
@@ -411,9 +411,14 @@ export class Shell {
     return el !== null && el !== document.body && this.hud.root.contains(el);
   }
 
+  /**
+   * A 4K laptop reports a ratio of 2.5 or 3 depending on the scaling it is set
+   * to, and the old cap of 2 left the table visibly soft on one. Nothing sheds
+   * this later: the adaptive pass drops effects under load, never resolution.
+   */
   private resize(): void {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    this.stage.resize(window.innerWidth, window.innerHeight, dpr);
+    const cssW = window.innerWidth, cssH = window.innerHeight;
+    this.stage.resize(cssW, cssH, backingDensity(cssW, cssH, window.devicePixelRatio));
   }
 
   // --------------------------------------------------------------- audio ---
