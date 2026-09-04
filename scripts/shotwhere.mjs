@@ -6,6 +6,14 @@ const [fa, fb] = process.argv.slice(2).map((f) => path.join(dir, f + '.png'));
 const A = await sharp(fa).raw().toBuffer({ resolveWithObject: true });
 const B = await sharp(fb).raw().toBuffer({ resolveWithObject: true });
 const { width: W, height: H, channels: C } = A.info;
+// The same geometry check `shotdiff` makes, and for the same reason: this walks
+// `B.data` on `A`'s dimensions, so a pair that merely happens to hold the same
+// number of bytes — 100x200 against 200x100 — would be indexed as if it were
+// the same picture and reported as having no differences at all.
+if (B.info.width !== W || B.info.height !== H || B.info.channels !== C) {
+  console.log(`SIZE MISMATCH  ${W}x${H}x${C} vs ${B.info.width}x${B.info.height}x${B.info.channels}`);
+  process.exit(1);
+}
 let minX = 1e9, maxX = -1, minY = 1e9, maxY = -1, n = 0;
 const GX = 16, GY = 16;
 const grid = Array.from({ length: GY }, () => new Array(GX).fill(0));

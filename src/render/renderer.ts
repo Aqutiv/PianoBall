@@ -746,11 +746,25 @@ export class PinballRenderer {
       // places at once. Frozen under reduced motion, where a smear is the one
       // thing that would still read as movement.
       if (speed > 900 && !this.quality.reducedMotion) {
-        const back = Math.min(0.024, speed / 150000);
+        // Backwards along the step the ball actually travelled, not along its
+        // velocity. After a bounce `v` is the *outgoing* velocity, so stepping
+        // back down it walks into the half-plane the ball never occupied —
+        // mirrored across the collision normal, and straight through whatever
+        // it just hit. The displacement from `prev` to `p` is the last piece of
+        // real travel there is, so the smear follows it and simply stops being
+        // drawn on the frame a ball reverses.
+        const stepX = ball.p.x - ball.prev.x, stepY = ball.p.y - ball.prev.y;
+        const stepLen = Math.hypot(stepX, stepY);
+        // How far back the smear reaches, unchanged; only its direction moves
+        // from the velocity to the travel. Taking the unit vector rather than
+        // scaling the step keeps this independent of the simulation rate.
+        const reach = speed * Math.min(0.024, speed / 150000);
+        const dx = stepLen > 1e-4 ? (stepX / stepLen) * reach : 0;
+        const dy = stepLen > 1e-4 ? (stepY / stepLen) * reach : 0;
         ctx.fillStyle = this.stage.theme.ball.body[3];
         for (let i = 1; i <= 3; i++) {
           const f = i / 3;
-          this.cam.project(x - ball.v.x * back * f, y - ball.v.y * back * f, ball.r, GHOST);
+          this.cam.project(x - dx * f, y - dy * f, ball.r, GHOST);
           ctx.globalAlpha = 0.2 * (1 - f) * Math.min(1, (speed - 900) / 1400);
           ctx.beginPath();
           ctx.ellipse(GHOST.x, GHOST.y, r * (1 - f * 0.18), r * (1 - f * 0.18), 0, 0, TAU);
