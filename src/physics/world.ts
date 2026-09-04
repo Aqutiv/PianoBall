@@ -1,7 +1,7 @@
 import { type Vec2, v2 } from './vec2';
 import { type Ball } from './ball';
 import {
-  type Collider, type SegmentCollider, type SoundTag, type Material,
+  type AABB, type Collider, type SegmentCollider, type SoundTag, type Material,
   closestFeature, updateAABB,
 } from './colliders';
 import { SpatialGrid } from './grid';
@@ -105,6 +105,15 @@ export class World {
    * only thing that ever reads it is the exit sweep at the end of that call.
    */
   private readonly seen = new Set<number>();
+  /**
+   * Every enabled paddle's bounds, unioned. Rebuilt once a step rather than
+   * consulted per candidate: the paddles are not in the broadphase grid, so
+   * `solveBall` had no way to reject them without walking all thirty-two, once
+   * per TOI iteration, per ball — even for a ball at the top of the table with
+   * the whole playfield between it and the keybed. Thirty-two reads a step
+   * buys a single compare in the place that used to do a thousand.
+   */
+  private readonly padBounds: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   private rand: () => number;
   private dirty = true;
 
@@ -153,6 +162,7 @@ export class World {
   step(dt: number): void {
     if (this.dirty) this.reindex();
     this.contacts.length = 0;
+    this.boundPaddles();
 
     const gx = this.tilt.x;
     const gy = -this.cfg.gravity + this.tilt.y;
@@ -207,6 +217,27 @@ export class World {
    * resolve exactly that one contact. Because motion is never applied past a
    * collision, a ball can never pass through a wall regardless of speed.
    */
+  /**
+   * Union of the enabled paddles' bounds, for this step.
+   *
+   * Empty when nothing is enabled — the sentinels invert the box so every test
+   * against it fails, which is what a world with no paddles should do.
+   */
+  private boundPaddles(): void {
+    const bb = this.padBounds;
+    bb.minX = bb.minY = Infinity;
+    bb.maxX = bb.maxY = -Infinity;
+    for (let i = 0; i < this.paddles.length; i++) {
+      const s = this.paddles[i].collider;
+      if (!s.enabled) continue;
+      const a = s.aabb;
+      if (a.minX < bb.minX) bb.minX = a.minX;
+      if (a.minY < bb.minY) bb.minY = a.minY;
+      if (a.maxX > bb.maxX) bb.maxX = a.maxX;
+      if (a.maxY > bb.maxY) bb.maxY = a.maxY;
+    }
+  }
+
   private solveBall(ball: Ball, dt: number): void {
     let remaining = dt;
     let iter = 0;
@@ -238,7 +269,13 @@ export class World {
         }
       }
 
-      for (let i = 0; i < this.paddles.length; i++) {
+      // One reject for the whole keybed. A ball anywhere but the bottom of the
+      // table misses every paddle, and this is the only place that can say so
+      // cheaply: paddles move every step, so they are not in the grid.
+      const pb = this.padBounds;
+      const nearPaddles = pb.maxX >= minX && pb.minX <= maxX
+        && pb.maxY >= minY && pb.minY <= maxY;
+      for (let i = 0; nearPaddles && i < this.paddles.length; i++) {
         const p = this.paddles[i];
         const s = p.collider;
         if (!s.enabled) continue;
