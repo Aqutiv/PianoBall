@@ -83,9 +83,24 @@ export class Adaptive {
   private floor = 0;
   /** The rung the last climb started from, to notice it being undone. */
   private climbedFrom = -1;
+  /** Take the next measured frame as the averages rather than blending it in. */
+  private priming = false;
 
-  /** Look away for a moment: the workload has changed under the measurement. */
-  disturb(): void { this.settle = SETTLE; }
+  /**
+   * Look away for a moment: the workload has changed under the measurement.
+   *
+   * Also throws away what the averages currently say. Skipping samples during
+   * the settle window keeps the *old* workload's numbers intact, so the first
+   * decision afterwards is made about a mode that is no longer running --
+   * enough, going from a cheap mode to an expensive one, to climb a rung on
+   * the strength of the old one and then hold that for eight seconds before
+   * noticing. They are re-primed from the first frame that is actually
+   * measured, rather than reset to a guess.
+   */
+  disturb(): void {
+    this.settle = SETTLE;
+    this.priming = true;
+  }
 
   /**
    * Forget what was learned about a workload that is no longer running.
@@ -99,7 +114,7 @@ export class Adaptive {
     this.failures.clear();
     this.floor = 0;
     this.climbedFrom = -1;
-    this.settle = SETTLE;
+    this.disturb();
   }
 
   /** A resize may mean a different display, and nothing else moves this. */
@@ -117,11 +132,15 @@ export class Adaptive {
     if (view.idle) { this.settle = SETTLE; return null; }
     if (this.settle > 0) { this.settle -= s.dt; return null; }
 
-    const k = Math.min(1, s.dt * 4);
+    // The first frame after a disturbance replaces the averages instead of
+    // being blended into them, so nothing of the previous workload survives
+    // into the first decision about this one.
+    const k = this.priming ? 1 : Math.min(1, s.dt * 4);
     this.frameAvg += ((s.stepMs + s.drawMs) - this.frameAvg) * k;
     if (s.frameMs < STALL_MS) {
       this.wallAvg += (s.frameMs - this.wallAvg) * k;
       this.refresh = Math.min(this.refresh, Math.max(4, s.frameMs));
+      this.priming = false;
     }
 
     this.held -= s.dt;
@@ -144,8 +163,16 @@ export class Adaptive {
       // it. Requiring an exact landing missed every two-rung shed, so a cycle
       // of climbing to 4 and jumping back to 6 was never counted and could
       // repeat all session.
+      //
+      // Counted once, and then the marker is cleared. Leaving it standing made
+      // every *subsequent* shed look like another failed recovery: carrying on
+      // down from 5 to 6 under continued overload would be recorded against
+      // rung 5, which nothing had ever tried to climb to -- and a later genuine
+      // attempt at it would then hit the limit after a single failure and be
+      // refused for the rest of the session.
       if (this.climbedFrom >= 0 && next >= this.climbedFrom) {
         this.failures.set(view.rung, (this.failures.get(view.rung) ?? 0) + 1);
+        this.climbedFrom = -1;
       }
       this.held = SHED_HOLD;
       return next;

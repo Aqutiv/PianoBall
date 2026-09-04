@@ -195,6 +195,55 @@ describe('the adaptive controller', () => {
     expect(offered).toBe(2);
   });
 
+  it('does not read continued overload as a second failed recovery', () => {
+    // A climb is undone once. Everything after that is the machine carrying on
+    // down under load, not another attempt -- but while the marker stood, each
+    // further shed was recorded against a rung nothing had ever tried to climb
+    // to, and a later genuine attempt at that rung would be refused after a
+    // single real failure.
+    const a = new Adaptive();
+    const feed = (frameMs: number, rung: number): number | null => {
+      for (let i = 0; i < 4000; i++) {
+        const t = a.update(
+          { stepMs: 0.6, drawMs: 1.4, frameMs, dt: frameMs / 1000 },
+          ladder({ rung }),
+        );
+        if (t !== null) return t;
+      }
+      return null;
+    };
+
+    // Climb out of 5, be pushed back to it, then keep sliding under load.
+    expect(feed(16.7, 5)).toBe(4);
+    expect(feed(33, 4)).toBe(5);
+    expect(feed(33, 5)).toBe(6);
+    expect(feed(33, 6)).toBe(7);
+
+    // Rung 5 has never been climbed to, so it is still worth two real tries.
+    expect(feed(16.7, 6)).toBe(5);
+    expect(feed(33, 5)).toBe(6);
+    expect(feed(16.7, 6)).toBe(5);
+  });
+
+  it('does not judge a new workload by the one that just stopped', () => {
+    // Cheap mode for a while, then a switch to an expensive one. Without
+    // re-priming, the comfortable averages survive the settle window and the
+    // controller climbs on the strength of a mode that is no longer running.
+    // The new workload is vsync-capped, so the wall clock says nothing and the
+    // whole question rests on the work average -- which is precisely the number
+    // the old mode left sitting at 2ms. Blended in one frame at a time it stays
+    // under the comfortable threshold long enough for the controller to offer a
+    // climb it has no business offering.
+    const a = new Adaptive();
+    run(a, { seconds: 40, frameMs: 16.7, workMs: 2, rung: 3 });
+    a.forget();
+    const { moves } = run(a, { seconds: 4, frameMs: 16.7, workMs: 30, rung: 3 });
+    expect(moves.length).toBeGreaterThan(0);
+    // Downward, every time. A climb here would be a verdict on the mode that
+    // just stopped.
+    expect(moves.every((m) => m > 3)).toBe(true);
+  });
+
   it('never measures a frame drawn behind a panel', () => {
     const a = new Adaptive();
     const work = a.frameAvg, wall = a.wallAvg;
