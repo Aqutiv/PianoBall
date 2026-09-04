@@ -534,9 +534,14 @@ ${this.active?.debugLines?.() ?? ''}`
     }
 
     // Nothing is expected to keep up while a panel is open: `draw` is
-    // deliberately throttled there, so `frameMs` measures the throttle.
+    // deliberately throttled there, so `frameMs` measures the throttle. Nor
+    // out of focus, where the run is suspended and `stepMs` falls to nothing
+    // that has anything to do with what this machine can manage. Both are
+    // covered by the panel today -- losing focus mid-run raises the pause
+    // screen -- but only incidentally, and the reason to skip is the state
+    // itself rather than the panel that happens to accompany it.
     this.qualityHeld -= dt;
-    if (this.overlay.visible || this.qualityHeld > 0) return;
+    if (this.overlay.visible || !this.focused || this.qualityHeld > 0) return;
     // A pinned preset means the player has decided. A setting that then drifts
     // is not a setting.
     if (perfSettings().graphics !== 'auto') return;
