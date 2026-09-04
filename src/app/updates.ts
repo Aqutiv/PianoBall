@@ -25,6 +25,41 @@ export type UpdateState = 'unsupported' | 'idle' | 'checking' | 'ready';
 /** How often to ask, in the background, whether a new build has been deployed. */
 const CHECK_EVERY = 60 * 60 * 1000;
 
+/**
+ * How long to give a worker to take over before reloading regardless.
+ *
+ * Activation clears the outdated precache first, so this is not instant, but
+ * it is seconds at worst on the slowest thing that can run the app. The limit
+ * is only here so a worker that never activates leaves the button unresponsive
+ * rather than permanently stuck — long enough that reaching it means something
+ * has genuinely gone wrong.
+ */
+const ACTIVATION_LIMIT = 10_000;
+
+/**
+ * Resolve once this worker is done becoming whatever it is going to be.
+ *
+ * `activated` is the one that matters: it is the point where the new worker
+ * answers fetches and a reload is safe. `redundant` resolves too, because a
+ * worker that was discarded is never going to activate and waiting out the
+ * full limit for it would help nobody.
+ */
+function settled(sw: ServiceWorker): Promise<void> {
+  if (sw.state === 'activated') return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = (): void => {
+      sw.removeEventListener('statechange', onChange);
+      clearTimeout(timer);
+      resolve();
+    };
+    const onChange = (): void => {
+      if (sw.state === 'activated' || sw.state === 'redundant') done();
+    };
+    sw.addEventListener('statechange', onChange);
+    const timer = setTimeout(done, ACTIVATION_LIMIT);
+  });
+}
+
 class Updates {
   state: UpdateState = 'unsupported';
 
@@ -99,22 +134,25 @@ class Updates {
    * here shortly after, which we will not be if the plugin got there first.
    */
   async applyNow(): Promise<void> {
-    // Is a handover actually coming? Only a worker that is waiting, on a page
-    // some worker already controls, produces one: telling it to stop waiting
-    // hands control over, and the plugin reloads on that. Wait for it rather
-    // than racing it. Activation has the old caches to clear before it can
-    // take over, which on a slow device is not quick, and a reload sent while
-    // the old worker is still in charge is answered by the old worker — which
-    // is how a fixed timer here would quietly land you back on the bundle you
-    // had just asked to leave.
-    const handover = !!this.reg?.waiting && !!navigator.serviceWorker.controller;
+    // The only question worth asking before reloading is whether the new
+    // worker is the one that will answer it. A reload sent while the old
+    // worker is still in charge is served by the old worker, and lands back on
+    // the bundle it was trying to leave.
+    //
+    // So wait on the worker itself rather than on anything about this page.
+    // Whether this tab has a controller says only whether the plugin will
+    // reload it, which is a different question and was the wrong one: a tab
+    // that has no controller can still be sharing a worker with a controlled
+    // tab in another window — that other tab is precisely what keeps the new
+    // worker waiting — and there the old worker is very much still serving.
+    const waiting = this.reg?.waiting ?? null;
     await this.apply?.();
-    // Otherwise nothing is coming and the button would do nothing at all. A
-    // page no worker controls, or one whose new worker activated without ever
-    // having to wait, has no change of control to reload on — and reloading is
-    // right there anyway: the cache is already serving the new bundle, and
-    // only this page is still running the old one.
-    if (!handover) location.reload();
+    if (waiting) await settled(waiting);
+    // Reload even when the plugin means to as well. Both only get here once
+    // the new worker is in charge, so whichever arrives first is right, and
+    // there are more ways to have no handover coming than to have one: no
+    // waiting worker at all, or no controller to hand over from.
+    location.reload();
   }
 
   /**
