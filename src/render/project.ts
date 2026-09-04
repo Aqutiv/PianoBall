@@ -111,6 +111,32 @@ export class TableCamera {
   }
 
   /**
+   * The rake that projects the table largest, for this viewport.
+   *
+   * Dropping the rake foreshortens the far end, which buys size while the fit is
+   * bound by height — but it also widens the table, so once width takes over it
+   * costs size instead. The crossover between the two is the most a viewport can
+   * give, and it moves with the aspect: at the floor on a wide display, at the
+   * design rake on a portrait one, and somewhere in between on a squarish one.
+   * Treating the floor as the maximum would walk straight past it.
+   */
+  private peakRake(viewW: number, viewH: number): number {
+    // Positive while height is the binding constraint, and rising with the rake.
+    const slack = (el: number) => {
+      const e = this.extent(el);
+      return viewW / e.spanU - viewH / e.spanV;
+    };
+    let lo = MIN_ELEVATION_DEG, hi = this.opts.elevationDeg;
+    if (slack(lo) >= 0) return lo;   // bound by height throughout: rake all the way
+    if (slack(hi) <= 0) return hi;   // bound by width throughout: nothing to win
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (slack(mid) < 0) lo = mid; else hi = mid;
+    }
+    return hi;   // the height-bound side of the crossover
+  }
+
+  /**
    * Solve focal length and origin so the whole table fits the viewport.
    *
    * `magnify` above 1 is paid for with rake rather than with `fill`. On a
@@ -130,25 +156,26 @@ export class TableCamera {
 
     if (magnify > 1) {
       const want = focal(ext) * magnify;
-      const floorExt = this.extent(MIN_ELEVATION_DEG);
-      if (focal(floorExt) >= want) {
-        // Monotone: focal grows as the rake drops, so bisect for the least rake
-        // that buys the asked-for size.
-        let lo = MIN_ELEVATION_DEG, hi = elevationDeg;
+      const peak = this.peakRake(viewW, viewH);
+      const peakExt = this.extent(peak);
+      if (focal(peakExt) > want) {
+        // Between the peak and the design rake the fit is bound by height, where
+        // focal falls off monotonically as the rake comes back up. Bisect that
+        // stretch for the least rake that still buys the size asked for.
+        let lo = peak, hi = elevationDeg;
         for (let i = 0; i < 14; i++) {
           const mid = (lo + hi) / 2;
           if (focal(this.extent(mid)) > want) lo = mid; else hi = mid;
         }
         el = (lo + hi) / 2;
         ext = this.extent(el);
-      } else if (focal(floorExt) > focal(ext)) {
-        // Asked for more than the rake can give. Take all of it.
-        el = MIN_ELEVATION_DEG;
-        ext = floorExt;
+      } else {
+        // More than this viewport has to give. Take the most of it there is —
+        // which on a portrait display is the design rake itself, so the setting
+        // is a no-op there rather than a way to make the table smaller.
+        el = peak;
+        ext = peakExt;
       }
-      // Otherwise the viewport is portrait and the fit is bound by width, where
-      // raking lower only makes the table wider and so smaller. Nothing to win:
-      // stay at the design rake and let the setting be a no-op.
     }
 
     this.place(el);

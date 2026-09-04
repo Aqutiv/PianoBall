@@ -21,11 +21,12 @@ export interface RenderQuality {
 /**
  * The range the table-size control offers.
  *
- * The top of it is where the rake runs out: past this the camera would have to
- * crop rather than foreshorten, and the first thing off the bottom of the screen
- * would be the front of the outermost keys.
+ * The top of it is exactly where the rake runs out. A landscape fit is bound by
+ * height, so the most raking can buy is the ratio of the two vertical spans, and
+ * that ratio does not depend on the viewport: asking for more than this would
+ * leave the last steps of the control doing nothing.
  */
-export const TABLE_SIZE = { min: 1, max: 1.15, step: 0.01 } as const;
+export const TABLE_SIZE = { min: 1, max: 1.13, step: 0.01 } as const;
 
 function clampTableSize(v: number): number {
   return Number.isFinite(v) ? Math.min(TABLE_SIZE.max, Math.max(TABLE_SIZE.min, v)) : TABLE_SIZE.min;

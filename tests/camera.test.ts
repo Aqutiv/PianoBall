@@ -5,6 +5,7 @@ import { DEFAULT_KEYBED } from '../src/game/keyLayout';
 import { TABLE_SIZE } from '../src/render/stage';
 
 const LANDSCAPE = { w: 1920, h: 1080 };
+const KEYBED = { ...DEFAULT_KEYBED, ...AURORA.keybed };
 
 function fitted(magnify: number, w = LANDSCAPE.w, h = LANDSCAPE.h): TableCamera {
   const cam = new TableCamera({ width: AURORA.width, height: AURORA.height, magnify });
@@ -12,10 +13,20 @@ function fitted(magnify: number, w = LANDSCAPE.w, h = LANDSCAPE.h): TableCamera 
   return cam;
 }
 
+/**
+ * The focal length, up to a constant.
+ *
+ * At the table centre the depth along the view axis is exactly the camera
+ * distance whatever the rake, so this reads the fit itself rather than the
+ * perspective at some particular spot on the table.
+ */
+function focalScale(cam: TableCamera): number {
+  return cam.scaleAt(0, AURORA.height / 2, 0);
+}
+
 /** Pixels per table unit across the middle of the keybed. */
 function keyScale(cam: TableCamera): number {
-  const kb = { ...DEFAULT_KEYBED, ...AURORA.keybed };
-  return cam.scaleAt(kb.left, kb.baseY, 13);
+  return cam.scaleAt(KEYBED.left, KEYBED.baseY, 13);
 }
 
 describe('the table camera', () => {
@@ -31,25 +42,51 @@ describe('the table camera', () => {
   });
 
   it('draws the table as much larger as it was asked to', () => {
-    const base = keyScale(fitted(1));
+    const base = focalScale(fitted(1));
 
     for (const m of [1.05, 1.1, TABLE_SIZE.max]) {
+      expect(focalScale(fitted(m)) / base, `magnify ${m}`).toBeCloseTo(m, 3);
+    }
+  });
+
+  it('hands the keyboard at least the size the table got', () => {
+    const base = keyScale(fitted(1));
+
+    // The keybed sits nearer than the focal plane, so the rake that pays for the
+    // size gives the keys a little more of it and the far end a little less.
+    for (const m of [1.05, 1.1, TABLE_SIZE.max]) {
       const got = keyScale(fitted(m)) / base;
-      // `magnify` sizes the fit; the keybed sits nearer than the focal plane, so
-      // the rake that pays for it hands the keys a little more than was asked
-      // for and the far end of the table a little less.
       expect(got, `magnify ${m}`).toBeGreaterThanOrEqual(m);
       expect(got, `magnify ${m}`).toBeLessThan(m * 1.05);
     }
   });
 
+  it('finds the best rake on a squarish viewport, not the one at the floor', () => {
+    // Here the fit stops being bound by height partway down the range, so the
+    // focal length peaks in the middle: raking to the floor overshoots and ends
+    // up smaller than a rake the viewport could actually have had.
+    const square = { w: 900, h: 1000 };
+    const base = focalScale(fitted(1, square.w, square.h));
+
+    expect(focalScale(fitted(1.04, square.w, square.h)) / base).toBeGreaterThanOrEqual(1.04);
+  });
+
+  it('offers no more size than the rake can actually deliver', () => {
+    // Every step of the control has to move something, so the top of the range
+    // must stay inside what raking can buy on a display bound by height.
+    const base = focalScale(fitted(1));
+    const atMax = focalScale(fitted(TABLE_SIZE.max));
+
+    expect(focalScale(fitted(TABLE_SIZE.max - TABLE_SIZE.step))).toBeLessThan(atMax);
+    expect(atMax / base).toBeGreaterThanOrEqual(TABLE_SIZE.max);
+  });
+
   it('buys the size with rake rather than by cropping the keyboard', () => {
     // The near edge of the outermost key, which is the first thing a crop would
     // take, and the shake that has to stay clear of the bottom of the screen.
-    const kb = { ...DEFAULT_KEYBED, ...AURORA.keybed };
-    const nearY = kb.baseY - kb.crown - kb.whiteDepth;
+    const nearY = KEYBED.baseY - KEYBED.crown - KEYBED.whiteDepth;
     const gap = (m: number) =>
-      LANDSCAPE.h - fitted(m).project(kb.left, nearY, 0, { x: 0, y: 0 }).y;
+      LANDSCAPE.h - fitted(m).project(KEYBED.left, nearY, 0, { x: 0, y: 0 }).y;
 
     // Raking lower lifts that edge if anything; it never eats into the reserve.
     expect(gap(TABLE_SIZE.max)).toBeGreaterThanOrEqual(gap(1));
@@ -71,6 +108,6 @@ describe('the table camera', () => {
 
     // Raking lower only makes the table wider there, so there is nothing to win
     // and — more to the point — nothing to lose.
-    expect(keyScale(fitted(TABLE_SIZE.max, 390, 844))).toBeGreaterThanOrEqual(base);
+    expect(keyScale(fitted(TABLE_SIZE.max, 390, 844))).toBe(base);
   });
 });

@@ -101,10 +101,14 @@ describe('a rendered string', () => {
   it('stays inside full scale and is finite everywhere', () => {
     for (const bucket of [0, 3] as const) {
       const x = renderString(HARP, 60, bucket, 48000, makeRng(6));
+      // Scanned rather than asserted sample by sample: at 48k this is millions
+      // of values, and an `expect` apiece cost seconds and left the test a
+      // hair inside its timeout. Reports the offending sample either way.
+      let bad = -1;
       for (let i = 0; i < x.length; i++) {
-        expect(Number.isFinite(x[i])).toBe(true);
-        expect(Math.abs(x[i])).toBeLessThanOrEqual(1);
+        if (!Number.isFinite(x[i]) || Math.abs(x[i]) > 1) { bad = i; break; }
       }
+      expect(bad < 0 ? null : { bucket, at: bad, value: x[bad] }).toBeNull();
     }
   });
 
