@@ -724,6 +724,192 @@ kbd {
 .wheel input[type="range"]::-moz-range-track { height: 4px; }
 .wheel input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; }
 
+/* ----------------------------------------------------------- scoreboard --- */
+
+/*
+ * The end-of-run screen for both modes.
+ *
+ * Everything here is drawn in tokens rather than in colours. That is not
+ * fastidiousness: `--panel` is a cream `#fff6e5` under Toybox and a near-black
+ * elsewhere, so a hairline written as `rgba(255,255,255,.06)` is invisible in
+ * one of the four themes. `currentColor` is the workhorse — the panel already
+ * sets its own ink per theme, and inheriting it is how the dial's marks and
+ * captions come out right on cream without a fifth override list.
+ */
+
+.sb { margin-top: 16px; }
+.sb-head { display: flex; align-items: center; gap: 20px; }
+.sb-detail { flex: 1; min-width: 0; }
+/* No map to put beside the dial, so the rows take that side instead. */
+.sb-lean .sb-detail { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+
+.sb-dial { flex: none; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.sb-ring { width: 148px; height: 148px; display: block; }
+.sb-track { fill: none; stroke: var(--track); stroke-width: 9; }
+.sb-sweep { fill: none; stroke-width: 9; stroke-linecap: round; }
+
+/*
+ * A notch is drawn twice: a wide halo in the panel's own ink under a thin line
+ * in its own colour. The halo is what keeps a two-pixel tick legible where the
+ * sweep's gradient passes under it, and on Toybox's cream, where an amber mark
+ * on its own would disappear.
+ */
+/*
+ * A notch not yet reached is drawn in the panel's own ink, and takes its own
+ * colour only once the sweep has crossed it. That is the state change the dial
+ * is for — and it is also the only version that survives Toybox, where amber
+ * at half opacity on cream is nothing at all.
+ */
+.sb-mark { stroke: currentColor; stroke-width: 2.5; stroke-opacity: 0.32; }
+.sb-mark.on { stroke-width: 3; stroke-opacity: 1; }
+.sb-mark-pass.on { stroke: var(--warn); }
+.sb-mark-best.on { stroke: var(--accent); }
+
+.sb-read {
+  fill: currentColor;
+  font-family: var(--font-mono);
+  /* Proportional figures make a counting number shuffle sideways, which reads
+     as a fault rather than as counting. */
+  font-variant-numeric: tabular-nums;
+  font-size: 27px;
+  text-anchor: middle;
+}
+.sb-badge {
+  fill: currentColor;
+  font-family: var(--font-display);
+  font-size: 54px;
+  font-weight: 750;
+  text-anchor: middle;
+}
+/* A word, not a grade: small, spaced, and under the figure rather than over it. */
+.sb-badge.sb-word { font-size: 15px; font-weight: 700; letter-spacing: 0.22em; }
+/* With nothing about to cover it, the figure can take the middle. */
+.sb-read-alone { font-size: 23px; }
+/* A long score has to fit across a ring 115 units wide on the inside. */
+.sb-read-mid { font-size: 22px; }
+.sb-read-long { font-size: 19px; }
+.sb-badge.sb-good { fill: var(--ok); }
+.sb-badge.sb-warn { fill: var(--warn); }
+.sb-badge.sb-bad { fill: var(--danger); }
+
+.sb-keys { display: flex; gap: 10px; font-size: 11px; letter-spacing: 0.04em; }
+.sb-key { white-space: nowrap; color: currentColor; opacity: 0.45; }
+.sb-key.on { opacity: 1; }
+.sb-key-pass.on { color: var(--warn); }
+.sb-key-best.on { color: var(--accent); }
+
+.sb-cap {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  margin-bottom: 7px;
+}
+
+/*
+ * The map sits on its own ground rather than on the panel, so it has a visible
+ * length before it fills — which is what makes the reveal read as a line being
+ * written rather than as chips appearing out of nowhere. On Toybox the ground
+ * is a dark frame around bright ticks, which is that theme's own language.
+ */
+.sb-map {
+  display: block;
+  width: 100%;
+  height: 34px;
+  background: var(--track);
+  border-radius: 4px;
+}
+
+.sb-split {
+  display: flex;
+  height: 7px;
+  margin-top: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--track);
+}
+.sb-split i { display: block; width: 0; }
+.sb-tally { justify-content: flex-start; margin-top: 7px; }
+
+.sb-rows { margin-top: 14px; }
+.sb-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+.sb-row + .sb-row { border-top: 1px solid var(--stroke); }
+.sb-label { color: currentColor; opacity: 0.72; }
+.sb-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.sb-value.sb-good { color: var(--ok); }
+.sb-value.sb-warn { color: var(--warn); }
+.sb-value.sb-bad { color: var(--danger); }
+
+/* A share gets a track under its row; a count has no denominator and so none. */
+.sb-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.sb-fill i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--neon), var(--neon2));
+}
+/* Where the mark being chased sits on that track. */
+.sb-fill b {
+  position: absolute;
+  top: -1px;
+  width: 2px;
+  height: 4px;
+  margin-left: -1px;
+  background: var(--accent);
+  border-radius: 0;
+}
+
+.sb-banner {
+  margin-top: 14px;
+  padding: 9px 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  border: 1px solid var(--stroke);
+}
+.sb-banner.sb-good { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.sb-banner.sb-warn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/*
+ * Narrow enough that a dial and a map cannot share a line. Stacking is the only
+ * honest answer: shrinking both leaves two things too small to read instead of
+ * one thing that is.
+ */
+@media (max-width: 520px) {
+  .sb-head { flex-direction: column; align-items: stretch; gap: 14px; }
+  .sb-dial { align-self: center; }
+}
+/* A short landscape window is the shape this is usually played in, and there
+   the panel's own 88vh is the constraint rather than the width. Below 720
+   rather than at it: a plain 720p window has room for the whole dial, and
+   shrinking it there would cost the one thing the screen is built around for
+   nothing in return. */
+@media (max-height: 640px) {
+  .sb-ring { width: 112px; height: 112px; }
+  .sb-badge { font-size: 44px; }
+  .sb-read { font-size: 22px; }
+}
+
 /* ------------------------------------------------------------- themes --- */
 
 /*
@@ -850,6 +1036,13 @@ kbd {
 [data-theme="rush"] .meter-fill,
 [data-theme="rush"] .tune-bar i,
 [data-theme="rush"] .wheel i { border-radius: 0; }
+/* The scoreboard's tracks are bars like any other, and two themes have no
+   round corners anywhere. Left out, they would be the only soft edges on the
+   screen. */
+[data-theme="rush"] .sb-map,
+[data-theme="rush"] .sb-split,
+[data-theme="rush"] .sb-fill,
+[data-theme="rush"] .sb-banner { border-radius: 0; }
 [data-theme="rush"] .meter-fill.slow { box-shadow: 0 0 14px rgba(47, 246, 255, 0.8); }
 [data-theme="rush"] .meter-fill.tilt { box-shadow: 0 0 14px rgba(255, 47, 160, 0.8); }
 [data-theme="rush"] .steps i.on { box-shadow: 0 0 10px var(--neon); }
@@ -986,6 +1179,10 @@ kbd {
 [data-theme="velvet"] .tune-bar,
 [data-theme="velvet"] .wheel > span,
 [data-theme="velvet"] .steps i { border-radius: 0; }
+[data-theme="velvet"] .sb-map,
+[data-theme="velvet"] .sb-split,
+[data-theme="velvet"] .sb-fill { border-radius: 0; }
+[data-theme="velvet"] .sb-banner { border-radius: 1px; }
 
 [data-theme="velvet"] .overlay {
   background: radial-gradient(120% 92% at 50% 40%, rgba(42, 16, 48, 0.82), rgba(8, 5, 10, 0.97));

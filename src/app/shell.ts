@@ -21,6 +21,7 @@ import { resetPinballSettings } from '../modes/pinball/settings';
 import { AURORA } from '../game/table/tables/aurora';
 import { Hud } from '../ui/hud';
 import { Overlay, type Screen } from '../ui/overlay';
+import type { ModeResult } from '../ui/scoreboard';
 import { FACTORIES, availableModes, type ModeInfo } from './registry';
 import type { GameMode, GameModeId, ModeContext } from './mode';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
@@ -34,10 +35,14 @@ import type { PlayTuneMode } from '../modes/playtune/playtune';
  */
 const IDLE_FRAME = 1 / 30;
 
-export interface ModeResult {
-  title: string;
-  lines: { label: string; value: string }[];
-}
+/**
+ * What a finished run has to say for itself.
+ *
+ * Defined with the screen that draws it rather than here, because the shape is
+ * the scoreboard's business and the shell only ever holds one. Re-exported so
+ * the modes keep importing it from where they always have.
+ */
+export type { ModeResult } from '../ui/scoreboard';
 
 /**
  * The one thing that exists for the whole life of the page.
@@ -182,7 +187,13 @@ export class Shell {
     this.refreshSound();
     this.input.midi.onDevicesChanged = () => {
       this.refreshStatus(this.input.midi.status);
-      if (this.overlay.visible) this.overlay.show(this.overlay.screen);
+      // Only the two screens that actually name the controller. This used to
+      // redraw whichever screen was up, which was harmless while every panel
+      // was static text and is not any more: plugging a keyboard in while the
+      // results were on screen threw the panel away mid-count and started the
+      // whole reveal again from zero.
+      const s = this.overlay.screen;
+      if (s === 'home' || s === 'settings') this.overlay.show(s);
     };
     // Something has to be playing itself behind the menu, or the first thing
     // the player sees is a black rectangle. Enter the mode without starting a
@@ -519,7 +530,7 @@ export class Shell {
 ${this.active?.debugLines?.() ?? ''}`
         : undefined,
     });
-    if (this.overlay.visible) this.overlay.update();
+    if (this.overlay.visible) this.overlay.update(frameDt);
     // Typing in a panel — or arrowing through a control in the HUD — must not
     // play the piano or bend the table underneath it. Anything still held when
     // the keyboard loses its claim is let go on the way out, so a note cannot

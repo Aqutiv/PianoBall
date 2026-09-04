@@ -320,6 +320,17 @@ export class PinballAudio {
     this.apply(0);
   }
 
+  /**
+   * A fresh run is starting.
+   *
+   * The game-over fall is placed a beat and a half ahead of itself, and
+   * Backspace inside that window starts a run the fall does not belong to —
+   * the last ball rolling home over a new one being served. Nothing else was
+   * going to stop it: `mallet` sits outside the engine's shot budget, so the
+   * app's hush cannot reach it, and these handles are the only way back.
+   */
+  newGame(): void { this.dropAhead(); }
+
   /** Take back everything placed ahead that has not sounded yet. */
   private dropAhead(): void {
     for (const h of this.ahead) h.cancel();
@@ -383,5 +394,35 @@ export class PinballAudio {
       const at = start + order.length * spacing;
       this.hold(this.engine.drum('crash', 0.8, at), at + 2);
     }
+  }
+
+  /**
+   * The last ball is gone.
+   *
+   * The one moment in the game that made no sound at all: the banner said GAME
+   * OVER and the table simply carried on comping underneath it.
+   *
+   * A whole-tone fall from the octave, which lands a major third below the
+   * tonic — nowhere — and dulls as it drops. Deliberately not built from
+   * `chordTones` the way a flourish is: a flourish belongs to the harmony it
+   * interrupts, and a game over is the opposite errand. It should not resolve,
+   * because nothing has. Then the trough, half a step later: the ball rolling
+   * home, which is what a table actually does last.
+   *
+   * On the grid, because unlike PlayTune's the bed here is still playing —
+   * opening the results screen does not hush anything, only pausing does.
+   */
+  gameOver(root: number): void {
+    const groove = this.bed.groove;
+    const start = groove.nextStep(this.engine.now);
+    const fall = [12, 10, 8];
+    const gains = [0.3, 0.26, 0.22];
+    const brights = [0.7, 0.5, 0.35];
+    fall.forEach((step, i) => {
+      const at = start + i * groove.stepSeconds;
+      this.hold(this.engine.mallet(root + step, gains[i], (i - 1) * 0.4, brights[i], at), at + 1.6);
+    });
+    const home = start + (fall.length - 0.5) * groove.stepSeconds;
+    this.hold(this.engine.mech('trough', 0.7, 0, home), home + 1);
   }
 }

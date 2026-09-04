@@ -64,6 +64,16 @@ export function installDebugApi(shell: Shell): void {
       return res.json();
     },
     resizeTo: (w: number, h: number, dpr = 1) => shell.stage.resize(w, h, dpr),
+    /** What the last finished run had to say for itself. */
+    report: () => shell.lastResult,
+    /**
+     * Hold the results screen's reveal at `t` seconds.
+     *
+     * The panel is DOM, so `shot` above cannot see it — that captures the
+     * canvas alone. This is for driving it under a real screenshot instead,
+     * without having to catch a moving target by hand.
+     */
+    board: (t = 99) => shell.overlay.scrub(t),
 
     state: () => {
       const game = pinball()?.game;

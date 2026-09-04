@@ -423,13 +423,14 @@ src/
   physics/   vec2, colliders, swept collision, spatial grid, world solver
   midi/      Web MIDI, note→lane mapping, velocity curves, keyboard fallback
   audio/     engine (graph + synthesis), instrument and drum banks, rhythm
-             patterns and box, music theory, shared state, chord bed
+             patterns and box, music theory, shared state, chord bed, stings
   game/      pinball state, key deck, keybed, key layout, scoring, tilt, table
   render/    stage, raked camera, keys, empty field, particles, bloom, theme
   modes/     pinball/  freestyle/  playtune/ (+ its chart, judge, library)
-  ui/        HUD chrome, overlay screens
+  ui/        HUD chrome, overlay screens, end-of-run scoreboard
 tests/       sweep math, tunnelling, determinism, key layout, music,
-             mode teardown, charts, judging, progression
+             mode teardown, charts, judging, progression, the scoreboard's
+             reveal and its cadence
 ```
 
 ## Scripts

@@ -18,6 +18,10 @@ import { findTune } from './library';
 import { loadProgress, recordRun, type Progress } from './progress';
 import { ROLES, type RoleId, type TuneRole } from './role';
 import { playTuneSettings, setPlayTuneSettings } from './settings';
+import { RUN_COLUMNS, TIMING, bucketRun, type Split, type Stat, type VerdictTone } from '../../ui/scoreboard';
+import { playSting } from '../../audio/sting';
+import { tuneSting } from './sting';
+import type { Scheduled } from '../../audio/engine';
 
 /** Points a verdict is worth before multipliers. */
 const WORTH: Record<Verdict, number> = {
@@ -37,6 +41,42 @@ type Phase = 'idle' | 'countin' | 'playing' | 'finished';
  */
 function comboMultiplier(combo: number, perOnset = 1): number {
   return 1 + Math.min(6, Math.floor(combo / (8 * perOnset))) * 0.5;
+}
+
+/** The breakdown, worst last, so the bar reads left to right as it went. */
+const SPLIT_ORDER: readonly VerdictTone[] = ['perfect', 'good', 'ok', 'miss', 'wrong'];
+
+/** Worst first, for folding a chord's several targets into one verdict. */
+const SEVERITY: Record<Verdict, number> = {
+  perfect: 0, good: 1, ok: 2, wrong: 3, miss: 4,
+};
+
+/**
+ * One verdict per moment the tune asked for something, in time order.
+ *
+ * Per onset rather than per target, which is the difference between a picture
+ * of the run and a picture of the target list: a chord is three or four entries
+ * at one instant, and drawn one apiece the chord role's map would be three
+ * times as long as its tune and would say a triad went well three times. The
+ * worst of the chord wins, because a triad with a note missing is a chord you
+ * did not play.
+ *
+ * `Judge` sorts its targets by time and then by pitch, so equal times are
+ * already adjacent and a single sweep is enough.
+ */
+function onsetVerdicts(targets: readonly Target[]): VerdictTone[] {
+  const out: VerdictTone[] = [];
+  let at = -Infinity;
+  for (const t of targets) {
+    const v = (t.verdict ?? 'miss') as VerdictTone;
+    if (t.time !== at) {
+      out.push(v);
+      at = t.time;
+    } else if (SEVERITY[v] > SEVERITY[out[out.length - 1]]) {
+      out[out.length - 1] = v;
+    }
+  }
+  return out;
 }
 
 /**
@@ -75,6 +115,15 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private strikePulse = 0;
   /** Octaves the running tune was moved by, needed to name its chords. */
   private shift = 0;
+  /**
+   * The cadence placed when a run ends, while it is still to come.
+   *
+   * Kept because `mallet` is deliberately outside the engine's shot budget, so
+   * nothing else will ever stop it: a player who leaves the results screen
+   * inside the first beat of it would otherwise hear the last tune resolve over
+   * the next one's count-in, in the last one's instrument.
+   */
+  private sting: Scheduled | null = null;
   /** Whether this run has ever seen a live audio clock. */
   private ranWithAudio = false;
   /** Mean notes this chart asks for at once, for the combo ladder. */
@@ -348,8 +397,14 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     audio.setBedVoice(DEFAULT_BED_VOICE);
     audio.setKeyBedVoice(DEFAULT_BED_VOICE);
     audio.setTempo(music.bpm);
+    this.dropSting();
     this.judge = null;
     this.phase = 'idle';
+  }
+
+  private dropSting(): void {
+    this.sting?.cancel();
+    this.sting = null;
   }
 
   /** Fold the finished run into the saved progress and open the results. */
@@ -374,27 +429,84 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const outcome = recordRun(this.role.storageKey, this.progress, tune.id, this.role.order, {
       accuracy, score: this.scoring.score, grade: letter, passed,
     });
+    // `outcome.best` is the best *including* this run, so the notch taken from
+    // there would sit exactly under the needle on every improvement and could
+    // never be seen to be crossed. `previous` is where the player stood — and
+    // it comes back from `recordRun` rather than being read here beforehand,
+    // because the merge with what another window has stored happens inside it.
+    // A reading taken out here would belong to a different chain from the
+    // `improved` beside it.
+    const wasBest = outcome.previous?.accuracy ?? null;
 
     const next = outcome.unlocked ? findTune(outcome.unlocked) : null;
+    // `recordRun` calls a first play an improvement, because there was nothing
+    // to be worse than. True of the record and useless to say out loud: a run
+    // that missed every note was being congratulated on a new best. Beating
+    // something requires there to have been something.
+    const beaten = outcome.previous !== null && outcome.improved;
+    const stats: Stat[] = [
+      { kind: 'count', label: 'Score', value: this.scoring.score },
+      { kind: 'count', label: 'Longest run', value: judge.bestCombo },
+    ];
+    if (held !== null) stats.push({ kind: 'share', label: 'Notes held', value: held });
+    if (judge.tally.wrong) {
+      stats.push({ kind: 'count', label: 'Wrong keys', value: judge.tally.wrong, tone: 'warn' });
+    }
+    stats.push({
+      kind: 'share',
+      label: 'Best run',
+      value: outcome.best.accuracy,
+      ...(wasBest === null ? {} : { mark: wasBest }),
+      tone: beaten ? 'good' : 'plain',
+    });
+    // On whether the run passed, not on whether it earned a letter: the pass
+    // marks all sit at or below C, so a run can clear the tune and still have no
+    // grade — and being told what to reach after you have reached it reads as a
+    // fail.
+    if (!passed) stats.push({ kind: 'share', label: 'To pass', value: card.pass, tone: 'warn' });
+
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const marks: { at: number; label: string; kind: 'pass' | 'best' }[] = [
+      { at: card.pass, label: `to pass ${pct(card.pass)}`, kind: 'pass' },
+    ];
+    if (wasBest !== null && wasBest > 0) {
+      marks.push({ at: wasBest, label: `your best ${pct(wasBest)}`, kind: 'best' });
+    }
+
     this.ctx.setResult({
-      title: letter ? `${tune.title} — ${letter}` : tune.title,
-      lines: [
-        { label: 'Accuracy', value: `${Math.round(accuracy * 100)}%` },
-        { label: 'Score', value: this.scoring.score.toLocaleString() },
-        { label: 'Perfect / good / ok / missed', value:
-          `${judge.tally.perfect} / ${judge.tally.good} / ${judge.tally.ok} / ${judge.tally.miss}` },
-        ...(held === null ? [] : [{ label: 'Notes held', value: `${Math.round(held * 100)}%` }]),
-        ...(judge.tally.wrong ? [{ label: 'Wrong keys', value: String(judge.tally.wrong) }] : []),
-        { label: 'Best run', value: `${Math.round(outcome.best.accuracy * 100)}%${outcome.improved ? ' — new best' : ''}` },
-        ...(next ? [{ label: 'Unlocked', value: next.title }] : []),
-        // On whether the run passed, not on whether it earned a letter: the
-        // pass marks all sit at or below C, so a run can clear the tune and
-        // still have no grade — and being told what to reach after you have
-        // reached it reads as a fail.
-        ...(passed ? [] : [{ label: 'To pass', value: `${Math.round(card.pass * 100)}% accuracy` }]),
-      ],
+      title: tune.title,
+      subtitle: `${tune.composer} · ${this.role.label.toLowerCase()}`,
+      hero: {
+        value: accuracy,
+        readout: { kind: 'percent' },
+        badge: letter,
+        marks,
+        tone: passed ? 'good' : 'warn',
+      },
+      run: bucketRun(onsetVerdicts(judge.targets), RUN_COLUMNS),
+      split: SPLIT_ORDER.map((t): Split => ({ tone: t, count: judge.tally[t] })),
+      stats,
+      banner: next ? { text: `${next.title} unlocked`, tone: 'good' }
+        : beaten ? { text: 'A new best on this tune', tone: 'warn' } : null,
     });
     this.ctx.openScreen('result');
+
+    // On the dial landing rather than on the panel opening: the cadence is what
+    // the sweep arriving sounds like, and a resolution that goes off while the
+    // ring is still climbing belongs to nothing. The tune's own key, tempo and
+    // instrument are all still loaded, because `stopRun` is deliberately not on
+    // this path.
+    this.dropSting();
+    this.sting = playSting(
+      this.ctx.audio,
+      tuneSting(
+        tune.root + this.shift,
+        SCALES[tune.scaleId],
+        this.transport.beatSeconds,
+        beaten && passed ? 'best' : passed ? 'pass' : 'short',
+      ),
+      TIMING.badge.at,
+    );
   }
 
   // ------------------------------------------------------------------ loop ---

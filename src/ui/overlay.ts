@@ -4,8 +4,9 @@ import { RANDOM, toKeyChoice } from '../audio/musicState';
 import type { CurveName } from '../midi/velocityCurve';
 import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
-import { loadScores } from '../modes/pinball/pinball';
 import { pinballSettings, setPinballSettings } from '../modes/pinball/settings';
+import { scoreboard, type Frames } from './board';
+import { REVEAL_SECONDS, type ModeResult } from './scoreboard';
 import type { ModTarget } from '../audio/engine';
 import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
 import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
@@ -56,7 +57,7 @@ const SOUND_PRESETS: readonly (readonly [string, string])[] = [
 export class Overlay {
   screen: Screen = 'home';
   private body!: HTMLElement;
-  private live: (() => void) | null = null;
+  private live: ((dt: number) => void) | null = null;
   /** Drops whatever input subscription the current screen took out. */
   private offInput: (() => void) | null = null;
   /** Index of the highlighted mode card on the home screen. */
@@ -69,6 +70,8 @@ export class Overlay {
    * loaded" was wrong, because one is always loaded to sit behind the menu.
    */
   private returnTo: Screen = 'home';
+  /** The scoreboard on screen, while one is. Only the debug scrub reads it. */
+  private board: Frames | null = null;
 
   constructor(private readonly root: HTMLElement, private readonly shell: Shell) {
     root.innerHTML = '<div class="panel" id="panel"></div>';
@@ -108,6 +111,7 @@ export class Overlay {
     if (sub && !wasSub) this.returnTo = this.screen ?? (this.shell.playing ? 'paused' : 'home');
     this.screen = screen;
     this.live = null;
+    this.board = null;
     this.offInput?.();
     this.offInput = null;
     if (!screen) {
@@ -139,7 +143,7 @@ export class Overlay {
   }
 
   /** Refresh the live parts of the current screen. */
-  update(): void { this.live?.(); }
+  update(dt: number): void { this.live?.(dt); }
 
   /** Keyboard navigation, forwarded by the shell. */
   onKey(e: KeyboardEvent): void {
@@ -347,21 +351,55 @@ export class Overlay {
 
   // ------------------------------------------------------------ game over ---
 
-  private renderGameOver(): void {
-    const result = this.shell.lastResult;
-    const best = loadScores().pinball;
-    const lines = (result?.lines ?? [])
-      .map((l) => `<div class="row"><label>${l.label}</label><span>${l.value}</span></div>`).join('');
+  /**
+   * The scoreboard, and whatever the screen offers to do next.
+   *
+   * Both end screens are this. What differed between them was never the way a
+   * run should be shown — it was three buttons and a title, and keeping two
+   * copies of the presentation for that is how one of them ends up with a row
+   * the other never got.
+   *
+   * The board's markup is written here, once, and the closure handed to `live`
+   * only ever sets attributes on what is already there. Rebuilding it per frame
+   * is the bug recorded further down this file: it swaps the button out between
+   * mousedown and mouseup, and a real click can never land.
+   */
+  private renderBoard(fallback: string, actions: string): void {
+    const result: ModeResult | null = this.shell.lastResult;
+    const board = result ? scoreboard(result) : null;
     this.body.innerHTML = `
-      <h1>${result?.title ?? 'Game over'}</h1>
-      ${lines}
-      <div class="row"><label>Best</label><span>${best.toLocaleString()}</span></div>
-      <div class="actions">
-        <button class="primary" id="btn-again">Play again</button>
-        <button id="btn-home">Change mode</button>
-        <button id="btn-settings">Settings</button>
-      </div>
+      <h1>${result?.title ?? fallback}</h1>
+      ${result?.subtitle ? `<p class="lede">${result.subtitle}</p>` : ''}
+      ${board ? board.html : ''}
+      <div class="actions">${actions}</div>
     `;
+    if (!board) return;
+    const frames = board.bind(this.body);
+    this.board = frames;
+    // The stored preference rather than the media query: the toggle under
+    // Display exists so a player can disagree with what their system says, and
+    // `defaultQuality` has already seeded it from the system for everyone who
+    // has not. Reduced motion is the reveal at its end — everything present,
+    // nothing having moved to get there.
+    if (this.shell.stage.quality.reducedMotion) frames.seek(REVEAL_SECONDS);
+    else frames.tick(0);
+    this.live = (dt) => frames.tick(dt);
+  }
+
+  /**
+   * Put the scoreboard's reveal at `seconds`, for a screenshot of a moment.
+   *
+   * Reached through the debug API rather than by anything the game does: an
+   * animation checked with a stopwatch is an animation that gets checked once.
+   */
+  scrub(seconds: number): void { this.board?.seek(seconds); }
+
+  private renderGameOver(): void {
+    this.renderBoard('Game over', `
+      <button class="primary" id="btn-again">Play again</button>
+      <button id="btn-home">Change mode</button>
+      <button id="btn-settings">Settings</button>
+    `);
     const on = (sel: string, fn: () => void) =>
       this.body.querySelector(sel)!.addEventListener('click', fn);
     on('#btn-again', () => { this.hide(); this.shell.restartMode(); });
@@ -469,7 +507,6 @@ export class Overlay {
   }
 
   private renderResult(): void {
-    const result = this.shell.lastResult;
     const mode = this.shell.playtune;
     const tune = mode?.tune ?? null;
     const order = mode?.tunes ?? [];
@@ -477,18 +514,11 @@ export class Overlay {
     const next = at >= 0 ? order[at + 1] : undefined;
     const nextOpen = next && mode?.progress.unlocked.includes(next.id);
 
-    const lines = (result?.lines ?? [])
-      .map((l) => `<div class="row"><label>${l.label}</label><span>${l.value}</span></div>`).join('');
-
-    this.body.innerHTML = `
-      <h1>${result?.title ?? 'Finished'}</h1>
-      ${lines}
-      <div class="actions">
-        <button class="primary" id="btn-again">Play again</button>
-        ${nextOpen ? `<button id="btn-next">Next: ${next!.title}</button>` : ''}
-        <button id="btn-list">Song list</button>
-      </div>
-    `;
+    this.renderBoard('Finished', `
+      <button class="primary" id="btn-again">Play again</button>
+      ${nextOpen ? `<button id="btn-next">Next: ${next!.title}</button>` : ''}
+      <button id="btn-list">Song list</button>
+    `);
     const on = (sel: string, fn: () => void) =>
       this.body.querySelector(sel)?.addEventListener('click', fn);
     on('#btn-again', () => { if (tune && mode) { this.hide(); mode.start(tune.id); } });
@@ -536,7 +566,7 @@ export class Overlay {
           : `Mapped ${noteLabel(m.low)}&ndash;${noteLabel(m.high)} &middot; ${m.settings.count} keys.`;
       done.textContent = m.phase === 'done' ? 'Done' : 'Cancel';
     };
-    this.live();
+    this.live(0);
   }
 
   // ------------------------------------------------------------ settings ---
@@ -914,6 +944,6 @@ export class Overlay {
       const map = input.mapping;
       rangeEl.textContent = `${noteLabel(map.low)}–${noteLabel(map.high)} · ${map.settings.count} keys`;
     };
-    this.live();
+    this.live(0);
   }
 }

@@ -146,6 +146,17 @@ export class Game {
   active = false;
   time = 0;
   ballsLeft = 0;
+  /**
+   * When the current run began, on the same clock.
+   *
+   * `time` itself is never reset: every energised element, every hit flash and
+   * the bonus count all hold deadlines against it, and putting it back to zero
+   * would make every one of them due at once. So a run's length is a
+   * subtraction rather than a second clock.
+   */
+  runStartedAt = 0;
+  /** Objectives completed this run, for the scoreboard at the end of it. */
+  objectivesCleared = 0;
   /** Ball waiting at the top for the player to drop it with a key press. */
   held: Ball | null = null;
   /** Slow-motion reserve, 0..1, spent by holding sustain. */
@@ -223,6 +234,18 @@ export class Game {
 
   get def(): TableDef { return this.table.def; }
   get balls(): Ball[] { return this.world.balls; }
+
+  /** How long this run has been going, in seconds. */
+  get runTime(): number { return Math.max(0, this.time - this.runStartedAt); }
+
+  /**
+   * An objective fell. Announced and counted in one place, so the count cannot
+   * drift from the announcements the way four separate increments would.
+   */
+  private objective(id: string, label: string): void {
+    this.objectivesCleared++;
+    this.bus.emit('objective', { id, label });
+  }
 
   private setState(to: GameState): void {
     if (to === this.state) return;
@@ -360,6 +383,8 @@ export class Game {
     this.musicState.roll();
     this.scoring.reset();
     this.ballsLeft = this.cfg.ballsPerGame;
+    this.runStartedAt = this.time;
+    this.objectivesCleared = 0;
     // The demo was mid-phrase when the player pressed start.
     this.attractHolds.length = 0;
     this.keybed.allOff();
@@ -746,11 +771,11 @@ export class Game {
 
     if (this.world.balls.length > 1) {
       this.scoring.add(28000, this.def.width / 2, 764, { label: 'JACKPOT', tone: 0.12, flat: true });
-      this.bus.emit('objective', { id: 'jackpot', label: 'JACKPOT' });
+      this.objective('jackpot', 'JACKPOT');
       return;
     }
     this.scoring.add(5000, this.def.width / 2, 764, { label: 'SCALE COMPLETE', tone: 0.5, flat: true });
-    this.bus.emit('objective', { id: 'bank', label: 'SCALE COMPLETE' });
+    this.objective('bank', 'SCALE COMPLETE');
     this.startMultiball();
   }
 
@@ -767,13 +792,13 @@ export class Game {
     if (group === 'lanes') {
       this.scoring.setGroove(this.scoring.groove + 1);
       this.scoring.add(2500, this.def.width / 2, 1236, { label: 'LANES', tone: 0.35, flat: true });
-      this.bus.emit('objective', { id: 'lanes', label: 'LANES' });
+      this.objective('lanes', 'LANES');
       return;
     }
     if (group === 'arc') {
       this.scoring.setResonance(this.scoring.resonance + 1);
       this.scoring.add(3200, this.def.width / 2, 486, { label: 'ARC', tone: 0.7, flat: true });
-      this.bus.emit('objective', { id: 'arc', label: 'ARC' });
+      this.objective('arc', 'ARC');
     }
   }
 
