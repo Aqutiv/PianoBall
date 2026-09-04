@@ -471,6 +471,8 @@ export class AudioEngine {
    * ones in step, and takes them back the same way.
    */
   private lite = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4;
+  /** Rendered impulse responses, by spec. See `room`. */
+  private readonly rooms = new Map<RoomSpec, AudioBuffer>();
   /** Held so the repeats can be retuned when the tempo changes. */
   private delayNode!: DelayNode;
   private noise!: AudioBuffer;
@@ -586,6 +588,9 @@ export class AudioEngine {
   }
 
   private build(ctx: AudioContext): void {
+    // Impulse responses are rendered at the context's sample rate, so nothing
+    // rendered for a previous context may be carried into this one.
+    this.rooms.clear();
     // The master chain. One compressor, and only one: Chromium's carries six
     // milliseconds of look-ahead, which this chain already pays once, and a
     // second would put another six between a key and its note. So it is tuned
@@ -778,6 +783,15 @@ export class AudioEngine {
     this.warm(this.bedSpec);
     this.warm(this.keyBedSpec);
     this.setEnsemble(this.bedSpec.ensemble ?? 0);
+
+    // The hall this session is *not* currently using, rendered once the gesture
+    // has been given back. `setLite` is called by the adaptive pass, which only
+    // ever fires on a machine that is already late; without this the first flip
+    // would render a two-and-a-half second stereo tail on the main thread at
+    // precisely the wrong moment.
+    setTimeout(() => {
+      if (this.ctx && this.ready) this.room(this.lite ? HALL : HALL_LITE);
+    }, 0);
   }
 
   /**
@@ -1046,11 +1060,30 @@ export class AudioEngine {
 
   get isLite(): boolean { return this.lite; }
 
-  /** A room, rendered at this context's sample rate, as a buffer the convolver takes. */
+  /**
+   * A room, rendered at this context's sample rate, as a buffer the convolver
+   * takes.
+   *
+   * Cached by spec. Rendering one is not cheap -- the hall is a 2.4 second
+   * stereo tail built from three filtered noise bands per channel -- and
+   * `setLite` swaps the hall for its shorter twin and back, on the main
+   * thread, driven by the adaptive pass. That put a multi-millisecond stall
+   * exactly where it could do the most harm: on a machine that has just been
+   * measured as unable to keep up. Rendered once each, they are then free.
+   *
+   * Keyed on identity, which is safe because the specs are module constants
+   * and the context -- and so the sample rate -- is created once per session.
+   * Cleared in `build` regardless, so a second context cannot inherit buffers
+   * rendered for the first one's rate.
+   */
   private room(spec: RoomSpec): AudioBuffer {
+    const hit = this.rooms.get(spec);
+    if (hit) return hit;
     const ctx = this.ctx!;
     const [l, r] = roomImpulse(spec, ctx.sampleRate, makeRng(ROOM_SEED));
-    return this.stereo(l, r);
+    const buf = this.stereo(l, r);
+    this.rooms.set(spec, buf);
+    return buf;
   }
 
   /** The soundboard, rendered the same way. */

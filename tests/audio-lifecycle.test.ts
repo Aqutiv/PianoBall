@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cancelFrom, holdAtTime } from '../src/audio/automation';
 import { AudioEngine } from '../src/audio/engine';
 import { findBedVoice } from '../src/audio/voices';
+import { HALL, HALL_LITE } from '../src/audio/rooms';
 
 interface FakeParam {
   value: number;
@@ -710,5 +711,48 @@ describe('key voice release tracking', () => {
     expect(state.active).toEqual([]);
     expect(state.voices.has(60)).toBe(false);
     expect(state.sustained.has(60)).toBe(false);
+  });
+});
+
+/**
+ * Impulse responses are expensive to render and the adaptive pass swaps the
+ * hall for its shorter twin and back — on the main thread, on a machine that
+ * has just been measured as too slow. Rendering one twice is the thing to
+ * catch.
+ */
+describe('room caching', () => {
+  function roomHarness() {
+    const engine = new AudioEngine();
+    let made = 0;
+    const ctx = {
+      sampleRate: 8000,
+      createBuffer: vi.fn((_ch: number, len: number) => {
+        made++;
+        return { length: len, copyToChannel: vi.fn() };
+      }),
+    };
+    engine.ctx = ctx as unknown as AudioContext;
+    const state = engine as unknown as { room(spec: unknown): unknown };
+    return { engine, state, made: () => made };
+  }
+
+  it('renders a given room once and hands the same buffer back after', () => {
+    const { state, made } = roomHarness();
+    const a = state.room(HALL);
+    const b = state.room(HALL);
+    expect(b).toBe(a);
+    expect(made()).toBe(1);
+  });
+
+  it('keeps the two halls apart, so a lite flip is not a re-render', () => {
+    const { state, made } = roomHarness();
+    const full = state.room(HALL);
+    const lite = state.room(HALL_LITE);
+    expect(lite).not.toBe(full);
+    expect(made()).toBe(2);
+    // The flip back, and the flip back again.
+    expect(state.room(HALL)).toBe(full);
+    expect(state.room(HALL_LITE)).toBe(lite);
+    expect(made()).toBe(2);
   });
 });
