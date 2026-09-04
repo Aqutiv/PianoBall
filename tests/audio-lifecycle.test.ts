@@ -289,10 +289,34 @@ describe('voice attack envelopes', () => {
 
     engine.noteOn(60, 0.5);
 
+    // Past the moment the graph finished, and by a margin: `currentTime` is
+    // the start of the last *completed* quantum, so anchoring exactly on it
+    // puts the envelope inside a quantum the audio thread has already
+    // rendered. Bounded, because the margin is latency a player can feel.
     const gain = gains[0]!.gain;
-    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 1.008);
-    expect(gain.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeGreaterThan(1.008);
-    expect(state.active[0]!.startedAt).toBe(1.008);
+    const onset = gain.setValueAtTime.mock.calls[0]![1] as number;
+    expect(onset).toBeGreaterThan(1.008);
+    expect(onset).toBeLessThanOrEqual(1.008 + 0.012);
+    expect(gain.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeGreaterThan(onset);
+    expect(state.active[0]!.startedAt).toBe(onset);
+  });
+
+  it('gives a voice with no noise layer the same margin as one with', () => {
+    // The margin used to be added only when a voice happened to carry a noise
+    // burst, which left every other instrument anchored on a bare
+    // `currentTime` -- and a full-amplitude step from silence on every note.
+    const quiet = graphHarness(1, { lead: 'sub-bass' });
+    quiet.state.addLayer = vi.fn(() => { quiet.ctx.currentTime = 1.008; return []; });
+    quiet.engine.noteOn(60, 0.5);
+    const quietOnset = quiet.gains[0]!.gain.setValueAtTime.mock.calls[0]![1] as number;
+
+    const noisy = graphHarness(1, { lead: 'grand' });
+    noisy.state.addLayer = vi.fn(() => []);
+    noisy.state.prepareNoise = vi.fn(() => { noisy.ctx.currentTime = 1.008; return vi.fn(); });
+    noisy.engine.noteOn(60, 0.5);
+    const noisyOnset = noisy.gains[0]!.gain.setValueAtTime.mock.calls[0]![1] as number;
+
+    expect(quietOnset).toBeCloseTo(noisyOnset, 6);
   });
 
   it('starts prepared key noise and its voice envelope at one guarded onset', () => {

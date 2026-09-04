@@ -89,6 +89,16 @@ const RETRIGGER_RELEASE = 0.02;
 const RELEASE_STOP_PAD = 0.02;
 /** Two Web Audio render quanta in which a prepared real-time graph can reach the audio thread. */
 const NOISE_LOOKAHEAD_FRAMES = 256;
+/**
+ * The most margin a note's onset may be given, in seconds.
+ *
+ * The margin exists so an envelope is not scheduled into a quantum the audio
+ * thread has already rendered -- but every millisecond of it is a millisecond
+ * between a key going down and a sound, in an engine whose whole scheduling
+ * design is about not having any. So it is capped, and deliberately well below
+ * where a player would start to feel it.
+ */
+const MAX_ONSET_MARGIN = 0.012;
 
 /**
  * A one-shot placed on the audio clock, which can still be taken back.
@@ -1307,6 +1317,34 @@ export class AudioEngine {
     };
   }
 
+  /**
+   * How far ahead of `currentTime` an envelope has to be anchored to survive.
+   *
+   * `currentTime` is the *start* of the last completed render quantum, so an
+   * event scheduled at it is already behind the quantum being rendered now.
+   * When the whole envelope lands in the past both endpoints are clamped, and
+   * the gain steps from silence to full amplitude at the next quantum boundary
+   * -- on oscillators that have been free-running since the note began, so the
+   * step lands wherever in the cycle they happen to be. That is a click, on
+   * every note.
+   *
+   * This used to be applied only to voices that happened to carry a noise
+   * layer, which left every other instrument with no margin at all.
+   *
+   * `baseLatency` and not `outputLatency`: the question is how far ahead the
+   * *render head* is, which is what `baseLatency` describes. `outputLatency`
+   * adds the whole device pipeline -- tens of milliseconds on some drivers --
+   * and putting that between a key and its note would trade a click for a
+   * sluggish instrument, which is a worse bargain and the opposite of what this
+   * engine is for.
+   */
+  private get onsetMargin(): number {
+    const ctx = this.ctx;
+    if (!ctx) return 0;
+    const quanta = NOISE_LOOKAHEAD_FRAMES / ctx.sampleRate;
+    return Math.min(MAX_ONSET_MARGIN, Math.max(quanta, ctx.baseLatency ?? 0));
+  }
+
   /** Measured round trip, for the diagnostics panel. */
   get latencyMs(): number {
     if (!this.ctx) return 0;
@@ -1363,8 +1401,7 @@ export class AudioEngine {
     // Node construction can take several milliseconds on a busy machine.
     // Anchor the audible attack only after the graph is ready; the sources
     // have been running silently behind makeChain's muted amplifier.
-    const onset = this.ctx.currentTime
-      + (bursts.length ? NOISE_LOOKAHEAD_FRAMES / this.ctx.sampleRate : 0);
+    const onset = this.ctx.currentTime + this.onsetMargin;
     const peak = velocityPeak(v, spec.velDb) * spec.gain * k.level * h.level;
     this.applyEnvelope(chain, spec, freq, v, onset, k, h, peak);
     this.duck(onset);
