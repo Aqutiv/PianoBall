@@ -66,6 +66,22 @@ export class Shell {
   private readonly activePointers = new Map<number, number>();
   private frameAvg = 8;
   private qualityHeld = 0;
+  /**
+   * Whether the adaptive pass is holding anything back.
+   *
+   * Recovery used to infer this by comparing what is running against what the
+   * player asked for, which is only sound while nothing else can reconcile the
+   * two. A player who re-enables the very thing that was shed — from the panel,
+   * before the machine recovers — makes preference and reality agree by hand,
+   * and every comparison then reads as "nothing was shed": the budget stayed
+   * capped at 500, and the audio stayed in lite mode with its shorter hall and
+   * fewer voices, for the rest of the session. Twice now, in two different
+   * flags, which is the sign the comparison was the wrong question.
+   *
+   * Recording the fact directly cannot be erased by anything the player does,
+   * and recovery still restores towards whatever the preference says *now*.
+   */
+  private shedding = false;
 
   constructor(canvas: HTMLCanvasElement, hudRoot: HTMLElement, overlayRoot: HTMLElement) {
     this.canvas = canvas;
@@ -386,6 +402,7 @@ export class Shell {
     if (this.frameAvg > 13 && q.bloom) {
       q.bloom = false;
       this.stage.particles.budget = 500;
+      this.shedding = true;
       this.qualityHeld = 3;
       // The sound sheds its own expensive effects on the same signal.
       this.audio.setLite(true);
@@ -400,29 +417,22 @@ export class Shell {
       // frame stays over budget and shadows, the next thing that would really
       // help, go untouched.
       q.pools = false;
+      this.shedding = true;
       this.qualityHeld = 3;
       this.audio.setLite(true);
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
+      this.shedding = true;
       this.qualityHeld = 3;
       // Bloom may already be off by choice, which makes this the first
       // thing shed: the sound has to follow from here too.
       this.audio.setLite(true);
-    } else if (this.frameAvg < 7 && (
-      q.bloom !== want.bloom || q.shadows !== want.shadows || q.pools !== want.pools
-      // The budget belongs in the test as much as the flags do. Shedding bloom
-      // drops it to 500, and a player who turns Bloom back on from the panel
-      // before the machine recovers puts `q.bloom` back in step with the
-      // preference by hand — at which point nothing here disagreed any more,
-      // recovery never ran, and the particles stayed capped at 500 for the rest
-      // of the session. Harmless while `budget` was a field nobody read; real
-      // as soon as it was enforced.
-      || this.stage.particles.budget !== want.particles
-    )) {
+    } else if (this.frameAvg < 7 && this.shedding) {
       q.bloom = want.bloom;
       q.shadows = want.shadows;
       q.pools = want.pools;
       this.stage.particles.budget = want.particles;
+      this.shedding = false;
       this.qualityHeld = 6;
       this.audio.setLite(false);
     }
