@@ -5,7 +5,6 @@ import { tone } from './palette';
 export type ParticleKind = 'spark' | 'ember' | 'ring' | 'shard' | 'note';
 
 interface Particle {
-  active: boolean;
   kind: ParticleKind;
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
@@ -18,44 +17,92 @@ interface Particle {
 
 const GRAVITY = -1400;
 
+/** How many particles exist. `budget` rations these; the pool never resizes. */
+const CAPACITY = 1400;
+
+/** Slots looked at when the budget is full, to find one worth overwriting. */
+const STEAL_SAMPLES = 4;
+
+function clampBudget(n: number): number {
+  return Number.isFinite(n) ? Math.max(0, Math.min(CAPACITY, Math.floor(n))) : CAPACITY;
+}
+
 /**
  * Pooled particle system. Everything is drawn additively from the pre-baked
  * sprite atlas, and particles live in table space so they inherit the rake.
+ *
+ * The live ones are held in the prefix `pool[0..live)`, which is what makes a
+ * frame cost what is on screen rather than what could be: stepping and drawing
+ * used to walk all fourteen hundred slots whether two were alight or none.
+ * Nothing outside the prefix is alive, so there is no `active` flag to keep in
+ * step with it.
  */
 export class Particles {
   private pool: Particle[] = [];
+  /** Rotating start for the steal sample, so it does not favour one slot. */
   private cursor = 0;
-  budget: number;
+  /** Everything in `pool[0..live)` is alive, and nothing outside it is. */
+  private live = 0;
+  private cap: number;
 
-  constructor(budget = 1400) {
-    this.budget = budget;
-    for (let i = 0; i < budget; i++) {
+  constructor(budget = CAPACITY) {
+    this.cap = clampBudget(budget);
+    for (let i = 0; i < CAPACITY; i++) {
       this.pool.push({
-        active: false, kind: 'spark', x: 0, y: 0, z: 0,
+        kind: 'spark', x: 0, y: 0, z: 0,
         vx: 0, vy: 0, vz: 0, life: 0, maxLife: 1, size: 8, hue: 200, spin: 0, angle: 0,
       });
     }
   }
 
-  get liveCount(): number {
-    let n = 0;
-    for (const p of this.pool) if (p.active) n++;
-    return n;
+  /**
+   * How many particles may be alight at once.
+   *
+   * This was write-only for its whole life: five call sites set it and nothing
+   * ever read it again, so the adaptive pass's drop to 500 under load shed
+   * exactly nothing. It rations the live prefix now, and because the pool is
+   * already allocated, changing it costs no memory either way.
+   */
+  get budget(): number { return this.cap; }
+  set budget(n: number) { this.cap = clampBudget(n); }
+
+  get liveCount(): number { return this.live; }
+
+  /**
+   * A slot to write a new particle into.
+   *
+   * Under budget that is simply the next free one. At budget something has to
+   * give, and the least-missed particle is the one with the least life left —
+   * but finding the true minimum means walking the whole live prefix on every
+   * spawn, which is the cost this pool exists to avoid. Looking at a handful
+   * and taking the weakest of those is O(1) and lands on a nearly-spent
+   * particle almost every time.
+   */
+  private take(): Particle {
+    if (this.live < this.cap) return this.pool[this.live++];
+    let worst = this.cursor % this.live;
+    for (let i = 1; i < STEAL_SAMPLES; i++) {
+      const j = (this.cursor + i * 37) % this.live;
+      if (this.pool[j].life < this.pool[worst].life) worst = j;
+    }
+    this.cursor = (this.cursor + 1) % this.live;
+    return this.pool[worst];
   }
 
-  private take(): Particle {
-    for (let i = 0; i < this.pool.length; i++) {
-      const p = this.pool[this.cursor];
-      this.cursor = (this.cursor + 1) % this.pool.length;
-      if (!p.active) return p;
+  /** Drop the live particle at `i` by swapping the last one down onto it. */
+  private retire(i: number): void {
+    const last = --this.live;
+    if (i !== last) {
+      const tmp = this.pool[i];
+      this.pool[i] = this.pool[last];
+      this.pool[last] = tmp;
     }
-    // Everything is busy: steal the one we landed on rather than dropping the effect.
-    return this.pool[this.cursor];
   }
 
   spawn(kind: ParticleKind, x: number, y: number, z: number, opts: Partial<Particle> = {}): void {
+    // A budget of nothing is a real setting, and `take` has no slot to hand out.
+    if (this.cap <= 0) return;
     const p = this.take();
-    p.active = true;
     p.kind = kind;
     p.x = x; p.y = y; p.z = z;
     p.vx = opts.vx ?? 0; p.vy = opts.vy ?? 0; p.vz = opts.vz ?? 0;
@@ -108,28 +155,34 @@ export class Particles {
   }
 
   update(dt: number): void {
-    for (const p of this.pool) {
-      if (!p.active) continue;
+    for (let i = 0; i < this.live;) {
+      const p = this.pool[i];
       p.life -= dt;
-      if (p.life <= 0) { p.active = false; continue; }
-      if (p.kind === 'ring') continue;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.z += p.vz * dt;
-      p.vz += GRAVITY * dt;
-      p.vx *= 1 - 1.6 * dt;
-      p.vy *= 1 - 1.6 * dt;
-      p.angle += p.spin * dt;
-      if (p.z < 0) { p.z = 0; p.vz *= -0.34; p.vx *= 0.6; p.vy *= 0.6; }
+      // `retire` swaps an untouched particle down into `i`, so hold the index.
+      if (p.life <= 0) { this.retire(i); continue; }
+      if (p.kind !== 'ring') {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.vz += GRAVITY * dt;
+        p.vx *= 1 - 1.6 * dt;
+        p.vy *= 1 - 1.6 * dt;
+        p.angle += p.spin * dt;
+        if (p.z < 0) { p.z = 0; p.vz *= -0.34; p.vx *= 0.6; p.vy *= 0.6; }
+      }
+      i++;
     }
+    // A budget cut should show up now rather than waiting out the longest-lived
+    // spark, which is the whole point of shedding under load.
+    if (this.live > this.cap) this.live = this.cap;
   }
 
   /** Draws into the emissive layer, which is additively composited later. */
   draw(ctx: CanvasRenderingContext2D, cam: TableCamera): void {
     const pt = { x: 0, y: 0 };
     ctx.globalCompositeOperation = 'lighter';
-    for (const p of this.pool) {
-      if (!p.active) continue;
+    for (let i = 0; i < this.live; i++) {
+      const p = this.pool[i];
       const t = p.life / p.maxLife;
       cam.project(p.x, p.y, p.z, pt);
       const scale = cam.scaleAt(p.x, p.y, p.z);
@@ -185,5 +238,5 @@ export class Particles {
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  clear(): void { for (const p of this.pool) p.active = false; }
+  clear(): void { this.live = 0; }
 }
