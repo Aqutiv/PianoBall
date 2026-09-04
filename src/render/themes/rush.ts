@@ -105,6 +105,7 @@ export const RUSH: Theme = {
   bloom: { strength: 0.56, spread: 0.72 },
   glow: { coreLight: 98, midLight: 78, midSat: 100, midAlpha: 0.5 },
   pool: { strength: 1, radius: 3.6 },
+  grade: { far: '#4433b8', near: '#ff8f5c', strength: 0.32 },
   glass: { sheen: '#7fe8ff', vignette: 0.88 },
   fonts: { display: DISPLAY, ui: DISPLAY, mono: MONO },
 };

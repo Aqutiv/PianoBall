@@ -181,6 +181,12 @@ export interface Theme {
    * of the thing's own radius.
    */
   pool: { strength: number; radius: number } | null;
+  /**
+   * A cast over the finished frame: `far` at the top of the screen, `near` at
+   * the bottom, in soft-light. Null for a look that wants its colours left
+   * exactly as it mixed them.
+   */
+  grade: { far: string; near: string; strength: number } | null;
   /** The pane of glass: diagonal sheen tint, and how hard the vignette closes. */
   glass: { sheen: string; vignette: number };
   /** Pushed to CSS as `--font-display` / `--font-ui` / `--font-mono`, and used

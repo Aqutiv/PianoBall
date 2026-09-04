@@ -607,6 +607,39 @@ export class Stage {
     vig.addColorStop(1, withAlpha(this.palette.void, this.theme.glass.vignette));
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
+
+    this.drawGrade();
+  }
+
+  /**
+   * The grade: cool at the far end of the table, warm at the near.
+   *
+   * Not a split tone by luminance — Canvas 2D has no way to mask on brightness
+   * without reading the frame back, which costs more than the whole rest of the
+   * pass. This is aerial perspective instead, and on this table the two amount
+   * to nearly the same picture: the far end is the dark end, the keys at the
+   * near edge are the bright end, and warming one while cooling the other is
+   * both what distance does to colour and what a grade would have done anyway.
+   *
+   * `soft-light` rather than `lighter`, because this has to tint what is
+   * already there rather than add to it — the point is a cast over the whole
+   * frame, not another light source in it.
+   */
+  private drawGrade(): void {
+    const g = this.theme.grade;
+    if (!g) return;
+    const ctx = this.ctx;
+    const w = this.cssW, h = this.cssH;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, g.far);
+    grad.addColorStop(0.55, g.far);
+    grad.addColorStop(1, g.near);
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = g.strength;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
 
   // --------------------------------------------------------- piano roll ---

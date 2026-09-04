@@ -101,6 +101,30 @@ describe('themes', () => {
     }
   });
 
+  it('gives every theme a bloom that says how hot and how wide, or neither', () => {
+    // `spread` is a per-level weight multiplier, so it has to stay under 1 or
+    // the widest and blurriest tap would be the loudest one on screen.
+    for (const t of THEMES) {
+      expect(t.bloom.strength, t.id).toBeGreaterThan(0);
+      expect(t.bloom.strength, t.id).toBeLessThanOrEqual(1);
+      expect(t.bloom.spread, t.id).toBeGreaterThan(0);
+      expect(t.bloom.spread, t.id).toBeLessThan(1);
+    }
+  });
+
+  it('gives every theme a grade, or says plainly that it wants none', () => {
+    for (const t of THEMES) {
+      expect(t, `${t.id} does not say either way about a grade`).toHaveProperty('grade');
+      if (t.grade === null) continue;
+      expect(t.grade.far, t.id).toMatch(/^#|^rgb/);
+      expect(t.grade.near, t.id).toMatch(/^#|^rgb/);
+      // Past about a third, soft-light stops being a cast and starts being a
+      // repaint of colours the theme already chose deliberately.
+      expect(t.grade.strength, t.id).toBeGreaterThan(0);
+      expect(t.grade.strength, t.id).toBeLessThanOrEqual(0.4);
+    }
+  });
+
   it('gives every theme six ball gradient stops', () => {
     // The renderer pairs these with a fixed list of gradient offsets.
     for (const t of THEMES) expect(t.ball.body, t.id).toHaveLength(6);

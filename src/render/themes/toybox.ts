@@ -107,6 +107,7 @@ export const TOYBOX: Theme = {
   bloom: { strength: 0.22, spread: 0.46 },
   glow: { coreLight: 96, midLight: 80, midSat: 100, midAlpha: 0.3 },
   pool: null,
+  grade: null,
   glass: { sheen: '#ffffff', vignette: 0.45 },
   fonts: { display: UI, ui: UI, mono: MONO },
 };

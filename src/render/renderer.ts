@@ -243,7 +243,7 @@ export class PinballRenderer {
    */
   private bakeCabinet(ctx: CanvasRenderingContext2D): void {
     const pal = this.stage.palette;
-    const { minX, maxX } = this.bounds;
+    const { minX, maxX, minY } = this.bounds;
     const w = this.cssW, h = this.cssH;
 
     const bg = ctx.createLinearGradient(0, 0, 0, h);
@@ -252,6 +252,26 @@ export class PinballRenderer {
     bg.addColorStop(1, mix(pal.void, '#000000', 0.5));
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
+
+    // The backbox. A real machine has a lit panel standing behind the glass,
+    // and this table simply stopped at its far edge with cabinet above it —
+    // which is why the top of the frame read as the end of the picture rather
+    // than as the back of a box. A wash of the theme's own neon, baked, so it
+    // costs nothing and sits under everything.
+    if (minY > 8) {
+      const box = ctx.createLinearGradient(0, 0, 0, minY);
+      box.addColorStop(0, withAlpha(pal.neon, 0.16));
+      box.addColorStop(0.55, withAlpha(pal.neon2, 0.06));
+      box.addColorStop(1, withAlpha(pal.neon, 0));
+      ctx.fillStyle = box;
+      ctx.fillRect(0, 0, w, minY);
+      // The lip the playfield meets it at.
+      const lip = ctx.createLinearGradient(0, minY - 10, 0, minY);
+      lip.addColorStop(0, withAlpha(pal.railTop, 0));
+      lip.addColorStop(1, withAlpha(pal.railTop, 0.22));
+      ctx.fillStyle = lip;
+      ctx.fillRect(0, minY - 10, w, 10);
+    }
 
     for (const [x0, x1, dir] of [[0, minX, 1], [maxX, w, -1]] as const) {
       const span = x1 - x0;

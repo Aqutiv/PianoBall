@@ -117,6 +117,7 @@ export const VELVET: Theme = {
   bloom: { strength: 0.32, spread: 0.6 },
   glow: { coreLight: 92, midLight: 68, midSat: 62, midAlpha: 0.34 },
   pool: { strength: 0.5, radius: 3 },
+  grade: { far: '#4a2f6e', near: '#ffd9a0', strength: 0.3 },
   glass: { sheen: '#ffe6b8', vignette: 0.9 },
   fonts: { display: DISPLAY, ui: UI, mono: MONO },
 };
