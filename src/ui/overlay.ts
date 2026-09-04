@@ -303,7 +303,7 @@ export class Overlay {
       this.body.querySelector(sel)?.addEventListener('click', fn);
     on('#btn-back', () => this.back());
     on('#btn-check', () => void updates.check());
-    on('#btn-update', () => updates.applyNow());
+    on('#btn-update', () => void updates.applyNow());
   }
 
   // -------------------------------------------------------------- paused ---

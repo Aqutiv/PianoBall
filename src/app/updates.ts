@@ -98,9 +98,23 @@ class Updates {
    * only this page is still running the old one. So reload if we are still
    * here shortly after, which we will not be if the plugin got there first.
    */
-  applyNow(): void {
-    void this.apply?.();
-    setTimeout(() => location.reload(), 400);
+  async applyNow(): Promise<void> {
+    // Is a handover actually coming? Only a worker that is waiting, on a page
+    // some worker already controls, produces one: telling it to stop waiting
+    // hands control over, and the plugin reloads on that. Wait for it rather
+    // than racing it. Activation has the old caches to clear before it can
+    // take over, which on a slow device is not quick, and a reload sent while
+    // the old worker is still in charge is answered by the old worker — which
+    // is how a fixed timer here would quietly land you back on the bundle you
+    // had just asked to leave.
+    const handover = !!this.reg?.waiting && !!navigator.serviceWorker.controller;
+    await this.apply?.();
+    // Otherwise nothing is coming and the button would do nothing at all. A
+    // page no worker controls, or one whose new worker activated without ever
+    // having to wait, has no change of control to reload on — and reloading is
+    // right there anyway: the cache is already serving the new bundle, and
+    // only this page is still running the old one.
+    if (!handover) location.reload();
   }
 
   /**
