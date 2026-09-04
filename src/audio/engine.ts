@@ -474,6 +474,8 @@ export class AudioEngine {
 
   private master!: GainNode;
   private glue!: DynamicsCompressorNode;
+  /** Where the rooms and the delay return, downstream of the glue. */
+  private wetBus!: GainNode;
   private clip!: WaveShaperNode;
   /** The last node before the ceiling, which is where `headroom` listens. */
   private toClip!: AudioNode;
@@ -669,7 +671,17 @@ export class AudioEngine {
     // buys over twenty is that a hammer's transient, which is over in two, is
     // met here rather than handed whole to the ceiling.
     this.glue = ctx.createDynamicsCompressor();
-    this.glue.threshold.value = -16;
+    // Raised by the master fader's own default, because the fader now sits
+    // *after* this rather than before it. Feeding the compressor a signal that
+    // is 1.4 dB hotter through the same threshold made it work measurably
+    // harder for no reason -- sixteen notes went from 2.4 dB of reduction to
+    // 5.3 dB purely from the re-plumb. Moving the threshold by exactly the
+    // same amount puts the operating point back where it was tuned.
+    //
+    // It also makes the compression independent of the volume knob, which is
+    // how it should always have been: turning the output down used to reduce
+    // the amount of glue as a side effect.
+    this.glue.threshold.value = -16 + 20 * Math.log10(1 / DEFAULT_AUDIO.master);
     this.glue.knee.value = 10;
     this.glue.ratio.value = 3;
     this.glue.attack.value = 0.004;
@@ -702,19 +714,44 @@ export class AudioEngine {
     // clipping without oversampling aliases and folds back inharmonically.
     this.clip.oversample = '2x';
     this.toClip = air;
-    rumble.connect(this.glue).connect(air).connect(preClip).connect(this.clip).connect(ctx.destination);
+    air.connect(preClip).connect(this.clip).connect(ctx.destination);
 
+    // The master fader sits *after* the compressor, so that the reverb returns
+    // can join the mix without going through it and still be covered by the
+    // mute and the volume. Everything audible passes through here.
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.settings.master;
-    this.master.connect(rumble);
+    this.master.connect(air);
+
+    // Dry: the instruments and the table, which is what the glue is for.
+    const dryBus = ctx.createGain();
+    dryBus.connect(rumble);
+    rumble.connect(this.glue).connect(this.master);
+
+    // Wet: the rooms and the delay, which used to go through the compressor
+    // with everything else -- so every ball impact pulled the hall tail and the
+    // bed down with it at four milliseconds and let them back over a hundred
+    // and eighty. That is not glue, it is the reverb ducking to the ball, and
+    // it is most of what "the mix falls apart when a lot happens at once"
+    // sounds like. A tail is the one thing in the mix that should not flinch.
+    //
+    // It keeps its own rumble filter: the returns no longer pass through the
+    // dry one, and a room's longest, lowest tail is exactly the kind of thing
+    // that filter is there to keep out of the ceiling.
+    this.wetBus = ctx.createGain();
+    const wetRumble = ctx.createBiquadFilter();
+    wetRumble.type = 'highpass';
+    wetRumble.frequency.value = RUMBLE_HZ;
+    wetRumble.Q.value = 0.7;
+    this.wetBus.connect(wetRumble).connect(this.master);
 
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.settings.music;
-    this.musicBus.connect(this.master);
+    this.musicBus.connect(dryBus);
 
     this.fxBus = ctx.createGain();
     this.fxBus.gain.value = this.settings.effects;
-    this.fxBus.connect(this.master);
+    this.fxBus.connect(dryBus);
 
     // Two rooms, both rendered rather than recorded (see `rooms.ts`). The
     // music plays in a hall; the ball rolls inside a cabinet, whose whole tail
@@ -725,7 +762,7 @@ export class AudioEngine {
     this.hallConv.buffer = this.room(this.lite ? HALL_LITE : HALL);
     this.hallWet = ctx.createGain();
     this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
-    this.hallConv.connect(this.hallWet).connect(this.master);
+    this.hallConv.connect(this.hallWet).connect(this.wetBus);
     this.hallSend = ctx.createGain();
     this.hallSend.gain.value = 1;
     this.hallSend.connect(this.hallConv);
@@ -734,7 +771,7 @@ export class AudioEngine {
     cab.buffer = this.room(CAB);
     this.cabWet = ctx.createGain();
     this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
-    cab.connect(this.cabWet).connect(this.master);
+    cab.connect(this.cabWet).connect(this.wetBus);
     this.cabSend = ctx.createGain();
     this.cabSend.gain.value = 1;
     this.cabSend.connect(cab);
@@ -764,7 +801,7 @@ export class AudioEngine {
     delay.connect(damp).connect(feedback).connect(delay);
     const delayOut = ctx.createGain();
     delayOut.gain.value = 0.6;
-    damp.connect(delayOut).connect(this.master);
+    damp.connect(delayOut).connect(this.wetBus);
     this.delaySend = ctx.createGain();
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
