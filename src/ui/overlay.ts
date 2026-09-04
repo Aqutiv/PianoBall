@@ -9,7 +9,7 @@ import { pinballSettings, setPinballSettings } from '../modes/pinball/settings';
 import type { ModTarget } from '../audio/engine';
 import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
 import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
-import { loadProgress, resetProgress } from '../modes/playtune/progress';
+import { loadProgress, passesNeeded, resetProgress } from '../modes/playtune/progress';
 import { CHORDS_ROLE, MELODY_ROLE, type RoleId, type TuneRole } from '../modes/playtune/role';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 import type { Tune } from '../modes/playtune/chart';
@@ -381,19 +381,22 @@ export class Overlay {
     const progress = mode.progress;
     const role = mode.role;
 
-    const cards = mode.tunes.map((tune, i) => {
+    const cards = mode.tunes.map((tune) => {
       const unlocked = progress.unlocked.includes(tune.id);
       const best = progress.best[tune.id];
       const fits = mode.fitFor(tune) !== null;
-      const previous = i > 0 ? mode.tunes[i - 1].title : null;
       // The card describes the part being played, not the piece: Canon in D is
       // five pips of melody and three of chords, and says so.
       const card = role.card(tune);
       const pips = Array.from({ length: 5 }, (_, d) =>
         `<i class="${d < card.difficulty ? 'on' : ''}"></i>`).join('');
 
+      // No single tune gates any other now — the curve opens several at a time
+      // and each first pass opens one more — so the card counts the passes
+      // between here and there rather than naming a predecessor it has not got.
+      const need = passesNeeded(progress, role.order, tune.id);
       const state = !unlocked
-        ? `<span class="song-locked">Pass ${previous} to unlock</span>`
+        ? `<span class="song-locked">Pass ${need} more tune${need === 1 ? '' : 's'} to unlock</span>`
         : !fits
           ? '<span class="song-locked">Needs more keys than your controller has</span>'
           : best

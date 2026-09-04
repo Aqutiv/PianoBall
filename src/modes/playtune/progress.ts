@@ -11,6 +11,17 @@ import type { Grade } from './judge';
 export const MELODY_STORE = 'playtune';
 export const CHORD_STORE = 'playchords';
 
+/**
+ * How many tunes are open before anything has been passed.
+ *
+ * Three rather than one because each curve climbs a single axis — melody
+ * difficulty for the library, strike rhythm and rate of change for the chord
+ * curve — so one step a player could not take used to stop the whole mode.
+ * With three open there is always somewhere else to go, and a wall can be
+ * walked around rather than only hammered at.
+ */
+export const OPENING_TUNES = 3;
+
 export interface TuneRecord {
   accuracy: number;
   score: number;
@@ -55,13 +66,39 @@ export interface RunOutcome {
   best: TuneRecord;
 }
 
+/** How many of the curve are open, given how many of it have been passed. */
+function frontier(progress: Progress, order: readonly string[]): number {
+  let passed = 0;
+  for (const id of order) if (progress.best[id]?.passed) passed++;
+  return Math.min(order.length, OPENING_TUNES + passed);
+}
+
+/**
+ * Open everything the pass count has earned, in curve order and in place.
+ *
+ * Derived rather than merely accumulated, which is what makes the list
+ * self-healing: a save from the build that opened one tune and added one per
+ * pass, a merge from a second window, and a fresh start all settle in the same
+ * place. Add-only, so a chain holding more than this says it earned keeps it —
+ * the one thing progress must never do is go backwards.
+ *
+ * In place for the same reason `absorbProgress` is: the mode hands out its live
+ * `Progress` object and the song list draws from it.
+ */
+function openEarned(progress: Progress, order: readonly string[]): void {
+  const n = frontier(progress, order);
+  for (let i = 0; i < n; i++) {
+    if (!progress.unlocked.includes(order[i])) progress.unlocked.push(order[i]);
+  }
+}
+
 /**
  * What the player has reached, and how well.
  *
- * The first tune is always available; every other one opens when the one before
- * it is passed. Anything unreadable in storage is treated as a fresh start
- * rather than an error — losing progress is bad, but refusing to launch is
- * worse.
+ * The opening few are open from the start and every first pass opens one more,
+ * so what is unlocked is the front `OPENING_TUNES + passed` of the curve.
+ * Anything unreadable in storage is treated as a fresh start rather than an
+ * error — losing progress is bad, but refusing to launch is worse.
  */
 export function loadProgress(key: string, order: readonly string[]): Progress {
   const raw = load<Progress>(key, { unlocked: [], best: {}, epoch: 0 });
@@ -69,16 +106,20 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   const unlocked = Array.isArray(raw.unlocked)
     ? raw.unlocked.filter((id) => known.has(id))
     : [];
-  const first = order[0];
-  if (first && !unlocked.includes(first)) unlocked.push(first);
+  // What was *stored*, taken before anything below opens more. The back-fill
+  // just after reads an open tune as evidence of a pass, and evidence has to
+  // predate the conclusions drawn from it: top up first and a save holding only
+  // the first tune gains the second, which is then misread as the first having
+  // been passed, which earns a third — progress out of nothing.
   const open = new Set(unlocked);
   const best: Record<string, TuneRecord> = {};
   for (const [id, rec] of Object.entries(raw.best ?? {})) {
     if (!known.has(id) || !rec || typeof rec !== 'object') continue;
     const grade = (rec.grade ?? null) as Grade;
-    // Records written before the flag existed have to be read for it. The tune
-    // after this one being open is the strong evidence — that is the only thing
-    // passing has ever done — and a letter is the fallback for the last tune in
+    // Records written before the flag existed have to be read for it, and they
+    // all come from the build that opened one tune per pass: the tune after
+    // this one being open is the strong evidence, because passing was the only
+    // thing that ever opened it. A letter is the fallback for the last tune in
     // the chain, which has no next to have opened.
     const next = order[order.indexOf(id) + 1];
     best[id] = {
@@ -91,7 +132,9 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
         : (next ? open.has(next) : false) || grade !== null,
     };
   }
-  return { unlocked, best, epoch: Number(raw.epoch) || 0 };
+  const progress: Progress = { unlocked, best, epoch: Number(raw.epoch) || 0 };
+  openEarned(progress, order);
+  return progress;
 }
 
 export function saveProgress(key: string, progress: Progress): void {
@@ -102,10 +145,23 @@ export function isUnlocked(progress: Progress, id: string): boolean {
   return progress.unlocked.includes(id);
 }
 
-/** The tune whose passing opens `id`, for the locked card's explanation. */
-export function unlockedBy(order: readonly string[], id: string): string | null {
-  const i = order.indexOf(id);
-  return i > 0 ? order[i - 1] : null;
+/**
+ * How many more passes a locked tune is waiting on, for its card. 0 once open.
+ *
+ * Every pass opens exactly one tune, so the answer is however many are still
+ * shut at or before this one. Counted rather than worked out from an index, so
+ * it stays right without assuming the unlocked set is a clean prefix.
+ */
+export function passesNeeded(
+  progress: Progress,
+  order: readonly string[],
+  id: string,
+): number {
+  const at = order.indexOf(id);
+  if (at < 0) return 0;
+  let shut = 0;
+  for (let i = 0; i <= at; i++) if (!isUnlocked(progress, order[i])) shut++;
+  return shut;
 }
 
 /** Worst to best, so two grades can be compared without ranking nulls. */
@@ -163,7 +219,9 @@ function adoptProgress(progress: Progress, other: Progress): Progress {
  * Fold a finished run into the saved progress, and say what changed.
  *
  * Bests only ever improve: a bad run after a good one loses nothing, and
- * neither does a fifth attempt at the first tune once the fifth is open.
+ * neither does a fifth attempt at the first tune once the fifth is open. Only
+ * a tune's *first* pass opens anything, which is what stops the easiest tune in
+ * the curve from being played over and over for the whole library.
  *
  * The write goes through what is *stored* rather than straight over it. A mode
  * is built once and keeps its `Progress` for the whole session, so a second
@@ -188,6 +246,10 @@ export function recordRun(
   const stored = loadProgress(key, order);
   if (stored.epoch > progress.epoch) adoptProgress(progress, stored);
   else absorbProgress(progress, stored);
+  // Settle what the merge earned before taking the mark, so this run is
+  // credited with what it opened and not with another window's passes as well.
+  openEarned(progress, order);
+  const before = new Set(progress.unlocked);
 
   const prev = progress.best[id];
   const improved = !prev || result.accuracy > prev.accuracy;
@@ -200,14 +262,9 @@ export function recordRun(
   };
   progress.best[id] = best;
 
-  let unlocked: string | null = null;
-  if (result.passed) {
-    const next = order[order.indexOf(id) + 1];
-    if (next && !progress.unlocked.includes(next)) {
-      progress.unlocked.push(next);
-      unlocked = next;
-    }
-  }
+  // At most one can appear: a run raises the pass count by one or by nothing.
+  openEarned(progress, order);
+  const unlocked = progress.unlocked.find((tune) => !before.has(tune)) ?? null;
 
   saveProgress(key, progress);
   return { unlocked, improved, best };
@@ -222,7 +279,7 @@ export function recordRun(
  */
 export function resetProgress(key: string, order: readonly string[]): Progress {
   const fresh: Progress = {
-    unlocked: order.length ? [order[0]] : [],
+    unlocked: order.slice(0, OPENING_TUNES),
     best: {},
     epoch: loadProgress(key, order).epoch + 1,
   };
