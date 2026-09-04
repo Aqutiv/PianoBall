@@ -33,6 +33,41 @@ export interface DrawHints {
   beat: BeatHint | null;
 }
 
+/** How many positions a ball's motion streak is drawn through. */
+const TRAIL_LEN = 14;
+
+/** Scratch for the far end of each streak segment. */
+const TRAIL_Q = { x: 0, y: 0 };
+
+/**
+ * One ball's recent positions, as a ring.
+ *
+ * This used to be an array of points with a `push` and a `shift` per ball per
+ * frame -- an object allocated and abandoned sixty times a second per ball,
+ * and an O(n) shuffle of the rest to go with it. Nothing here escapes the
+ * frame it is read in, so it lives in two fixed buffers and an index.
+ */
+class Trail {
+  readonly x = new Float64Array(TRAIL_LEN);
+  readonly y = new Float64Array(TRAIL_LEN);
+  /** Samples held, up to `TRAIL_LEN`. */
+  n = 0;
+  /** Where the next sample goes. */
+  private head = 0;
+
+  push(x: number, y: number): void {
+    this.x[this.head] = x;
+    this.y[this.head] = y;
+    this.head = (this.head + 1) % TRAIL_LEN;
+    if (this.n < TRAIL_LEN) this.n++;
+  }
+
+  /** Ring index of the `i`th sample, oldest first. */
+  at(i: number): number {
+    return (this.head - this.n + i + TRAIL_LEN * 2) % TRAIL_LEN;
+  }
+}
+
 /** Scratch for the ball's motion-blur ghosts. */
 const GHOST = { x: 0, y: 0 };
 
@@ -706,11 +741,14 @@ export class PinballRenderer {
 
   // -------------------------------------------------------------- balls ---
 
-  private trails = new Map<number, { x: number; y: number }[]>();
+  private trails = new Map<number, Trail>();
+  /** Which balls were seen this frame, for the sweep that drops dead trails. */
+  private readonly liveBalls = new Set<number>();
 
   private drawBalls(ctx: CanvasRenderingContext2D, em: CanvasRenderingContext2D, game: Game, alpha: number): void {
     const pal = this.stage.palette;
-    const live = new Set<number>();
+    const live = this.liveBalls;
+    live.clear();
     const p = { x: 0, y: 0 };
 
     for (const ball of game.balls) {
@@ -719,9 +757,8 @@ export class PinballRenderer {
       const y = ball.prev.y + (ball.p.y - ball.prev.y) * alpha;
 
       let trail = this.trails.get(ball.id);
-      if (!trail) { trail = []; this.trails.set(ball.id, trail); }
-      trail.push({ x, y });
-      if (trail.length > 14) trail.shift();
+      if (!trail) { trail = new Trail(); this.trails.set(ball.id, trail); }
+      trail.push(x, y);
 
       const scale = this.cam.scaleAt(x, y, ball.r);
       const r = ball.r * scale;
@@ -733,15 +770,16 @@ export class PinballRenderer {
 
       // Motion streak: tapered from a point behind the ball out to its full
       // width at the ball itself, so it reads as a smear rather than a stick.
-      if (trail.length > 3 && speed > 260) {
+      if (trail.n > 3 && speed > 260) {
         em.globalCompositeOperation = 'lighter';
         em.lineCap = 'round';
         const strength = Math.min(0.5, speed / 3400);
-        const q = { x: 0, y: 0 };
-        for (let i = 1; i < trail.length; i++) {
-          const f = i / (trail.length - 1);
-          this.cam.project(trail[i - 1].x, trail[i - 1].y, ball.r, p);
-          this.cam.project(trail[i].x, trail[i].y, ball.r, q);
+        const q = TRAIL_Q;
+        for (let i = 1; i < trail.n; i++) {
+          const f = i / (trail.n - 1);
+          const u = trail.at(i - 1), v = trail.at(i);
+          this.cam.project(trail.x[u], trail.y[u], ball.r, p);
+          this.cam.project(trail.x[v], trail.y[v], ball.r, q);
           em.beginPath();
           em.moveTo(p.x, p.y);
           em.lineTo(q.x, q.y);
@@ -871,7 +909,9 @@ export class PinballRenderer {
       }
     }
 
-    for (const id of [...this.trails.keys()]) if (!live.has(id)) this.trails.delete(id);
+    // Deleting the current entry while iterating a Map is defined and safe, so
+    // this no longer copies the whole key set every frame to do it.
+    for (const id of this.trails.keys()) if (!live.has(id)) this.trails.delete(id);
   }
 
   private drawPops(ctx: CanvasRenderingContext2D, game: Game): void {
