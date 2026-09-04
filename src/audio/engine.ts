@@ -85,6 +85,10 @@ const LEGACY_ASSIST_STORAGE_KEY = 'audioAssist';
 const MAX_VOICES = 48;
 /** A repeated strike crosses the old string out quickly without clicking. */
 const RETRIGGER_RELEASE = 0.02;
+/** Silence reached before a scheduled source is finally stopped. */
+const RELEASE_STOP_PAD = 0.02;
+/** Two Web Audio render quanta in which a prepared real-time graph can reach the audio thread. */
+const NOISE_LOOKAHEAD_FRAMES = 256;
 
 /**
  * A one-shot placed on the audio clock, which can still be taken back.
@@ -240,9 +244,10 @@ interface Glide {
 /**
  * Seconds after a pedal-driven release within which the pedal going down
  * again catches the note, and how long past its release a caught note may
- * go on ringing. A scheduled stop cannot be withdrawn, so the second is a
- * reprieve rather than a recapture; a real re-pedal catches strings that
- * are still moving, and that is what these approximate.
+ * go on ringing. A caught note deliberately keeps the stop already placed,
+ * so the second is a bounded reprieve rather than a fresh voice; a real
+ * re-pedal catches strings that are still moving, and that is what these
+ * approximate.
  */
 const RECATCH = 0.3;
 const RECATCH_REPRIEVE = 1.5;
@@ -311,8 +316,6 @@ interface KeyVoice {
   /** Where the voice reaches the buses. The damper's thud goes out through it too. */
   panner: StereoPannerNode;
   freq: number;
-  /** What the amplifier was asked to reach, so the release can tell how much of the note is left. */
-  peak: number;
   k: KeyFactors;
   /**
    * Taken from the spec at the moment the key went down, not read back off the
@@ -321,7 +324,7 @@ interface KeyVoice {
    */
   release: number;
   damper?: VoiceNoise;
-  /** The voice's motion, tapped off the shared oscillators. Unhooked on release. */
+  /** The voice's motion, tapped off the shared oscillators. Unhooked after its source stops. */
   taps: Tap[];
   releasing: boolean;
   /** Audio-clock time at which the scheduled sources have completely stopped. */
@@ -1114,17 +1117,25 @@ export class AudioEngine {
       this.sustained.delete(voice.note);
       this.release(voice, voice.release, false);
     }
-    // Breath, or the knock of the key itself: a slice of the shared buffer,
-    // the same layer the drums are mostly made of.
-    for (const n of noises(spec.noise)) this.addNoise(chain.filter, n, freq, v, t, k);
+    // Build every transient behind a muted gain before choosing the audible
+    // onset, so its attack and the pitched voice reach the audio thread at the
+    // same sample even when graph construction itself was slow.
+    const bursts = noises(spec.noise).map(
+      (n) => this.prepareNoise(chain.filter, n, freq, v, k));
     const taps = this.attachExpression(sources, chain, spec.lfo, t);
+    // Node construction can take several milliseconds on a busy machine.
+    // Anchor the audible attack only after the graph is ready; the sources
+    // have been running silently behind makeChain's muted amplifier.
+    const onset = this.ctx.currentTime
+      + (bursts.length ? NOISE_LOOKAHEAD_FRAMES / this.ctx.sampleRate : 0);
     const peak = velocityPeak(v, spec.velDb) * spec.gain * k.level * h.level;
-    this.applyEnvelope(chain, spec, freq, v, t, k, h, peak);
-    this.duck(t);
+    this.applyEnvelope(chain, spec, freq, v, onset, k, h, peak);
+    this.duck(onset);
+    for (const start of bursts) start(onset);
 
     const voice: KeyVoice = {
-      note, startedAt: t, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
-      freq, peak, k, release: spec.env.release * k.release, damper: spec.damper, taps,
+      note, startedAt: onset, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
+      freq, k, release: spec.env.release * k.release, damper: spec.damper, taps,
       releasing: false, stopAt: null,
     };
     this.voices.set(note, voice);
@@ -1168,6 +1179,7 @@ export class AudioEngine {
       sources.push(...this.addLayer(chain.filter, layer, freq, v, t, NO_TRACK, h, registerOf(note), detunes, 0, str));
     }
     this.attachExpression(sources, chain, undefined, t);
+    const onset = this.ctx.currentTime;
 
     // Swelled, not struck — but only just. A real pad attack would put the
     // sound behind the beat it was played on, and this is a rhythm game: the
@@ -1176,24 +1188,24 @@ export class AudioEngine {
     const attack = BED_KEY_ATTACK * (1 - v * 0.45);
     const peak = (0.035 + v * 0.06) * spec.gain;
     const { amp, filter } = chain;
-    amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.exponentialRampToValueAtTime(peak, t + attack);
+    amp.gain.setValueAtTime(0.0001, onset);
+    amp.gain.exponentialRampToValueAtTime(peak, onset + attack);
     // A plucked bed voice is a plucked thing whoever is holding the key: a harp
     // that sustained until release would not be a harp.
-    if (spec.pluck) amp.gain.exponentialRampToValueAtTime(0.0001, t + spec.pluck);
+    if (spec.pluck) amp.gain.exponentialRampToValueAtTime(0.0001, onset + spec.pluck);
 
-    filter.frequency.setValueAtTime(cut.start, t);
-    filter.frequency.linearRampToValueAtTime(cut.peak * (0.55 + v * 0.6), t + attack + 0.12);
+    filter.frequency.setValueAtTime(cut.start, onset);
+    filter.frequency.linearRampToValueAtTime(cut.peak * (0.55 + v * 0.6), onset + attack + 0.12);
     // Settling part of the way back rather than all the way to `end`: the note
     // is still being held, so it darkens without going out.
     filter.frequency.linearRampToValueAtTime(
-      cut.end + (cut.peak - cut.end) * 0.35, t + BED_KEY_SETTLE);
+      cut.end + (cut.peak - cut.end) * 0.35, onset + BED_KEY_SETTLE);
     filter.Q.value = cut.q;
-    this.duck(t);
+    this.duck(onset);
 
     const voice: KeyVoice = {
-      note, startedAt: t, sources, filter, amp, panner: chain.panner,
-      freq, peak, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false, stopAt: null,
+      note, startedAt: onset, sources, filter, amp, panner: chain.panner,
+      freq, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false, stopAt: null,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
@@ -1340,7 +1352,10 @@ export class AudioEngine {
    * Its band can follow the pitch, which is how a hammer's knock stays a
    * knock up the keyboard rather than turning into a hiss.
    */
-  private addNoise(into: AudioNode, n: VoiceNoise, freq: number, v: number, t: number, k: KeyFactors): void {
+  private prepareNoise(
+    into: AudioNode, n: VoiceNoise, freq: number, v: number, k: KeyFactors,
+    strength?: number,
+  ): (at: number) => void {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
@@ -1349,15 +1364,21 @@ export class AudioEngine {
     bp.frequency.value = clamp(n.pitchTrack ? freq * n.pitchTrack : n.freq, 40, 16000);
     bp.Q.value = n.q;
     const g = ctx.createGain();
-    const start = t + (n.delay ?? 0);
+    // A new GainNode starts at unity. Mute it before it is connected; the
+    // caller chooses an onset only after this entire graph has been prepared.
+    g.gain.value = 0.0001;
+    src.connect(bp).connect(g).connect(into);
     const attack = n.attack ?? 0.002;
     const curve = n.velCurve ? Math.pow(v, n.velCurve) : 1;
-    const level = Math.max(0.0001, n.gain * (0.5 + v * 0.5) * curve * k.noise);
-    g.gain.setValueAtTime(0.0001, start);
-    g.gain.exponentialRampToValueAtTime(level, start + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, start + attack + n.decay);
-    src.connect(bp).connect(g).connect(into);
-    src.start(start, Math.random() * 0.9, attack + n.decay + 0.02);
+    const velocityStrength = (0.5 + v * 0.5) * curve;
+    const level = Math.max(0.0001, n.gain * (strength ?? velocityStrength) * k.noise);
+    return (at: number) => {
+      const start = at + (n.delay ?? 0);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(level, start + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + attack + n.decay);
+      src.start(start, Math.random() * 0.9, attack + n.decay + 0.02);
+    };
   }
 
   /**
@@ -1573,6 +1594,21 @@ export class AudioEngine {
     this.active = this.active.filter((voice) => !expired.has(voice));
     this.fading = this.fading.filter((f) => !expired.has(f.voice));
     for (const voice of expired) {
+      // Expression is part of the sound, so it must outlive the release
+      // envelope. Disconnecting a rotary, tremolo or vibrato while the voice
+      // is still loud snaps its gain, pan or pitch back to neutral and makes a
+      // key-up click. Once the scheduled stop has passed the amp is already at
+      // its floor, and the permanent expression sources can let the voice go
+      // without an audible discontinuity or a retained AudioParam reference.
+      for (const s of voice.sources) {
+        this.bendSource.disconnect(s.detune);
+        this.lfoVibrato.disconnect(s.detune);
+      }
+      this.lfoColour.disconnect(voice.filter.frequency);
+      for (const { lfo, gain } of voice.taps) {
+        lfo.disconnect(gain);
+        gain.disconnect();
+      }
       if (this.voices.get(voice.note) !== voice) continue;
       this.voices.delete(voice.note);
       this.sustained.delete(voice.note);
@@ -1602,31 +1638,28 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const firstRelease = !voice.releasing;
     voice.releasing = true;
-    if (firstRelease && damp && voice.damper && !this.lite) {
-      // As loud as what is left of the note: a string that has already died
-      // away has little for the damper to stop.
-      const left = clamp01(voice.amp.gain.value / Math.max(0.0001, voice.peak));
-      this.addNoise(voice.panner, voice.damper, voice.freq, left, t, voice.k);
-    }
+    const requestedStop = t + seconds + RELEASE_STOP_PAD + reprieve;
+    const previousStop = voice.stopAt;
+    // A voice already on a quicker fade needs no new automation. Holding and
+    // redrawing it past its earlier stop would manufacture a hard cutoff.
+    if (!firstRelease && previousStop !== null && requestedStop >= previousStop) return;
+    const stop = Math.min(previousStop ?? Number.POSITIVE_INFINITY, requestedStop);
+    const fadeEnd = Math.min(t + seconds, Math.max(t, stop - RELEASE_STOP_PAD));
+    // Put the continuous voice safely onto its release before constructing a
+    // key-off sound. On a busy machine even that small graph can cross a render
+    // quantum, which used to leave the hold scheduled in the past.
+    const left = clamp01(voice.amp.gain.value);
     holdAtTime(voice.amp.gain, t);
-    voice.amp.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
-    const requestedStop = t + seconds + 0.02 + reprieve;
-    const stop = Math.min(voice.stopAt ?? Number.POSITIVE_INFINITY, requestedStop);
+    voice.amp.gain.exponentialRampToValueAtTime(0.0001, fadeEnd);
     voice.stopAt = stop;
     for (const s of voice.sources) s.stop(stop);
-    // The expression sources are permanent and hold a reference to every param
-    // they feed, so a voice that is not explicitly unhooked never goes away.
-    if (firstRelease) {
-      for (const s of voice.sources) {
-        this.bendSource.disconnect(s.detune);
-        this.lfoVibrato.disconnect(s.detune);
-      }
-      this.lfoColour.disconnect(voice.filter.frequency);
-      // The pooled oscillators are permanent too, and hold every tap they feed.
-      for (const { lfo, gain } of voice.taps) {
-        lfo.disconnect(gain);
-        gain.disconnect();
-      }
+    if (firstRelease && damp && voice.damper && !this.lite) {
+      // As loud as what is left of the note: a string that has already died
+      // away has little for the damper to stop. Prepare it only after the
+      // continuous voice is safely fading, then leave two render quanta for
+      // its short attack to reach the audio thread intact.
+      const start = this.prepareNoise(voice.panner, voice.damper, voice.freq, 1, voice.k, left);
+      start(this.ctx.currentTime + NOISE_LOOKAHEAD_FRAMES / this.ctx.sampleRate);
     }
   }
 
@@ -1667,8 +1700,8 @@ export class AudioEngine {
   /**
    * The pedal going down again: every note let go within the last moment is
    * held where it is, back under the pedal. Its sources still stop when
-   * their reprieve runs out, and its own motion is not rewired — a caught
-   * note is a note saved, not a note struck again.
+   * their reprieve runs out, and its own motion remains wired — a caught note
+   * is a note saved, not a note struck again.
    */
   private recatch(t: number): void {
     this.pruneVoices(t);
@@ -1676,14 +1709,17 @@ export class AudioEngine {
     for (const f of this.fading) {
       const voice = f.voice;
       if (this.voices.has(voice.note)) continue;
+      const level = voice.amp.gain.value;
       holdAtTime(voice.amp.gain, t);
-      voice.releasing = false;
-      for (const s of voice.sources) {
-        this.bendSource.connect(s.detune);
-        this.lfoVibrato.connect(s.detune);
+      // Source stops cannot be left at a non-zero held gain. Keep the recaught
+      // note steady, then lower it over the final retrigger-sized window.
+      if (voice.stopAt !== null) {
+        const fadeEnd = Math.max(t, voice.stopAt - RELEASE_STOP_PAD);
+        const fadeStart = Math.max(t, fadeEnd - RETRIGGER_RELEASE);
+        voice.amp.gain.setValueAtTime(level, fadeStart);
+        voice.amp.gain.exponentialRampToValueAtTime(0.0001, fadeEnd);
       }
-      this.lfoColour.connect(voice.filter.frequency);
-      voice.taps = [];
+      voice.releasing = false;
       this.voices.set(voice.note, voice);
       this.sustained.add(voice.note);
     }
