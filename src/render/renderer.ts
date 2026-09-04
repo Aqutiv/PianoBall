@@ -422,7 +422,10 @@ export class PinballRenderer {
     em.strokeStyle = tone(hue, 80, 62, alpha);
     em.lineCap = 'round';
     em.lineWidth = Math.max(1, (2 + breathe * 3) * this.cam.scaleAt(nest.x, nest.y));
-    tracePath(em, this.cam, circlePoints(nest.x, nest.y, 250 * (1 + breathe * 0.08)), 2, true);
+    // The one ring big enough for the tessellation to show: at 250 units the
+    // forty-gon this used to be sat nearly four pixels inside the circle it was
+    // drawing at its flattest point.
+    this.stage.discPath(em, nest.x, nest.y, 250 * (1 + breathe * 0.08), 2);
     em.stroke();
 
     // Along the keybed, following its crown, just up the table from the lip.

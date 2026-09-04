@@ -104,14 +104,14 @@ export async function install() {
 
   window.__bench = (opts = {}) => {
     const { w = 1280, h = 800, dpr = 2, mode = 'pinball', theme = 'nocturne',
-            warm = 60, iters = 300, balls = 4 } = opts;
+            warm = 60, iters = 300, balls = 4, parts = 40 } = opts;
     return pinned(async (reseed) => {
       reseed();
       setup(mode, theme, w, h, dpr);
       reseed();
       if (mode === 'pinball') {
         for (let i = 0; i < balls; i++) api.spawnBall(300 + i * 130, 700 + i * 40, 220 - i * 90, -420);
-        for (let i = 0; i < 40; i++) api.stage.particles.burst(400 + i * 8, 800, 0, 1, 900, 200, 12);
+        for (let i = 0; i < parts; i++) api.stage.particles.burst(400 + i * 8, 800, 0, 1, 900, 200, 12);
       }
       api.frame(warm, 1 / 60);
       const t = [];
@@ -123,8 +123,10 @@ export async function install() {
       }
       t.sort((a, b) => a - b);
       const at = (p) => +t[Math.min(t.length - 1, Math.floor(p * t.length))].toFixed(3);
-      return { mode, theme, dpr, live: api.stage.particles.liveCount,
-               median: at(0.5), p90: at(0.9), max: +t[t.length - 1].toFixed(3) };
+      // The median is the only stable number on a shared machine; p25 says how
+      // fast a clean frame is when nothing else is competing for the CPU.
+      return { mode, theme, dpr, parts, live: api.stage.particles.liveCount,
+               p25: at(0.25), median: at(0.5), p90: at(0.9) };
     });
   };
 

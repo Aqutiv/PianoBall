@@ -1,10 +1,9 @@
 import { TableCamera } from './project';
 import { Particles } from './particles';
-import { circlePoints, fillPoly, tracePath } from './geom';
 import { mix, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
 import { shadowSprite, glowSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
-import { clamp01 } from '../core/math';
+import { clamp01, TAU } from '../core/math';
 import { load, save } from '../core/storage';
 
 export interface RenderQuality {
@@ -112,6 +111,10 @@ export interface Layer {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
 }
+
+/** Scratch for `discPath`, which runs a couple of hundred times a frame. */
+const POLE_A = { x: 0, y: 0 };
+const POLE_B = { x: 0, y: 0 };
 
 function makeLayer(w: number, h: number): Layer {
   const canvas = document.createElement('canvas');
@@ -362,8 +365,44 @@ export class Stage {
     this.bounds = { minX, maxX, minY, maxY };
   }
 
+  /**
+   * Path a table-space disc as the ellipse it actually projects to.
+   *
+   * A circle lying on a plane goes to an ellipse under a pinhole camera —
+   * exactly, not approximately — so tessellating one into thirty-four points
+   * was buying nothing but allocations, and there were two hundred and thirty
+   * of these a frame.
+   *
+   * Two projections describe it. The near and far poles give the vertical
+   * extent, and their midpoint gives where the centre really sits, which is
+   * *not* where the centre of the circle projects to: perspective pushes it
+   * towards the near pole. `scaleAt` gives the horizontal half-width.
+   *
+   * The tilt is left off. The ellipse is only axis-aligned for a disc on the
+   * camera's own x axis, and leans up to nine degrees at the edge of the
+   * table — but those are the same discs that are nearly circular by then, so
+   * an axis-aligned one is within a fifth of a pixel everywhere on Aurora.
+   * Solving the true conic costs an atan2 and two square roots per disc to
+   * move an edge by less than it can be drawn.
+   */
+  discPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
+    const cam = this.cam;
+    cam.project(x, y - r, z, POLE_A);
+    cam.project(x, y + r, z, POLE_B);
+    const cy = (POLE_A.y + POLE_B.y) / 2;
+    const ry = Math.abs(POLE_B.y - POLE_A.y) / 2;
+    cam.project(x, y, z, POLE_A);
+    const rx = r * cam.scaleAt(x, y, z);
+    ctx.beginPath();
+    // `ellipse` throws on a negative radius, and a zero-radius disc is a real
+    // call — the bumper cap shrinks to nothing as one squashes.
+    ctx.ellipse(POLE_A.x, cy, Math.max(0, rx), Math.max(0, ry), 0, 0, TAU);
+  }
+
   fillDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, style: string | CanvasGradient): void {
-    fillPoly(ctx, this.cam, circlePoints(x, y, r, 34), z, style);
+    this.discPath(ctx, x, y, r, z);
+    ctx.fillStyle = style;
+    ctx.fill();
   }
 
   /** Stack of projected discs: reads as a solid extruded cylinder. */
@@ -384,7 +423,9 @@ export class Stage {
   outlineDisc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
     const o = this.theme.outline;
     if (!o) return;
-    tracePath(ctx, this.cam, circlePoints(x, y, r, 34), z, true);
+    // The same ellipse the fill uses. A 34-gon outline sitting on a smooth
+    // ellipse fill is exactly the mismatch Toybox's whole read would show up.
+    this.discPath(ctx, x, y, r, z);
     ctx.strokeStyle = o.color;
     ctx.lineWidth = Math.max(1, o.width * this.cam.scaleAt(x, y, z));
     ctx.lineJoin = 'round';
