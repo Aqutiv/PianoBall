@@ -1,7 +1,7 @@
 import { noteToFreq } from '../midi/notes';
 import { clamp, clamp01 } from '../core/math';
 import { load, save } from '../core/storage';
-import { holdAtTime } from './automation';
+import { cancelFrom, holdAtTime } from './automation';
 import { DRUM_SPECS, type DrumVoice } from './drums';
 import { CAB, HALL, HALL_LITE, boardImpulse, roomImpulse, type RoomSpec, type Samples } from './rooms';
 import {
@@ -1017,7 +1017,11 @@ export class AudioEngine {
    */
   private duck(t: number): void {
     const g = this.padDuck.gain;
-    holdAtTime(g, t);
+    // `t` is the note's onset, which is ahead of now, and the two target curves
+    // below anchor themselves there. Pinning the level as it stands would put
+    // the value from a few milliseconds earlier at that onset instead, and step
+    // the whole bed under every note of a chord while it is already ducking.
+    cancelFrom(g, t);
     g.setTargetAtTime(DUCK_FLOOR, t, 0.008);
     g.setTargetAtTime(1, t + DUCK_HOLD, DUCK_RETURN);
   }
