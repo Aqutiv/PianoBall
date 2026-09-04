@@ -1,7 +1,7 @@
 import { type Vec2, v2 } from './vec2';
 import { type Ball } from './ball';
 import {
-  type AABB, type Collider, type SegmentCollider, type SoundTag, type Material,
+  type AABB, type Collider, type Feature, type SegmentCollider, type SoundTag, type Material,
   closestFeature, updateAABB,
 } from './colliders';
 import { SpatialGrid } from './grid';
@@ -114,6 +114,8 @@ export class World {
    * buys a single compare in the place that used to do a thousand.
    */
   private readonly padBounds: AABB = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  /** Scratch for `closestFeature`, which is read and dropped at both callers. */
+  private readonly feat: Feature = { dist: 0, nx: 0, ny: 0 };
   private rand: () => number;
   private dirty = true;
 
@@ -392,7 +394,17 @@ export class World {
    */
   private depenetrate(ball: Ball): void {
     const r = ball.r;
-    this.grid.query(ball.p.x - r - 2, ball.p.y - r - 2, ball.p.x + r + 2, ball.p.y + r + 2, this.cand);
+    const minX = ball.p.x - r - 2, minY = ball.p.y - r - 2;
+    const maxX = ball.p.x + r + 2, maxY = ball.p.y + r + 2;
+    this.grid.query(minX, minY, maxX, maxY, this.cand);
+    // The grid candidates arrive already filtered by the query box; the
+    // paddles do not, and this loop used to reach `closestFeature` for all
+    // thirty-two of them, twice, for every ball on the table — with no bounds
+    // test of any kind. A capsule that fails its own AABB cannot be
+    // overlapping the ball, so rejecting on it changes nothing but the bill.
+    const pb = this.padBounds;
+    const nearPaddles = pb.maxX >= minX && pb.minX <= maxX
+      && pb.maxY >= minY && pb.minY <= maxY;
     for (let pass = 0; pass < 2; pass++) {
       let moved = false;
       for (let i = 0; i < this.cand.length; i++) {
@@ -400,18 +412,21 @@ export class World {
         if (!s.enabled || s.sensor) continue;
         moved = this.pushOut(ball, s, 0, 0) || moved;
       }
-      for (let i = 0; i < this.paddles.length; i++) {
+      for (let i = 0; nearPaddles && i < this.paddles.length; i++) {
         const p = this.paddles[i];
-        if (!p.collider.enabled) continue;
+        const s = p.collider;
+        if (!s.enabled) continue;
+        const bb = s.aabb;
+        if (bb.maxX < minX || bb.minX > maxX || bb.maxY < minY || bb.minY > maxY) continue;
         const sv = this.surfaceVelocity(p, ball.p.x, ball.p.y);
-        moved = this.pushOut(ball, p.collider, sv.x, sv.y) || moved;
+        moved = this.pushOut(ball, s, sv.x, sv.y) || moved;
       }
       if (!moved) break;
     }
   }
 
   private pushOut(ball: Ball, s: Collider, svx: number, svy: number): boolean {
-    const f = closestFeature(s, ball.p);
+    const f = closestFeature(s, ball.p, this.feat);
     if (!isFinite(f.dist)) return false;
     const pen = ball.r - f.dist;
     if (pen <= 1e-4) return false;
@@ -445,7 +460,7 @@ export class World {
     for (let i = 0; i < this.cand.length; i++) {
       const s = this.cand[i];
       if (!s.enabled || !s.sensor) continue;
-      let touching = closestFeature(s, ball.p).dist < r;
+      let touching = closestFeature(s, ball.p, this.feat).dist < r;
       if (!touching) {
         touching = sweepVsCollider(ball.prev.x, ball.prev.y, vx, vy, r, s, dt, this.probe);
       }

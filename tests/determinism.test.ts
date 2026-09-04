@@ -21,7 +21,7 @@ import { MusicState } from '../src/audio/musicState';
  */
 
 /** A long, busy run: multiball, keys worked, sensors crossed, walls hit. */
-function run(steps: number): { hash: number; marks: number[] } {
+function run(steps: number): { hash: number; balls: number; marks: string[] } {
   const input = new InputHub();
   const music = new MusicState({ ...AURORA.music });
   const game = new Game(input, AURORA, music);
