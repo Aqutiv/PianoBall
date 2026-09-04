@@ -28,10 +28,17 @@ interface FakeFilterNode extends FakeNode {
   Q: { value: number };
 }
 
+interface FakeSource {
+  detune: FakeParam;
+  stop: ReturnType<typeof vi.fn>;
+  addEventListener: ReturnType<typeof vi.fn>;
+  emitEnded(): void;
+}
+
 interface FakeVoice {
   note: number;
   startedAt: number;
-  sources: { detune: FakeParam; stop: ReturnType<typeof vi.fn> }[];
+  sources: FakeSource[];
   filter: { frequency: FakeParam };
   amp: { gain: FakeParam };
   panner: object;
@@ -42,17 +49,21 @@ interface FakeVoice {
   taps: { lfo: FakeNode; gain: FakeNode }[];
   releasing: boolean;
   stopAt: number | null;
+  remainingSources: number;
+  retired: boolean;
 }
 
 interface EngineInternals {
   active: FakeVoice[];
   voices: Map<number, FakeVoice>;
   sustained: Set<number>;
+  pedal: number;
   fading: { voice: FakeVoice; at: number }[];
   bendSource: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   lfoVibrato: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   lfoColour: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   release(voice: FakeVoice, seconds: number, damp?: boolean, reprieve?: number): void;
+  trackVoice(voice: FakeVoice): void;
   pruneVoices(t: number): void;
   retrigger(note: number, t: number): void;
   recatch(t: number): void;
@@ -85,6 +96,22 @@ function param(value = 0.25): FakeParam {
 
 function connectable<T extends object>(value: T): T & FakeNode {
   return Object.assign(value, { connect: vi.fn((to: unknown) => to), disconnect: vi.fn() });
+}
+
+function source(): FakeSource {
+  let ended: (() => void) | null = null;
+  return {
+    detune: param(),
+    stop: vi.fn(),
+    addEventListener: vi.fn((type: string, listener: () => void) => {
+      if (type === 'ended') ended = listener;
+    }),
+    emitEnded() {
+      const listener = ended;
+      ended = null;
+      listener?.();
+    },
+  };
 }
 
 function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
@@ -125,10 +152,11 @@ function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
 }
 
 function voice(note: number, startedAt = 0, releasing = false, stopAt: number | null = null): FakeVoice {
+  const sources = [source()];
   return {
     note,
     startedAt,
-    sources: [{ detune: param(), stop: vi.fn() }],
+    sources,
     filter: { frequency: param() },
     amp: { gain: param() },
     panner: {},
@@ -138,6 +166,8 @@ function voice(note: number, startedAt = 0, releasing = false, stopAt: number | 
     taps: [],
     releasing,
     stopAt,
+    remainingSources: sources.length,
+    retired: false,
   };
 }
 
@@ -308,6 +338,7 @@ describe('key voice release tracking', () => {
     const held = voice(60);
     state.active.push(held);
     state.voices.set(60, held);
+    state.trackVoice(held);
 
     state.release(held, 0.3, false);
 
@@ -333,6 +364,107 @@ describe('key voice release tracking', () => {
     expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
     expect(state.lfoVibrato.disconnect).toHaveBeenCalledOnce();
     expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+
+    // A queued source event may arrive after clock pruning won the race.
+    held.sources[0].emitEnded();
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('retires an idle release only after every source has ended', () => {
+    const { state } = harness();
+    const held = voice(60);
+    held.sources = [source(), source()];
+    held.remainingSources = held.sources.length;
+    const lfo = connector();
+    const gain = connector();
+    held.taps = [{ lfo, gain }];
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.sustained.add(60);
+    state.fading.push({ voice: held, at: 1 });
+    state.trackVoice(held);
+
+    state.release(held, 0.08, false);
+    held.sources[0].emitEnded();
+
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(lfo.disconnect).not.toHaveBeenCalled();
+
+    held.sources[1].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.fading).toEqual([]);
+    expect(state.bendSource.disconnect).toHaveBeenCalledTimes(2);
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledTimes(2);
+    expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+    expect(lfo.disconnect).toHaveBeenCalledWith(gain);
+    expect(gain.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a naturally ended finite voice until its key is released', async () => {
+    const { state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+
+    held.sources[0].emitEnded();
+
+    expect(held.remainingSources).toBe(0);
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(state.bendSource.disconnect).not.toHaveBeenCalled();
+
+    state.release(held, 0.08, false);
+    // Mirrors the recatch bookkeeping performed by note-off/pedal-up in the
+    // same call stack. The queued cleanup must remove this stale entry too.
+    state.fading.push({ voice: held, at: 1 });
+    await Promise.resolve();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.fading).toEqual([]);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not retain a silent finite voice when its key lifts under sustain', async () => {
+    const { engine, state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+    held.sources[0].emitEnded();
+    state.pedal = 1;
+
+    engine.noteOff(60);
+    await Promise.resolve();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not let an ended tail retire a newer strike of the same pitch', () => {
+    const { state } = harness();
+    const oldTail = voice(60);
+    const newStrike = voice(60, 1.01);
+    state.active.push(oldTail, newStrike);
+    state.voices.set(60, newStrike);
+    state.sustained.add(60);
+    state.trackVoice(oldTail);
+
+    state.release(oldTail, 0.02, false);
+    oldTail.sources[0].emitEnded();
+
+    expect(state.active).toEqual([newStrike]);
+    expect(state.voices.get(60)).toBe(newStrike);
+    expect(state.sustained.has(60)).toBe(true);
   });
 
   it('disconnects voice-owned motion only after its release is silent', () => {
@@ -455,6 +587,25 @@ describe('key voice release tracking', () => {
     expect(state.active).toEqual([]);
   });
 
+  it('automatically retires every all-notes-off tail while the engine is idle', () => {
+    const { engine, state } = harness();
+    const first = voice(60);
+    const second = voice(64);
+    state.active.push(first, second);
+    state.voices.set(60, first);
+    state.voices.set(64, second);
+    state.trackVoice(first);
+    state.trackVoice(second);
+
+    engine.allNotesOff();
+    first.sources[0].emitEnded();
+    expect(state.active).toEqual([second]);
+
+    second.sources[0].emitEnded();
+    expect(state.active).toEqual([]);
+    expect(state.voices.size).toBe(0);
+  });
+
   it('recatches without duplicating a voice and never revives a superseded tail', () => {
     const { state } = harness();
     const caught = voice(60, 0, true, 3);
@@ -484,5 +635,24 @@ describe('key voice release tracking', () => {
     expect(state.voices.has(60)).toBe(false);
     expect(state.sustained.has(60)).toBe(false);
     expect(state.fading).toEqual([]);
+  });
+
+  it('retires a recaught voice when its already-scheduled sources end', () => {
+    const { state } = harness();
+    const caught = voice(60, 0, true, 3);
+    state.active.push(caught);
+    state.fading.push({ voice: caught, at: 0.9 });
+    state.trackVoice(caught);
+
+    state.recatch(1);
+    expect(caught.releasing).toBe(false);
+    expect(state.voices.get(60)).toBe(caught);
+    expect(state.sustained.has(60)).toBe(true);
+
+    caught.sources[0].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
   });
 });

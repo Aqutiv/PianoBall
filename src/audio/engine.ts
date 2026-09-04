@@ -329,6 +329,10 @@ interface KeyVoice {
   releasing: boolean;
   /** Audio-clock time at which the scheduled sources have completely stopped. */
   stopAt: number | null;
+  /** Sources yet to report that their audio-thread lifetime has ended. */
+  remainingSources: number;
+  /** Makes source-ended events and synchronous clock pruning safe to race. */
+  retired: boolean;
 }
 
 /** One connection from a pooled oscillator to a voice, through its own depth. */
@@ -1136,10 +1140,11 @@ export class AudioEngine {
     const voice: KeyVoice = {
       note, startedAt: onset, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
       freq, k, release: spec.env.release * k.release, damper: spec.damper, taps,
-      releasing: false, stopAt: null,
+      releasing: false, stopAt: null, remainingSources: sources.length, retired: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
+    this.trackVoice(voice);
     this.cull();
   }
 
@@ -1206,9 +1211,11 @@ export class AudioEngine {
     const voice: KeyVoice = {
       note, startedAt: onset, sources, filter, amp, panner: chain.panner,
       freq, k: NO_TRACK, release: BED_KEY_RELEASE, taps: [], releasing: false, stopAt: null,
+      remainingSources: sources.length, retired: false,
     };
     this.voices.set(note, voice);
     this.active.push(voice);
+    this.trackVoice(voice);
     this.cull();
   }
 
@@ -1563,7 +1570,14 @@ export class AudioEngine {
     const voice = this.voices.get(note);
     if (!voice || voice.releasing) return;
     // Pedal down: the note is held, and released when the pedal comes up.
-    if (this.pedal >= PEDAL_DOWN && !immediate) { this.sustained.add(note); return; }
+    if (this.pedal >= PEDAL_DOWN && !immediate) {
+      this.sustained.add(note);
+      // A finite string can have become silent before the player lifts its
+      // key. There is nothing for the pedal to sustain, so do not retain its
+      // modulation graph indefinitely if the pedal stays down.
+      if (voice.remainingSources === 0) queueMicrotask(() => this.retireVoice(voice));
+      return;
+    }
     this.voices.delete(note);
     if (immediate) { this.release(voice, RETRIGGER_RELEASE, false); return; }
     // Half down, the dampers only brush the strings and the note fades slowly.
@@ -1587,31 +1601,49 @@ export class AudioEngine {
     this.fading = this.fading.filter((f) => t - f.at <= RECATCH);
   }
 
+  /**
+   * Retire a voice from its sources' audio-thread `ended` events. Every source
+   * participates because a short partial or finite rendered string may finish
+   * before the rest of the voice. The audio clock pauses with its context, so
+   * unlike a wall timer this can never detach modulation from a suspended
+   * release that still has sound left to render.
+   */
+  private trackVoice(voice: KeyVoice): void {
+    for (const source of voice.sources) {
+      source.addEventListener('ended', () => {
+        voice.remainingSources = Math.max(0, voice.remainingSources - 1);
+        // A finite rendered string may run out while its key is still held.
+        // Preserve that logical key state until the release path has had a
+        // chance to handle its damper and sustain/recatch bookkeeping.
+        if (voice.remainingSources === 0 && voice.stopAt !== null) this.retireVoice(voice);
+      }, { once: true });
+    }
+  }
+
+  /** Disconnect and forget one fully silent voice, exactly once. */
+  private retireVoice(voice: KeyVoice): void {
+    if (voice.retired) return;
+    voice.retired = true;
+    this.active = this.active.filter((item) => item !== voice);
+    this.fading = this.fading.filter((f) => f.voice !== voice);
+    for (const source of voice.sources) {
+      this.bendSource.disconnect(source.detune);
+      this.lfoVibrato.disconnect(source.detune);
+    }
+    this.lfoColour.disconnect(voice.filter.frequency);
+    for (const { lfo, gain } of voice.taps) {
+      lfo.disconnect(gain);
+      gain.disconnect();
+    }
+    if (this.voices.get(voice.note) !== voice) return;
+    this.voices.delete(voice.note);
+    this.sustained.delete(voice.note);
+  }
+
   /** Drop voices only after every source has reached its scheduled stop. */
   private pruneVoices(t: number): void {
-    const expired = new Set(this.active.filter((voice) => voice.stopAt !== null && voice.stopAt <= t));
-    if (!expired.size) return;
-    this.active = this.active.filter((voice) => !expired.has(voice));
-    this.fading = this.fading.filter((f) => !expired.has(f.voice));
-    for (const voice of expired) {
-      // Expression is part of the sound, so it must outlive the release
-      // envelope. Disconnecting a rotary, tremolo or vibrato while the voice
-      // is still loud snaps its gain, pan or pitch back to neutral and makes a
-      // key-up click. Once the scheduled stop has passed the amp is already at
-      // its floor, and the permanent expression sources can let the voice go
-      // without an audible discontinuity or a retained AudioParam reference.
-      for (const s of voice.sources) {
-        this.bendSource.disconnect(s.detune);
-        this.lfoVibrato.disconnect(s.detune);
-      }
-      this.lfoColour.disconnect(voice.filter.frequency);
-      for (const { lfo, gain } of voice.taps) {
-        lfo.disconnect(gain);
-        gain.disconnect();
-      }
-      if (this.voices.get(voice.note) !== voice) continue;
-      this.voices.delete(voice.note);
-      this.sustained.delete(voice.note);
+    for (const voice of [...this.active]) {
+      if (voice.stopAt !== null && voice.stopAt <= t) this.retireVoice(voice);
     }
   }
 
@@ -1660,6 +1692,12 @@ export class AudioEngine {
       // its short attack to reach the audio thread intact.
       const start = this.prepareNoise(voice.panner, voice.damper, voice.freq, 1, voice.k, left);
       start(this.ctx.currentTime + NOISE_LOOKAHEAD_FRAMES / this.ctx.sampleRate);
+    }
+    if (voice.remainingSources === 0) {
+      // `noteOff` and pedal-up remember a catchable release immediately after
+      // this method returns. Retire on the next microtask so that bookkeeping
+      // happens first, then remove any now-obsolete recatch entry as well.
+      queueMicrotask(() => this.retireVoice(voice));
     }
   }
 
