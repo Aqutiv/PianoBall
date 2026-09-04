@@ -37,6 +37,19 @@ const SHED_HOLD = 3;
 const CLIMB_HOLD = 8;
 /** A frame longer than this is a stall, not a frame rate. */
 const STALL_MS = 200;
+/** Where the refresh estimate starts, and the fastest common panel it assumes. */
+const ASSUMED_REFRESH = 16.7;
+/**
+ * Slowest average frame that still counts as comfortable, whatever the display.
+ *
+ * A 50Hz panel sits at 20ms, which is under the late threshold but was over the
+ * old recovery threshold of 1.15x the estimate -- so such a display was never
+ * comfortable and could never climb back out of anything it had shed. The band
+ * between this and `late` is deliberately empty: a frame in it is neither good
+ * enough to take something back nor bad enough to give something up, which is
+ * what keeps the ladder from hunting.
+ */
+const COMFORTABLE_MS = 22;
 /** Climbs to one rung that end in a shed back past it, before giving up on it. */
 const GIVE_UP_AFTER = 2;
 
@@ -73,7 +86,7 @@ export class Adaptive {
    * it is comfortable, and climbs back rather than shedding. This has to
    * describe what the display can do, never what the machine is managing.
    */
-  refresh = 16.7;
+  refresh = ASSUMED_REFRESH;
 
   private held = 0;
   private settle = 0;
@@ -83,8 +96,17 @@ export class Adaptive {
   private floor = 0;
   /** The rung the last climb started from, to notice it being undone. */
   private climbedFrom = -1;
-  /** Take the next measured frame as the averages rather than blending it in. */
-  private priming = false;
+  /**
+   * Take the next measured frame as the averages rather than blending it in.
+   *
+   * True from the start, not only after a disturbance: the values the averages
+   * are declared with are a guess at a machine nobody has measured yet, and
+   * blending away from them leaves a window in which they are neither the guess
+   * nor the truth. That window is long enough to act in -- a fresh controller
+   * on a 40fps machine would find both averages still optimistic on its second
+   * frame and offer a climb on the strength of them.
+   */
+  private priming = true;
 
   /**
    * Look away for a moment: the workload has changed under the measurement.
@@ -118,7 +140,9 @@ export class Adaptive {
   }
 
   /** A resize may mean a different display, and nothing else moves this. */
-  resetRefresh(): void { this.refresh = 16.7; }
+  resetRefresh(): void {
+    this.refresh = ASSUMED_REFRESH;
+  }
 
   /** Wait this long before moving again, after a change made from outside. */
   hold(seconds: number): void { this.held = Math.max(this.held, seconds); }
@@ -179,7 +203,7 @@ export class Adaptive {
     }
 
     const comfortable = this.frameAvg < 7
-      && this.wallAvg < Math.max(this.refresh * 1.15, 17.5);
+      && this.wallAvg < Math.max(this.refresh * 1.15, COMFORTABLE_MS);
     if (!comfortable || view.rung <= this.floor) return null;
 
     const target = view.rung - 1;

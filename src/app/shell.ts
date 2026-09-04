@@ -1,5 +1,5 @@
 import { GameLoop } from '../core/loop';
-import { load, save, stored } from '../core/storage';
+import { load, save } from '../core/storage';
 import { Stage, backingDensity } from '../render/stage';
 import { LITE_AUDIO_RUNG, MAX_RUNG, derive, rungLabel } from '../render/tiers';
 import { readDeviceHints, seedRung } from '../render/deviceHint';
@@ -165,7 +165,11 @@ export class Shell {
     const preset = perfSettings().graphics;
     if (preset !== 'auto') { this.shedTo(PRESET_RUNG[preset], 0); return; }
 
-    if (stored('quality')) return;
+    // Once, ever, and recorded as such. Whatever the controller settled on
+    // last session is a measurement of this machine; the hint is a guess about
+    // it, and a guess does not get to overrule a measurement every morning.
+    if (perfSettings().seeded) return;
+    setPerfSettings({ seeded: true });
     const rung = seedRung(readDeviceHints(this.stage.cssW * this.stage.cssH * this.stage.dpr * this.stage.dpr));
     if (rung > 0) this.shedTo(rung, 6);
   }
@@ -451,6 +455,12 @@ export class Shell {
     this.stage.theme = theme;
     applyTheme(theme);
     this.stage.invalidate();
+    // A theme is a workload. Toybox draws neither the floor light nor the
+    // grade, so two of the ladder's rungs do nothing there and the frame is
+    // cheaper throughout -- which means what the controller learned under
+    // Nocturne is not true here. Without this, a floor earned on the expensive
+    // theme followed the player to the cheap one and kept bloom off for good.
+    this.forgetMeasurements();
   }
 
   /** The keybed range changed; every built mode has to follow. */

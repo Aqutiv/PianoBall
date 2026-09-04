@@ -244,6 +244,26 @@ describe('the adaptive controller', () => {
     expect(moves.every((m) => m > 3)).toBe(true);
   });
 
+  it('lets a fifty-hertz display take back what it gave up', () => {
+    // A 50Hz panel sits at 20ms. That is comfortably under the late threshold,
+    // but it used to be over the recovery threshold of 1.15x an assumed 60Hz --
+    // so such a display could never be comfortable, and anything it shed once
+    // it kept for the rest of the session.
+    const a = new Adaptive();
+    const start = 4;
+    const { rung } = run(a, { seconds: 90, frameMs: 20, workMs: 2, rung: start });
+    expect(rung).toBeLessThan(start);
+  });
+
+  it('still gives nothing back to a machine that is merely nearly fast enough', () => {
+    // The band between comfortable and late is deliberately empty: 24ms is
+    // neither good enough to take something back nor bad enough to give
+    // something up, and a ladder that moved here would hunt.
+    const a = new Adaptive();
+    const { moves } = run(a, { seconds: 90, frameMs: 24, workMs: 2, rung: 4 });
+    expect(moves).toEqual([]);
+  });
+
   it('never measures a frame drawn behind a panel', () => {
     const a = new Adaptive();
     const work = a.frameAvg, wall = a.wallAvg;

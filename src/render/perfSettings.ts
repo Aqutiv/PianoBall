@@ -16,9 +16,20 @@ export type SoundPreset = 'auto' | 'full' | 'lite';
 export interface PerfSettings {
   graphics: GraphicsPreset;
   sound: SoundPreset;
+  /**
+   * Whether the first-run guess at what this machine can draw has been made.
+   *
+   * Its own marker, because the thing it used to be inferred from -- whether a
+   * `quality` preference had ever been written -- is only true once the player
+   * touches a Display toggle. An Auto player who never does was treated as a
+   * first run on every single load, so a capable machine misclassified by a
+   * coarse thread count started degraded every session and spent half a minute
+   * climbing back out, however well the previous session had gone.
+   */
+  seeded: boolean;
 }
 
-export const DEFAULT_PERF: PerfSettings = { graphics: 'auto', sound: 'auto' };
+export const DEFAULT_PERF: PerfSettings = { graphics: 'auto', sound: 'auto', seeded: false };
 
 /**
  * The rung each pinned preset holds the ladder at.
