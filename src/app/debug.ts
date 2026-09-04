@@ -42,6 +42,13 @@ export function installDebugApi(shell: Shell): void {
      *
      * So this drives the engine directly and holds every input still. It is the
      * only way to say whether a change to `roll` made it quieter.
+     *
+     * **Read `floorRms` before believing `rms`.** The floor is the same scene
+     * with the rolls stopped, so it should be a few parts in a hundred
+     * thousand. When it is not, something else was still sounding -- the bed
+     * places pads ahead on the clock and they go on decaying for a second or
+     * two after `stop`, and a run taken during that measures them too. A
+     * contaminated run reads several times high; discard it and take another.
      */
     rollBench: async (n = 4, speed = 1500, seconds = 1.5, share = 1 / Math.sqrt(Math.max(1, n))) => {
       await shell.startAudio();
@@ -52,7 +59,10 @@ export function installDebugApi(shell: Shell): void {
       shell.play('freestyle');
       shell.bed.stop();
       shell.audio.hush();
-      await new Promise((done) => setTimeout(done, 300));
+      // Long enough for pads already written onto the clock to decay. Three
+      // hundred milliseconds was not, and the runs that caught them read five
+      // times high.
+      await new Promise((done) => setTimeout(done, 1600));
       const handles = Array.from({ length: n }, () => shell.audio.roll());
       // Driven for a moment first: the gain is smoothed with a 50 ms time
       // constant and would otherwise still be climbing when the window opens.
