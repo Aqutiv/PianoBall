@@ -7,6 +7,9 @@ import { clamp01, TAU, lerp } from '../../core/math';
 import { FIELD } from '../../render/field';
 import type { Vec2 } from '../../physics/vec2';
 
+/** Points along one aurora band. */
+const AURORA_POINTS = 16;
+
 /** Ribbons rise at this many table units a second. */
 const RISE = 300;
 /** Two onsets on the same note closer than this count as a repeat. */
@@ -64,6 +67,12 @@ export class Field {
   density = 0;
 
   private t = 0;
+  /**
+   * The aurora's points, held rather than rebuilt. Four bands of seventeen,
+   * every frame, always on: sixty-eight objects a frame for a curve whose
+   * shape is rewritten each time anyway.
+   */
+  private readonly auroraPts: Vec2[] = Array.from({ length: AURORA_POINTS + 1 }, () => ({ x: 0, y: 0 }));
   private bend = 0;
   private mod = 0;
 
@@ -236,12 +245,13 @@ export class Field {
       const hue = this.chordPcs.length
         ? this.stage.hue(this.chordPcs[band % this.chordPcs.length])
         : 200 + band * 22;
-      const pts: Vec2[] = [];
-      for (let i = 0; i <= 16; i++) {
-        const u = i / 16;
+      const pts = this.auroraPts;
+      for (let i = 0; i <= AURORA_POINTS; i++) {
+        const u = i / AURORA_POINTS;
         const y = lerp(FIELD.near + 60, FIELD.far, u);
         const x = FIELD.width / 2 + Math.sin(phase + u * 3.1) * (150 + band * 90);
-        pts.push({ x: this.sway(x, y), y });
+        pts[i].x = this.sway(x, y);
+        pts[i].y = y;
       }
       em.strokeStyle = tone(hue, 70, 62);
       em.globalAlpha = lively * (1 - band * 0.18);
