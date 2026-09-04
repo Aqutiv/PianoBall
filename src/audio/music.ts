@@ -676,8 +676,20 @@ const NATURAL_STACK = ['9', '11', '13'];
  */
 const MIN_SCORE = 12;
 
+/**
+ * Accidentals in ASCII, both of them.
+ *
+ * The flat used to be a real `\u266d` (U+266D) while the sharp was always a plain
+ * `#`, which was already an odd pair to write next to each other. What settled
+ * it is that no face the app bundles carries U+266D: the woff2 files are latin
+ * subsets, so `\u266d` came from whatever the system had, at whatever weight it had
+ * it, glued to a letter drawn in Jost or Fredoka or Archivo. That was tolerable
+ * while the names were plain white text and became obvious once they were given
+ * an outline, because the fallback took a different one. `b` is what a lead
+ * sheet writes anyway.
+ */
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const FLAT_NAMES = ['C', 'D\u266d', 'D', 'E\u266d', 'E', 'F', 'G\u266d', 'G', 'A\u266d', 'A', 'B\u266d', 'B'];
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
 /**
  * Steps above the tonic that a musician writes as a flattened degree.

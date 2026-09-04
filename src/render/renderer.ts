@@ -1,11 +1,11 @@
 import type { TableCamera } from './project';
 import { tracePath, arcPoints, circlePoints, extrudeStroke, fillPoly } from './geom';
 import { mix, withAlpha, pitchColor, tone } from './palette';
-import type { Stage, RenderQuality } from './stage';
+import type { Stage, RenderQuality, LabelStyle } from './stage';
 import { drawKeys } from './keys';
 import type { Game } from '../game/game';
 import type { WallStyle } from '../game/table/schema';
-import type { Theme } from './theme';
+import type { TablePalette, Theme } from './theme';
 import type { Vec2 } from '../physics/vec2';
 import { clamp01, TAU } from '../core/math';
 import { noteName } from '../midi/notes';
@@ -50,6 +50,25 @@ export function nestOf(game: Game): { x: number; y: number } {
  */
 function wallColors(style: WallStyle, theme: Theme): [string, string] {
   return theme.walls[style] ?? theme.walls.rail;
+}
+
+/**
+ * The outline the table's pitch names are drawn with.
+ *
+ * Every one of them lands on a halo laid down at the same point a line earlier,
+ * and a bumper's cap has a 96%-lightness disc under it besides — so a near-white
+ * glyph had nothing to read against. Worse than the same problem in PlayTune,
+ * in fact: these are drawn *before* `composite()`, so the additive bloom goes
+ * over the letter rather than under it.
+ *
+ * One object, rewritten in place rather than allocated per label per frame, in
+ * the same spirit as `TableCamera.project` writing into a point it was handed.
+ * `label` reads it synchronously and keeps no reference.
+ */
+const INK_EDGE: LabelStyle = { edge: '' };
+function inkEdge(pal: TablePalette): LabelStyle {
+  INK_EDGE.edge = pal.void;
+  return INK_EDGE;
 }
 
 /**
@@ -333,7 +352,7 @@ export class PinballRenderer {
       stage.label(
         ctx,
         g.drawCx + g.nx * 12, g.drawCy + g.ny * 12, g.z + 18,
-        noteName(g.note), pal.ink, 0.75 * near,
+        noteName(g.note), pal.ink, 0.75 * near, undefined, inkEdge(pal),
       );
     }
   }
@@ -424,7 +443,7 @@ export class PinballRenderer {
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, tone(capHue, 100, 96, 0.5 + pulse * 0.5));
 
         this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5 + env * 0.35);
-        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55);
+        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55, undefined, inkEdge(pal));
         break;
       }
 
@@ -462,7 +481,7 @@ export class PinballRenderer {
         ctx.lineWidth = 3.5 * scale;
         ctx.stroke();
         this.stage.halo(em, el.x, el.y, el.z, hue, 54, flash + (energised ? 0.4 : 0));
-        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 12, noteName(el.note), pal.ink, 0.6);
+        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 12, noteName(el.note), pal.ink, 0.6, undefined, inkEdge(pal));
         break;
       }
 
