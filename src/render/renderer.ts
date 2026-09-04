@@ -406,6 +406,10 @@ export class PinballRenderer {
       stage.halo(em, L.x, L.y, 6, hue, 40, 0.5 * near);
       const k = game.keybed.keys[L.lane];
       if (!k) continue;
+      // Gated like every other note name. This one was not, so turning the
+      // labels off left the landing hints still spelling out the key — the
+      // setting removed most of the writing on the table but not all of it.
+      if (!this.quality.labels) continue;
       const g = k.geom;
       this.queueLabel(
         g.drawCx + g.nx * 12, g.drawCy + g.ny * 12, g.z + 18,
