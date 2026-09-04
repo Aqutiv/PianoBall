@@ -28,35 +28,50 @@ interface FakeFilterNode extends FakeNode {
   Q: { value: number };
 }
 
+interface FakeSource {
+  detune: FakeParam;
+  stop: ReturnType<typeof vi.fn>;
+  addEventListener: ReturnType<typeof vi.fn>;
+  emitEnded(): void;
+}
+
 interface FakeVoice {
   note: number;
   startedAt: number;
-  sources: { detune: FakeParam; stop: ReturnType<typeof vi.fn> }[];
+  sources: FakeSource[];
   filter: { frequency: FakeParam };
   amp: { gain: FakeParam };
   panner: object;
   freq: number;
-  peak: number;
   k: object;
   release: number;
-  taps: never[];
+  damper?: object;
+  taps: { lfo: FakeNode; gain: FakeNode }[];
   releasing: boolean;
   stopAt: number | null;
+  remainingSources: number;
+  retired: boolean;
 }
 
 interface EngineInternals {
   active: FakeVoice[];
   voices: Map<number, FakeVoice>;
   sustained: Set<number>;
+  pedal: number;
   fading: { voice: FakeVoice; at: number }[];
   bendSource: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   lfoVibrato: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   lfoColour: { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
   release(voice: FakeVoice, seconds: number, damp?: boolean, reprieve?: number): void;
+  trackVoice(voice: FakeVoice): void;
   pruneVoices(t: number): void;
   retrigger(note: number, t: number): void;
   recatch(t: number): void;
   cull(): void;
+  prepareNoise(
+    into: object, noise: object, freq: number, velocity: number, key: object,
+    strength?: number,
+  ): (at: number) => void;
 }
 
 interface GraphInternals {
@@ -83,6 +98,22 @@ function connectable<T extends object>(value: T): T & FakeNode {
   return Object.assign(value, { connect: vi.fn((to: unknown) => to), disconnect: vi.fn() });
 }
 
+function source(): FakeSource {
+  let ended: (() => void) | null = null;
+  return {
+    detune: param(),
+    stop: vi.fn(),
+    addEventListener: vi.fn((type: string, listener: () => void) => {
+      if (type === 'ended') ended = listener;
+    }),
+    emitEnded() {
+      const listener = ended;
+      ended = null;
+      listener?.();
+    },
+  };
+}
+
 function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
   const engine = new AudioEngine();
   if (voices.lead) engine.setLeadVoice(voices.lead);
@@ -92,6 +123,7 @@ function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
   const filters: FakeFilterNode[] = [];
   const ctx = {
     currentTime: now,
+    sampleRate: 48000,
     state: 'running',
     createBiquadFilter: vi.fn(() => {
       const filter = connectable({ type: 'lowpass', frequency: param(), Q: { value: 0 } });
@@ -116,24 +148,26 @@ function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
   state.padDuck = connectable({ gain: param(1) });
   state.padGen = connectable({});
   state.lfoColour = connectable({});
-  return { engine, state, gains, filters };
+  return { engine, state, gains, filters, ctx };
 }
 
 function voice(note: number, startedAt = 0, releasing = false, stopAt: number | null = null): FakeVoice {
+  const sources = [source()];
   return {
     note,
     startedAt,
-    sources: [{ detune: param(), stop: vi.fn() }],
+    sources,
     filter: { frequency: param() },
     amp: { gain: param() },
     panner: {},
     freq: 440,
-    peak: 0.5,
     k: {},
     release: 0.3,
     taps: [],
     releasing,
     stopAt,
+    remainingSources: sources.length,
+    retired: false,
   };
 }
 
@@ -142,7 +176,7 @@ function connector() {
 }
 
 function harness(now = 1) {
-  const clock = { currentTime: now, state: 'running' };
+  const clock = { currentTime: now, sampleRate: 48000, state: 'running' };
   const engine = new AudioEngine();
   engine.ctx = clock as unknown as AudioContext;
   engine.ready = true;
@@ -181,6 +215,39 @@ describe('holding gain automation', () => {
   });
 });
 
+describe('short noise envelopes', () => {
+  it('stays muted while building and schedules an immediate burst in the future', () => {
+    let now = 1;
+    const source = connectable({ buffer: null as object | null, start: vi.fn() });
+    const filter = connectable({ type: 'lowpass', frequency: param(), Q: { value: 0 } });
+    const gain = connectable({ gain: param(1) });
+    const ctx = {
+      get currentTime() { return now; },
+      sampleRate: 48000,
+      createBufferSource: vi.fn(() => { now += 0.003; return source; }),
+      createBiquadFilter: vi.fn(() => { now += 0.003; return filter; }),
+      createGain: vi.fn(() => { now += 0.003; return gain; }),
+    };
+    const engine = new AudioEngine();
+    engine.ctx = ctx as unknown as AudioContext;
+    const state = engine as unknown as EngineInternals & { noise: object };
+    state.noise = {};
+
+    const startBurst = state.prepareNoise(
+      connectable({}), { freq: 2400, q: 2, decay: 0.006, gain: 0.05 },
+      440, 1, { noise: 1 }, 0.12,
+    );
+
+    const start = now + 256 / 48000;
+    expect(gain.gain.value).toBe(0.0001);
+    expect(source.start).not.toHaveBeenCalled();
+    startBurst(start);
+    expect(gain.gain.setValueAtTime).toHaveBeenCalledWith(0.0001, start);
+    expect(gain.gain.exponentialRampToValueAtTime).toHaveBeenNthCalledWith(1, 0.006, start + 0.002);
+    expect(source.start).toHaveBeenCalledWith(start, expect.any(Number), 0.028);
+  });
+});
+
 describe('voice attack envelopes', () => {
   it('starts a key chain silent before any voice layer can start', () => {
     const { engine, state, gains } = graphHarness(1, { lead: 'sub-bass' });
@@ -194,6 +261,38 @@ describe('voice attack envelopes', () => {
 
     expect(gainAtSourceStart.length).toBeGreaterThan(0);
     expect(gainAtSourceStart.every((value) => value === 0.0001)).toBe(true);
+  });
+
+  it('anchors the audible attack after a slow voice graph has been built', () => {
+    const { engine, state, gains, ctx } = graphHarness(1, { lead: 'sub-bass' });
+    state.addLayer = vi.fn(() => {
+      ctx.currentTime = 1.008;
+      return [];
+    });
+
+    engine.noteOn(60, 0.5);
+
+    const gain = gains[0]!.gain;
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 1.008);
+    expect(gain.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeGreaterThan(1.008);
+    expect(state.active[0]!.startedAt).toBe(1.008);
+  });
+
+  it('starts prepared key noise and its voice envelope at one guarded onset', () => {
+    const { engine, state, gains, ctx } = graphHarness(1, { lead: 'grand' });
+    const startBurst = vi.fn();
+    state.addLayer = vi.fn(() => []);
+    state.prepareNoise = vi.fn(() => {
+      ctx.currentTime = 1.008;
+      return startBurst;
+    });
+
+    engine.noteOn(60, 0.5);
+
+    const onset = 1.008 + 256 / 48000;
+    expect(gains[0]!.gain.setValueAtTime).toHaveBeenCalledWith(0.0001, onset);
+    expect(startBurst).toHaveBeenCalledWith(onset);
+    expect(state.active[0]!.startedAt).toBe(onset);
   });
 
   it('keeps a slow plucked pad on its finite pluck envelope', () => {
@@ -239,6 +338,7 @@ describe('key voice release tracking', () => {
     const held = voice(60);
     state.active.push(held);
     state.voices.set(60, held);
+    state.trackVoice(held);
 
     state.release(held, 0.3, false);
 
@@ -246,11 +346,168 @@ describe('key voice release tracking', () => {
     expect(held.stopAt).toBeCloseTo(1.32);
     expect(held.amp.gain.cancelAndHoldAtTime).toHaveBeenCalledWith(1);
     expect(held.sources[0].stop).toHaveBeenCalledWith(held.stopAt);
+    // Modulation remains part of the audible release instead of snapping back
+    // to neutral while the voice is still loud.
+    expect(state.bendSource.disconnect).not.toHaveBeenCalled();
+    expect(state.lfoVibrato.disconnect).not.toHaveBeenCalled();
+    expect(state.lfoColour.disconnect).not.toHaveBeenCalled();
 
     clock.currentTime = 1.321;
     state.pruneVoices(clock.currentTime);
     expect(state.active).toEqual([]);
     expect(state.voices.has(60)).toBe(false);
+    expect(state.bendSource.disconnect).toHaveBeenCalledWith(held.sources[0].detune);
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledWith(held.sources[0].detune);
+    expect(state.lfoColour.disconnect).toHaveBeenCalledWith(held.filter.frequency);
+
+    state.pruneVoices(clock.currentTime);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+
+    // A queued source event may arrive after clock pruning won the race.
+    held.sources[0].emitEnded();
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledOnce();
+    expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('retires an idle release only after every source has ended', () => {
+    const { state } = harness();
+    const held = voice(60);
+    held.sources = [source(), source()];
+    held.remainingSources = held.sources.length;
+    const lfo = connector();
+    const gain = connector();
+    held.taps = [{ lfo, gain }];
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.sustained.add(60);
+    state.fading.push({ voice: held, at: 1 });
+    state.trackVoice(held);
+
+    state.release(held, 0.08, false);
+    held.sources[0].emitEnded();
+
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(lfo.disconnect).not.toHaveBeenCalled();
+
+    held.sources[1].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.fading).toEqual([]);
+    expect(state.bendSource.disconnect).toHaveBeenCalledTimes(2);
+    expect(state.lfoVibrato.disconnect).toHaveBeenCalledTimes(2);
+    expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+    expect(lfo.disconnect).toHaveBeenCalledWith(gain);
+    expect(gain.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a naturally ended finite voice until its key is released', async () => {
+    const { state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+
+    held.sources[0].emitEnded();
+
+    expect(held.remainingSources).toBe(0);
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(state.bendSource.disconnect).not.toHaveBeenCalled();
+
+    state.release(held, 0.08, false);
+    // Mirrors the recatch bookkeeping performed by note-off/pedal-up in the
+    // same call stack. The queued cleanup must remove this stale entry too.
+    state.fading.push({ voice: held, at: 1 });
+    await Promise.resolve();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.fading).toEqual([]);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not retain a silent finite voice when its key lifts under sustain', async () => {
+    const { engine, state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+    held.sources[0].emitEnded();
+    state.pedal = 1;
+
+    engine.noteOff(60);
+    await Promise.resolve();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('retires a finite voice that ends after its key lifts under sustain', () => {
+    const { engine, state } = harness();
+    const held = voice(60);
+    state.active.push(held);
+    state.voices.set(60, held);
+    state.trackVoice(held);
+    state.pedal = 1;
+
+    engine.noteOff(60);
+    expect(state.active).toEqual([held]);
+    expect(state.voices.get(60)).toBe(held);
+    expect(state.sustained.has(60)).toBe(true);
+
+    held.sources[0].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
+    expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not let an ended tail retire a newer strike of the same pitch', () => {
+    const { state } = harness();
+    const oldTail = voice(60);
+    const newStrike = voice(60, 1.01);
+    state.active.push(oldTail, newStrike);
+    state.voices.set(60, newStrike);
+    state.sustained.add(60);
+    state.trackVoice(oldTail);
+
+    state.release(oldTail, 0.02, false);
+    oldTail.sources[0].emitEnded();
+
+    expect(state.active).toEqual([newStrike]);
+    expect(state.voices.get(60)).toBe(newStrike);
+    expect(state.sustained.has(60)).toBe(true);
+  });
+
+  it('disconnects voice-owned motion only after its release is silent', () => {
+    const { clock, state } = harness();
+    const held = voice(60);
+    const lfo = connector();
+    const gain = connector();
+    held.taps = [{ lfo, gain }];
+    state.active.push(held);
+    state.voices.set(60, held);
+
+    state.release(held, 0.08, false);
+
+    expect(lfo.disconnect).not.toHaveBeenCalled();
+    expect(gain.disconnect).not.toHaveBeenCalled();
+
+    clock.currentTime = held.stopAt! + 0.001;
+    state.pruneVoices(clock.currentTime);
+
+    expect(lfo.disconnect).toHaveBeenCalledOnce();
+    expect(lfo.disconnect).toHaveBeenCalledWith(gain);
+    expect(gain.disconnect).toHaveBeenCalledOnce();
   });
 
   it('crossfades every same-note tail while leaving other pitches ringing', () => {
@@ -274,6 +531,38 @@ describe('key voice release tracking', () => {
     expect(state.voices.has(60)).toBe(false);
     expect(state.sustained.has(60)).toBe(false);
     expect(state.fading).toEqual([]);
+  });
+
+  it('never redraws a repeated release beyond an earlier source stop', () => {
+    const { state } = harness();
+    const fading = voice(60, 0, true, 1.015);
+
+    state.release(fading, 0.05, false);
+
+    expect(fading.amp.gain.cancelAndHoldAtTime).not.toHaveBeenCalled();
+    expect(fading.amp.gain.exponentialRampToValueAtTime).not.toHaveBeenCalled();
+    expect(fading.sources[0].stop).not.toHaveBeenCalled();
+
+    const recaught = voice(62, 0, false, 1.03);
+    state.release(recaught, 0.3, false);
+    expect(recaught.amp.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 1.01);
+    expect(recaught.sources[0].stop).toHaveBeenCalledWith(1.03);
+  });
+
+  it('scales a key-off contact by the voice level still sounding', () => {
+    const { state } = harness();
+    const held = voice(60);
+    held.amp.gain.value = 0.12;
+    held.damper = { freq: 2400, q: 2, decay: 0.006, gain: 0.05 };
+    const start = vi.fn();
+    state.prepareNoise = vi.fn(() => start);
+
+    state.release(held, 0.08, true);
+
+    expect(state.prepareNoise).toHaveBeenCalledWith(
+      held.panner, held.damper, held.freq, 1, held.k, 0.12,
+    );
+    expect(start).toHaveBeenCalledWith(1 + 256 / 48000);
   });
 
   it('keeps rapid repeated note-on/off sequences bounded by the crossfade', () => {
@@ -319,9 +608,30 @@ describe('key voice release tracking', () => {
     expect(state.active).toEqual([]);
   });
 
+  it('automatically retires every all-notes-off tail while the engine is idle', () => {
+    const { engine, state } = harness();
+    const first = voice(60);
+    const second = voice(64);
+    state.active.push(first, second);
+    state.voices.set(60, first);
+    state.voices.set(64, second);
+    state.trackVoice(first);
+    state.trackVoice(second);
+
+    engine.allNotesOff();
+    first.sources[0].emitEnded();
+    expect(state.active).toEqual([second]);
+
+    second.sources[0].emitEnded();
+    expect(state.active).toEqual([]);
+    expect(state.voices.size).toBe(0);
+  });
+
   it('recatches without duplicating a voice and never revives a superseded tail', () => {
     const { state } = harness();
     const caught = voice(60, 0, true, 3);
+    const motion = { lfo: connector(), gain: connector() };
+    caught.taps = [motion];
     state.active.push(caught);
     state.fading.push({ voice: caught, at: 0.9 });
 
@@ -331,6 +641,12 @@ describe('key voice release tracking', () => {
     expect(state.voices.get(60)).toBe(caught);
     expect(state.sustained.has(60)).toBe(true);
     expect(caught.releasing).toBe(false);
+    expect(state.bendSource.connect).not.toHaveBeenCalled();
+    expect(state.lfoVibrato.connect).not.toHaveBeenCalled();
+    expect(state.lfoColour.connect).not.toHaveBeenCalled();
+    expect(caught.taps).toEqual([motion]);
+    expect(caught.amp.gain.setValueAtTime).toHaveBeenCalledWith(0.25, 2.96);
+    expect(caught.amp.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 2.98);
 
     state.fading.push({ voice: caught, at: 1 });
     state.retrigger(60, 1);
@@ -340,5 +656,24 @@ describe('key voice release tracking', () => {
     expect(state.voices.has(60)).toBe(false);
     expect(state.sustained.has(60)).toBe(false);
     expect(state.fading).toEqual([]);
+  });
+
+  it('retires a recaught voice when its already-scheduled sources end', () => {
+    const { state } = harness();
+    const caught = voice(60, 0, true, 3);
+    state.active.push(caught);
+    state.fading.push({ voice: caught, at: 0.9 });
+    state.trackVoice(caught);
+
+    state.recatch(1);
+    expect(caught.releasing).toBe(false);
+    expect(state.voices.get(60)).toBe(caught);
+    expect(state.sustained.has(60)).toBe(true);
+
+    caught.sources[0].emitEnded();
+
+    expect(state.active).toEqual([]);
+    expect(state.voices.has(60)).toBe(false);
+    expect(state.sustained.has(60)).toBe(false);
   });
 });
