@@ -63,6 +63,18 @@ export interface RunOutcome {
   unlocked: string | null;
   /** True when this run beat the player's previous best accuracy. */
   improved: boolean;
+  /**
+   * The record this run was actually judged against, or null for a first play.
+   *
+   * Returned rather than left to the caller to read beforehand, because the
+   * merge below happens inside this function: a mode holds its `Progress` for
+   * the whole session, so anything read from it before the call is a snapshot
+   * from before whatever another window has done since. A caller pairing its
+   * own stale reading with the `improved` computed here gets two answers from
+   * two different chains — and after a reset in another tab, a run below the
+   * stale best would still be called an improvement.
+   */
+  previous: TuneRecord | null;
   best: TuneRecord;
 }
 
@@ -267,7 +279,7 @@ export function recordRun(
   const unlocked = progress.unlocked.find((tune) => !before.has(tune)) ?? null;
 
   saveProgress(key, progress);
-  return { unlocked, improved, best };
+  return { unlocked, improved, previous: prev ?? null, best };
 }
 
 /**

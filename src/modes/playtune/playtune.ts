@@ -426,23 +426,24 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const letter = grade(accuracy);
     const card = this.role.card(tune);
     const passed = accuracy >= card.pass;
-    // Read before the write, and this is the whole reason it is a separate
-    // line: `recordRun` folds this run into the record it hands back, so
-    // `outcome.best` is the best *including* what just happened. Taken from
-    // there, the mark on the dial would sit exactly under the needle on every
-    // improved run and could never be seen to be crossed — and after the write
-    // there is nowhere left that says where the player was.
-    const wasBest = this.progress.best[tune.id]?.accuracy ?? null;
     const outcome = recordRun(this.role.storageKey, this.progress, tune.id, this.role.order, {
       accuracy, score: this.scoring.score, grade: letter, passed,
     });
+    // `outcome.best` is the best *including* this run, so the notch taken from
+    // there would sit exactly under the needle on every improvement and could
+    // never be seen to be crossed. `previous` is where the player stood — and
+    // it comes back from `recordRun` rather than being read here beforehand,
+    // because the merge with what another window has stored happens inside it.
+    // A reading taken out here would belong to a different chain from the
+    // `improved` beside it.
+    const wasBest = outcome.previous?.accuracy ?? null;
 
     const next = outcome.unlocked ? findTune(outcome.unlocked) : null;
     // `recordRun` calls a first play an improvement, because there was nothing
     // to be worse than. True of the record and useless to say out loud: a run
     // that missed every note was being congratulated on a new best. Beating
     // something requires there to have been something.
-    const beaten = wasBest !== null && outcome.improved;
+    const beaten = outcome.previous !== null && outcome.improved;
     const stats: Stat[] = [
       { kind: 'count', label: 'Score', value: this.scoring.score },
       { kind: 'count', label: 'Longest run', value: judge.bestCombo },

@@ -806,6 +806,37 @@ describe('progression', () => {
     expect(p.unlocked).toEqual(['a']);
   });
 
+  it('hands back the record it actually judged the run against', () => {
+    // The results screen marks the dial with where the player stood, and reads
+    // it from here rather than from its own copy of `Progress`. Its own copy is
+    // a session-old snapshot, and the merge with what is stored happens inside
+    // `recordRun` — so a caller pairing its own reading with `improved` would
+    // be quoting two different chains.
+    const p = resetProgress(KEY, order);
+    expect(recordRun(KEY, p, 'a', order, { accuracy: 0.4, score: 10, grade: null, passed: false }).previous)
+      .toBeNull();
+    const second = recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 99, grade: 'A', passed: true });
+    expect(second.previous?.accuracy).toBe(0.4);
+    expect(second.improved).toBe(true);
+    // And it is the mark that was beaten, not the one that now stands.
+    expect(second.best.accuracy).toBe(0.9);
+  });
+
+  it('takes the previous best from the merged chain, not the stale one', () => {
+    const p = resetProgress(KEY, order);
+    recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 500, grade: 'A', passed: true });
+    // Another window resets the chain. This one still holds the old snapshot,
+    // and `recordRun` adopts the fresh side on the way in.
+    resetProgress(KEY, order);
+    const after = recordRun(KEY, p, 'a', order, { accuracy: 0.5, score: 20, grade: null, passed: false });
+    // Nothing left to have been beaten, so nothing may claim to have beaten it:
+    // reading 90% from the stale snapshot beside this `improved` was how a 50%
+    // run got called a new best.
+    expect(after.previous).toBeNull();
+    expect(after.improved).toBe(true);
+    expect(after.best.accuracy).toBe(0.5);
+  });
+
   it('only ever improves a best', () => {
     const p = resetProgress(KEY, order);
     recordRun(KEY, p, 'a', order, { accuracy: 0.9, score: 500, grade: 'A', passed: true });
