@@ -373,7 +373,7 @@ export class PinballRenderer {
     const beat = hints?.beat ?? null;
     const env = beat ? Math.pow(1 - beat.phase, 4) * (beat.beat === 0 ? 1 : 0.55) : 0;
 
-    this.drawFloorLights(ctx, game, env);
+    this.drawFloorLights(ctx, game, env, alpha);
     for (const el of this.depthSorted(game)) this.drawElement(ctx, em, game, el, env);
     this.drawPulse(em, game, env);
 
@@ -403,7 +403,7 @@ export class PinballRenderer {
    * Under reduced motion the light still varies — a brightness that changes is
    * not motion — but the throbbing term is halved, the way `drawPulse` does it.
    */
-  private drawFloorLights(ctx: CanvasRenderingContext2D, game: Game, env: number): void {
+  private drawFloorLights(ctx: CanvasRenderingContext2D, game: Game, env: number, alpha: number): void {
     if (!this.stage.theme.pool || !this.quality.pools) return;
     const still = this.quality.reducedMotion;
 
@@ -428,11 +428,22 @@ export class PinballRenderer {
 
     // A ball carries the note of the key that threw it, so the light it drags
     // across the table is the colour it is going to sound as.
+    //
+    // Interpolated with the same `alpha` the body is drawn at, and for the same
+    // reason: the simulation runs at 240Hz and the frame lands somewhere
+    // between two steps. Lighting the ball at `p` while drawing it between
+    // `prev` and `p` puts its own light ahead of it by up to a full step, which
+    // at full speed is most of the ball's width.
     for (const ball of game.balls) {
       if (ball.note === null) continue;
       const speed = Math.hypot(ball.v.x, ball.v.y);
-      this.stage.floorPool(ctx, ball.p.x, ball.p.y, ball.r, this.hue(ball.note),
-        0.3 + Math.min(0.3, speed / 3200));
+      this.stage.floorPool(
+        ctx,
+        ball.prev.x + (ball.p.x - ball.prev.x) * alpha,
+        ball.prev.y + (ball.p.y - ball.prev.y) * alpha,
+        ball.r, this.hue(ball.note),
+        0.3 + Math.min(0.3, speed / 3200),
+      );
     }
   }
 
