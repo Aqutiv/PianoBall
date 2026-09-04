@@ -225,11 +225,15 @@ export class VoicePicker {
   }
 
   private onListKey(e: KeyboardEvent): void {
-    // The list only has focus while it is open, and while it is open it owns
-    // the keyboard. Without this the window listener in `Shell.wireKeys` still
-    // sees every key: Escape would close the picker *and* pause the mode, and
-    // the letters typed at the type-ahead would play notes underneath it.
-    e.stopPropagation();
+    // While the list is open it owns the keyboard. Without this the window
+    // listener in `Shell.wireKeys` still sees every key: Escape would close the
+    // picker *and* pause the mode, and the letters typed at the type-ahead
+    // would play notes underneath it.
+    //
+    // Guarded on `open` rather than done unconditionally: a closed list cannot
+    // hold focus, so this only ever fires for a key the picker is really
+    // using, and the game keeps every key the picker is not.
+    if (this.open) e.stopPropagation();
     const last = this.rows.length - 1;
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); this.setActive(Math.min(this.activeIndex + 1, last), true); return;
