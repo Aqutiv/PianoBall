@@ -2134,9 +2134,12 @@ export class AudioEngine {
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     src.connect(bp).connect(ng).connect(out);
     src.start(t, Math.random() * 0.8, 0.06);
-    // Everything above reaches the buses through the panner, so cutting it
-    // loose silences the strike whether it has started yet or not.
-    return { cancel: () => pannerNode.disconnect() };
+    // Taken back with a ramp rather than by pulling the node out of the graph.
+    // `disconnect` on a sounding voice is full scale to zero in one sample, and
+    // this is reached from `pause` and from leaving the mode -- so pausing
+    // mid-flourish used to truncate whatever was ringing. `cutShort` is the
+    // same few milliseconds the shot budget already uses to take a slot back.
+    return { cancel: () => cutShort(out, ctx.currentTime) };
   }
 
   // ------------------------------------------------------------ the table ---
@@ -2229,7 +2232,7 @@ export class AudioEngine {
     if (m.sweep) this.sweep(out, m.sweep, level, t);
     this.place(out, pan, MECH_HALL, MECH_CAB);
     if (m.surface) this.hit(m.surface.tag, m.surface.energy * IMPACT_FULL * level, { pan, at: t });
-    return { cancel: () => out.disconnect() };
+    return { cancel: () => cutShort(out, ctx.currentTime) };
   }
 
   /**
@@ -2405,16 +2408,23 @@ export class AudioEngine {
     const shorten = 1 - (spec.velDecay ?? 0) * (1 - v);
     const brighten = Math.pow(2, (spec.velBright ?? 0) * (v - 0.5));
 
-    const out = ctx.createStereoPanner();
-    out.pan.value = clamp(spec.pan, -1, 1);
-    out.connect(this.musicBus);
+    // A gain in front of the panner, purely so there is something to ramp: a
+    // drum placed ahead on the clock can be taken back, and taking it back by
+    // disconnecting the panner is full scale to zero in one sample. Every
+    // source below still connects to `out`, which is now this rather than the
+    // panner.
+    const out = ctx.createGain();
+    const pannerNode = ctx.createStereoPanner();
+    pannerNode.pan.value = clamp(spec.pan, -1, 1);
+    out.connect(pannerNode);
+    pannerNode.connect(this.musicBus);
     const rev = ctx.createGain();
     rev.gain.value = spec.reverb;
-    out.connect(rev).connect(this.hallSend);
+    pannerNode.connect(rev).connect(this.hallSend);
     const box = ctx.createGain();
     box.gain.value = 0.18;
-    out.connect(box).connect(this.cabSend);
-    const handle: Scheduled = { cancel: () => out.disconnect() };
+    pannerNode.connect(box).connect(this.cabSend);
+    const handle: Scheduled = { cancel: () => cutShort(out, ctx.currentTime) };
 
     if (spec.noiseFreq > 0) {
       // A handclap is several bursts a few milliseconds apart; every other
