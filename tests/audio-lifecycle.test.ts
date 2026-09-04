@@ -188,14 +188,17 @@ function harness(now = 1) {
 }
 
 describe('holding gain automation', () => {
-  it('uses the native hold operation without cancelling separately', () => {
+  it('cancels natively but still pins the value itself', () => {
     const gain = param(0.23);
 
     holdAtTime(gain as unknown as AudioParam, 4);
 
     expect(gain.cancelAndHoldAtTime).toHaveBeenCalledWith(4);
     expect(gain.cancelScheduledValues).not.toHaveBeenCalled();
-    expect(gain.setValueAtTime).not.toHaveBeenCalled();
+    // The native hold writes a value back only where it truncates an event that
+    // is still running. On a note whose attack and decay are over it holds
+    // nothing, and the release ramp then anchors on the end of the decay.
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.23, 4);
   });
 
   it('captures the current value before the compatibility cancellation', () => {
@@ -370,6 +373,25 @@ describe('key voice release tracking', () => {
     expect(state.bendSource.disconnect).toHaveBeenCalledOnce();
     expect(state.lfoVibrato.disconnect).toHaveBeenCalledOnce();
     expect(state.lfoColour.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('anchors the release on the level the note is at, not on the last envelope event', () => {
+    const { state } = harness();
+    const held = voice(60);
+    held.amp.gain.value = 0.42;
+    state.active.push(held);
+    state.voices.set(60, held);
+
+    state.release(held, 0.3, false);
+
+    // A held note has no automation left: its attack and decay are long over.
+    // Unpinned, the release ramp anchors on the end of the decay instead, so it
+    // starts already spent and cuts the note off inside a sample rather than
+    // letting it go — and the longer the key was held the worse it gets.
+    const gain = held.amp.gain;
+    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.42, 1);
+    expect(gain.setValueAtTime.mock.invocationCallOrder[0])
+      .toBeLessThan(gain.exponentialRampToValueAtTime.mock.invocationCallOrder[0]);
   });
 
   it('retires an idle release only after every source has ended', () => {
