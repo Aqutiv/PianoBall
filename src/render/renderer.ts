@@ -407,6 +407,18 @@ export class PinballRenderer {
     if (!this.stage.theme.pool || !this.quality.pools) return;
     const still = this.quality.reducedMotion;
 
+    // Clipped to the playfield, the way everything else painted onto the
+    // surface is. These pools are wide — three and a half times the radius of
+    // the thing throwing them, so the left-orbit spinner's reaches ten units
+    // past the outline — and unclipped they laid light across the rails and up
+    // onto the cabinet, which are not the floor and are not lit by something
+    // standing on it. Measured on Aurora under Neon Rush by counting lit pixels
+    // falling outside the outline polygon: 1,921 of them before, 89 after, and
+    // those 89 are the antialiased fringe of the clip edge itself.
+    ctx.save();
+    tracePath(ctx, this.cam, game.def.outline, 0, true);
+    ctx.clip();
+
     for (const el of game.table.elements) {
       const energised = el.energisedUntil > game.time;
       let lit = el.flash;
@@ -452,6 +464,7 @@ export class PinballRenderer {
         0.3 + Math.min(0.3, speed / 3200),
       );
     }
+    ctx.restore();
   }
 
   private sorted: Game['table']['elements'] = [];
