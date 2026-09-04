@@ -845,17 +845,23 @@ describe('changing rooms', () => {
  * sounds like.
  */
 describe('polyphony on the lead bus', () => {
-  const busLevel = (h: ReturnType<typeof graphHarness>) => {
-    const calls = h.state.leadOut.dry.gain.setTargetAtTime.mock.calls;
-    return calls.at(-1)?.[0] as number;
-  };
-
-  /** A harness whose layers are stubbed out, as the attack tests do. */
+  /**
+   * The bus is written two ways -- ramped to a note's onset, smoothed when a
+   * note leaves or a fader moves -- so the last value scheduled has to be read
+   * across both rather than out of one mock.
+   */
   const rig = () => {
     const h = graphHarness(1, { lead: 'sub-bass' });
     h.state.addLayer = vi.fn(() => []);
-    return h;
+    // The pedal touches the soundboard send on its way through.
+    (h.state as unknown as { bodyWet: unknown }).bodyWet = connectable({ gain: param(0.35) });
+    const log: number[] = [];
+    const gain = h.state.leadOut.dry.gain;
+    gain.linearRampToValueAtTime = vi.fn((v: number) => { log.push(v); });
+    gain.setTargetAtTime = vi.fn((v: number) => { log.push(v); });
+    return { ...h, log };
   };
+  const busLevel = (h: { log: number[] }) => h.log.at(-1) as number;
 
   it('pulls the bus down as more notes are held', () => {
     const h = rig();
@@ -877,6 +883,45 @@ describe('polyphony on the lead bus', () => {
     h.engine.noteOff(64);
     const two = busLevel(h);
     expect(two).toBeGreaterThan(four);
+  });
+
+  it('has the new level in place by the time the note is audible', () => {
+    // A time constant cannot do this: the margin an onset waits out is capped
+    // at twelve milliseconds, so a 25ms constant leaves a chord's attacks
+    // beginning with the bus only a third of the way down -- and the transient,
+    // which is the thing the compressor reacts to, still arrives at nearly the
+    // old level.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const ramps = h.state.leadOut.dry.gain.linearRampToValueAtTime.mock.calls;
+    expect(ramps.length).toBeGreaterThan(0);
+    const [, arrivesAt] = ramps.at(-1)!;
+    const onset = h.state.active[0]!.startedAt;
+    // Arrives by the onset, not after it.
+    expect(arrivesAt).toBeLessThanOrEqual(onset + 1e-9);
+  });
+
+  it('puts the bus back when the pedal recatches a chord', () => {
+    // Releasing the notes raised the bus as the held count fell. Recatching
+    // them makes them count again, and without telling the bus the recaught
+    // chord sits at the one-note level until something unrelated corrects it.
+    const h = rig();
+    const notes = [60, 64, 67, 72];
+    for (const n of notes) h.engine.noteOn(n, 0.5);
+    const four = busLevel(h);
+
+    // Pedal down, keys let go: still four notes held, so nothing moves.
+    h.engine.setSustain(1);
+    for (const n of notes) h.engine.noteOff(n);
+    expect(busLevel(h)).toBeCloseTo(four, 6);
+
+    // Pedal up: they start releasing, stop counting, and the bus comes back up.
+    h.engine.setSustain(0);
+    expect(busLevel(h)).toBeGreaterThan(four);
+
+    // Pedal straight back down catches them, so they count again.
+    h.engine.setSustain(1);
+    expect(busLevel(h)).toBeCloseTo(four, 6);
   });
 
   it('does not count a note that is already on its way out', () => {

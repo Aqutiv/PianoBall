@@ -1113,17 +1113,32 @@ export class AudioEngine {
    * Move the instrument's fader. Every way out carries the same value, and a
    * ramp rather than a set, so a drag reaches a held chord without zippering.
    */
-  private applyLeadGain(): void {
+  private applyLeadGain(at = 0): void {
     // `leadOut` as well as `ready`: this is now reached from the note path, and
     // a note can arrive against an engine whose context has been handed to it
     // without the graph having been built -- which is exactly what the tests do.
     if (!this.ready || !this.ctx || !this.leadOut) return;
     const t = this.ctx.currentTime;
     const level = this.leadGain * this.polyScale;
-    // Faster than the fader's own ramp: this one has to be in place before the
-    // note that caused it is audible, and 25 ms is under the margin every
-    // onset already waits out. Slow enough not to be a step.
-    for (const g of Object.values(this.leadOut)) g.gain.setTargetAtTime(level, t, 0.025);
+    for (const g of Object.values(this.leadOut)) {
+      if (at > t) {
+        // Arriving *by* the onset, not heading towards it.
+        //
+        // A time constant cannot do this. `setTargetAtTime` is asymptotic, and
+        // the margin an onset waits out is capped at twelve milliseconds -- so
+        // with the 25ms constant this used, a chord's attacks began with the
+        // bus only about a third of the way down, and the transient still met
+        // the compressor at very nearly the old level. The transient is the
+        // whole point: it is what the compressor reacts to, and reacting to it
+        // is what the pumping was.
+        holdAtTime(g.gain, t);
+        g.gain.linearRampToValueAtTime(level, at);
+      } else {
+        // No onset to meet -- a fader drag, or a note leaving. Smoothed, or a
+        // slider becomes a staircase in the waveform.
+        g.gain.setTargetAtTime(level, t, 0.025);
+      }
+    }
   }
 
   /**
@@ -1355,6 +1370,14 @@ export class AudioEngine {
     let redMin = 0, redMax = -Infinity, redSum = 0, redN = 0;
     try {
       while (ctx.currentTime < until && Date.now() < giveUp) {
+        // Re-asserted every poll, not just at the start. The window losing
+        // focus mutes the master, and a measurement that began before that
+        // happened would otherwise quietly return silence -- which is a worse
+        // answer than no answer, because it looks like one.
+        if (silent) {
+          this.master.gain.cancelScheduledValues(ctx.currentTime);
+          this.master.gain.setValueAtTime(this.settings.master, ctx.currentTime);
+        }
         meter.getFloatTimeDomainData(window);
         for (const s of window) {
           const a = Math.abs(s);
@@ -1488,8 +1511,10 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
-    // After `cull`, so the count the bus is set from is the one that survived.
-    this.applyLeadGain();
+    // After `cull`, so the count the bus is set from is the one that survived,
+    // and aimed at this note's own onset so the new level is in place before
+    // its attack rather than on its way there.
+    this.applyLeadGain(onset);
   }
 
   /**
@@ -1561,8 +1586,10 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
-    // After `cull`, so the count the bus is set from is the one that survived.
-    this.applyLeadGain();
+    // After `cull`, so the count the bus is set from is the one that survived,
+    // and aimed at this note's own onset so the new level is in place before
+    // its attack rather than on its way there.
+    this.applyLeadGain(onset);
   }
 
   // ------------------------------------------------------- voice builders ---
@@ -2111,6 +2138,11 @@ export class AudioEngine {
       this.sustained.add(voice.note);
     }
     this.fading = [];
+    // Those voices are held again, so they count towards the share again. The
+    // releases that let them go had already raised the bus on the way down;
+    // without this the recaught chord sits at the one-note level until some
+    // unrelated note or release happens to correct it, and then jumps.
+    this.applyLeadGain();
   }
 
   /** Oldest-first voice stealing, so a two-handed run never runs out. */
