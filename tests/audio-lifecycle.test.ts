@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { holdAtTime } from '../src/audio/automation';
+import { cancelFrom, holdAtTime } from '../src/audio/automation';
 import { AudioEngine } from '../src/audio/engine';
 import { findBedVoice } from '../src/audio/voices';
 
@@ -199,6 +199,19 @@ describe('holding gain automation', () => {
     // is still running. On a note whose attack and decay are over it holds
     // nothing, and the release ramp then anchors on the end of the decay.
     expect(gain.setValueAtTime).toHaveBeenCalledWith(0.23, 4);
+  });
+
+  it('leaves a future hold to the native operation, which knows the value there', () => {
+    const gain = param(0.23);
+
+    cancelFrom(gain as unknown as AudioParam, 4);
+
+    expect(gain.cancelAndHoldAtTime).toHaveBeenCalledWith(4);
+    // A `setTargetAtTime` anchors itself wherever it starts, so it needs no pin
+    // — and pinning would write the level as it stands now at a time still to
+    // come, which is not the same number.
+    expect(gain.setValueAtTime).not.toHaveBeenCalled();
+    expect(gain.cancelScheduledValues).not.toHaveBeenCalled();
   });
 
   it('captures the current value before the compatibility cancellation', () => {
