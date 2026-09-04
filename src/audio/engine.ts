@@ -124,6 +124,8 @@ const BED_KEY_REVERB = 0.42;
 
 /** Hall wet gain at a full reverb setting. Half of it is the original fixed value. */
 const REVERB_MAX = 1.7;
+/** Seconds to take the hall send down and back around a room change. */
+const HALL_SWAP = 0.03;
 /** Cabinet wet gain at a full reverb setting: the table's box, under the same knob. */
 const CAB_MAX = 0.9;
 
@@ -513,6 +515,8 @@ export class AudioEngine {
   private lite = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4;
   /** Rendered impulse responses, by spec. See `room`. */
   private readonly rooms = new Map<RoomSpec, AudioBuffer>();
+  /** Ticket for the in-flight hall swap, so a second one cannot strand the send. */
+  private swapping = 0;
   /** Held so the repeats can be retuned when the tempo changes. */
   private delayNode!: DelayNode;
   private noise!: AudioBuffer;
@@ -662,7 +666,16 @@ export class AudioEngine {
     preClip.gain.value = 1 / CLIP_RANGE;
     this.clip = ctx.createWaveShaper();
     this.clip.curve = softClip(CLIP_POINTS);
-    this.clip.oversample = this.lite ? 'none' : '2x';
+    // Always oversampled, and never changed after this.
+    //
+    // Assigning `oversample` on a live node rebuilds its resampling filters
+    // with zeroed history and changes the node's latency -- a second pop on the
+    // master path, next to the hall's. And it was a false economy in the first
+    // place: this is one WaveShaper on the master bus against forty-eight
+    // voices, while the machines that get lite mode are precisely the ones
+    // whose mix is most likely to reach the flat top of the curve, where
+    // clipping without oversampling aliases and folds back inharmonically.
+    this.clip.oversample = '2x';
     this.toClip = air;
     rumble.connect(this.glue).connect(air).connect(preClip).connect(this.clip).connect(ctx.destination);
 
@@ -1094,8 +1107,40 @@ export class AudioEngine {
     this.lite = on;
     this.shots.max = on ? MAX_SHOTS_LITE : MAX_SHOTS;
     if (!this.ready || !this.ctx) return;
-    this.hallConv.buffer = this.room(on ? HALL_LITE : HALL);
-    this.clip.oversample = on ? 'none' : '2x';
+    this.swapHall(on ? HALL_LITE : HALL);
+  }
+
+  /**
+   * Change the hall without a bang.
+   *
+   * Assigning a `ConvolverNode`'s buffer throws away its internal state, so a
+   * 2.4 second tail carrying the whole music bus stopped in one sample -- not a
+   * fade, the tail simply ceasing to exist. On the master path, that is a pop.
+   * It was audible every time the adaptive pass crossed the rung that turns
+   * lite mode on, in either direction, which on a marginal machine is often.
+   *
+   * So the send is taken down first, the buffer swapped while nothing is going
+   * through it, and the send brought back. What is lost is the tail that was in
+   * the air, which is what a room change costs anyway; what is gained is that
+   * it sounds like a room change rather than like a fault.
+   *
+   * `swapping` guards the pair, so a second flip arriving mid-swap does not
+   * leave the send parked at zero.
+   */
+  private swapHall(spec: RoomSpec): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const g = this.hallWet.gain;
+    const token = ++this.swapping;
+    holdAtTime(g, ctx.currentTime);
+    g.linearRampToValueAtTime(0, ctx.currentTime + HALL_SWAP);
+    setTimeout(() => {
+      if (!this.ctx || !this.ready || token !== this.swapping) return;
+      this.hallConv.buffer = this.room(spec);
+      const t = this.ctx.currentTime;
+      holdAtTime(g, t);
+      g.linearRampToValueAtTime(REVERB_MAX * this.settings.reverb, t + HALL_SWAP);
+    }, HALL_SWAP * 1000 + 30);
   }
 
   get isLite(): boolean { return this.lite; }

@@ -756,3 +756,56 @@ describe('room caching', () => {
     expect(made()).toBe(2);
   });
 });
+
+/**
+ * Lite mode used to change two live nodes on the master path: the convolver's
+ * buffer, which throws away a 2.4 second tail in one sample, and the
+ * WaveShaper's oversampling, which rebuilds its filters with zeroed history and
+ * moves its latency. Both are pops, and the adaptive quality ladder crosses the
+ * rung that triggers them in both directions.
+ */
+describe('changing rooms', () => {
+  function liteHarness() {
+    vi.useFakeTimers();
+    const engine = new AudioEngine();
+    const wetGain = param(1.7);
+    const conv: { buffer: unknown } = { buffer: 'the full hall' };
+    const clip = { oversample: '2x' };
+    const state = engine as unknown as {
+      ctx: unknown; ready: boolean; hallWet: unknown; hallConv: unknown;
+      clip: unknown; rooms: Map<unknown, unknown>; shots: { max: number };
+    };
+    state.ctx = { currentTime: 5, sampleRate: 48000 };
+    state.ready = true;
+    state.hallWet = { gain: wetGain };
+    state.hallConv = conv;
+    state.clip = clip;
+    // Pre-seed the cache so the swap does not try to render a real room.
+    state.rooms.set(HALL_LITE, 'the short hall');
+    return { engine, wetGain, conv, clip };
+  }
+
+  it('takes the hall send down before the buffer changes, and brings it back', () => {
+    const { engine, wetGain, conv } = liteHarness();
+    engine.setLite(true);
+
+    // Down first, and the tail still the old one.
+    expect(wetGain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+    expect(conv.buffer).toBe('the full hall');
+
+    vi.runAllTimers();
+    expect(conv.buffer).toBe('the short hall');
+    // And back up to where the reverb setting says it belongs.
+    const last = wetGain.linearRampToValueAtTime.mock.calls.at(-1);
+    expect(last?.[0]).toBeGreaterThan(0);
+    vi.useRealTimers();
+  });
+
+  it('leaves the oversampling on the clipper alone', () => {
+    const { engine, clip } = liteHarness();
+    engine.setLite(true);
+    vi.runAllTimers();
+    expect(clip.oversample).toBe('2x');
+    vi.useRealTimers();
+  });
+});
