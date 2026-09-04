@@ -1,6 +1,6 @@
 import { chordNotes, degreeToNote } from '../src/audio/music';
 import { describe, expect, it } from 'vitest';
-import { AudioEngine, DEFAULT_AUDIO } from '../src/audio/engine';
+import { AudioEngine, DEFAULT_AUDIO, softClip, unisonPhases } from '../src/audio/engine';
 import { wireGlobalControls } from '../src/audio/controls';
 import { InputHub } from '../src/midi/inputHub';
 import { ChordBed } from '../src/audio/bed';
@@ -416,5 +416,124 @@ describe("the loop's pattern", () => {
     tick();
     expect(pads.length).toBeGreaterThan(written);
     for (const p of pads.slice(written)) expect(p.at).toBeCloseTo(0.5, 6);
+  });
+});
+
+/**
+ * The master ceiling.
+ *
+ * A `WaveShaper` clamps its input to ±1 and reads the curve across exactly
+ * that range, so a curve that is still climbing when the table runs out is a
+ * hard clipper wearing a soft clipper's name: the waveform gets a corner in it
+ * at full scale, which is the crunch. These are the properties that make it a
+ * ceiling instead, and the slope-at-the-edges one is what the original curve
+ * failed.
+ */
+describe('the soft clipper', () => {
+  const POINTS = 4096;
+  const curve = softClip(POINTS);
+  const slopes = Array.from({ length: POINTS - 1 }, (_, i) => curve[i + 1] - curve[i]);
+  const steepest = Math.max(...slopes);
+
+  it('reaches full scale rather than stopping short of it', () => {
+    // The old curve was `tanh` across the table's own range, so it topped out
+    // at tanh(1) = 0.762 and gave away two and a half decibels for nothing.
+    expect(curve[POINTS - 1]).toBeGreaterThan(0.99);
+    expect(curve[POINTS - 1]).toBeLessThanOrEqual(1);
+    expect(curve[0]).toBeCloseTo(-curve[POINTS - 1], 12);
+  });
+
+  it('has flattened out before the table runs out', () => {
+    // The one that matters. Beyond the table the shaper repeats the end point,
+    // so the curve has to arrive there with no slope left; anything else is a
+    // corner in the waveform at exactly the level everything is loudest.
+    expect(slopes[0]).toBeLessThan(steepest * 0.01);
+    expect(slopes[slopes.length - 1]).toBeLessThan(steepest * 0.01);
+  });
+
+  it('is unity through the middle, so a mix that fits is untouched', () => {
+    // A straight line, within what a `Float32Array` can hold it to.
+    const mid = POINTS >> 1;
+    for (let i = mid - 100; i < mid + 100; i++) {
+      expect(Math.abs(slopes[i] / steepest - 1)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('never turns back on itself, and never bends sharply', () => {
+    for (let i = 0; i < slopes.length; i++) {
+      // Level, not falling. Out at the ends the curve has saturated so
+      // completely that two neighbours land on the same float, which is the
+      // point of it.
+      expect(slopes[i]).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(curve[i])).toBeLessThanOrEqual(1);
+      if (i > 0) expect(Math.abs(slopes[i] - slopes[i - 1])).toBeLessThan(steepest * 0.02);
+    }
+  });
+});
+
+/**
+ * Unison phases.
+ *
+ * Three strings under one hammer are three strings. The engine scales each
+ * copy by the number of copies to a power near a half, which is what sources
+ * at independent phases sum to — so the phases have to actually be
+ * independent, partial by partial. They were not once: a single shift in time
+ * per copy moves partial *k* by *k* times one angle, which is a comb, and a
+ * comb has notches. That is what these guard.
+ */
+describe('unison phases', () => {
+  /** How much of one oscillator's partial `k` survives when `copies` are summed. */
+  const sum = (copies: number, k: number): number => {
+    const table = unisonPhases(copies);
+    let re = 0;
+    let im = 0;
+    for (let j = 0; j < copies; j++) {
+      re += Math.cos(table[j][k]);
+      im += Math.sin(table[j][k]);
+    }
+    return Math.hypot(re, im);
+  };
+
+  it('leaves the spectrum exactly as written for the first copy', () => {
+    // A voice with no unison at all must be untouched by any of this.
+    for (const copies of [1, 2, 3]) {
+      for (const a of unisonPhases(copies)[0]) expect(a).toBe(0);
+    }
+  });
+
+  it('gives one copy the same phases every time it is asked', () => {
+    expect(unisonPhases(3)[1]).toEqual(unisonPhases(3)[1]);
+    expect(unisonPhases(3)[2][7]).toBe(unisonPhases(3)[2][7]);
+  });
+
+  it('never lets a partial cancel', () => {
+    // The failure this replaced: three copies a golden ratio apart summed
+    // their fundamentals to 0.47 where independent sources give about 1.73 —
+    // eleven decibels of hollow on the attack. And drawing at random alone is
+    // not enough either; it buries whichever partial lands in a null.
+    for (const copies of [2, 3]) {
+      for (let k = 1; k < 64; k++) {
+        expect(sum(copies, k), `${copies} copies, partial ${k}`)
+          .toBeGreaterThan(Math.sqrt(copies) * 0.7);
+      }
+    }
+  });
+
+  it('sums to what the level scaling assumes, partial by partial', () => {
+    for (const copies of [2, 3]) {
+      for (let k = 1; k < 64; k++) {
+        expect(sum(copies, k), `${copies} copies, partial ${k}`)
+          .toBeLessThan(Math.sqrt(copies) * 1.3);
+      }
+    }
+  });
+
+  it('scatters differently for each partial, or the sum would be peaky again', () => {
+    // Every partial landing on the same phases would make the copies sum to a
+    // scaled version of the original waveform — the same crest, and no
+    // headroom won at all. The variety across partials is the point.
+    const angles = unisonPhases(3)[1].slice(1, 64);
+    const spread = new Set(angles.map((a) => Math.round(a * 8)));
+    expect(spread.size).toBeGreaterThan(8);
   });
 });

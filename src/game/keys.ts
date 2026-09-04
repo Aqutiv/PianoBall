@@ -126,14 +126,24 @@ export class KeyDeck<K extends KeyLit = KeyLit> {
   /**
    * How hard a tap at a point counts as having hit a key.
    *
-   * A touchscreen sends no velocity, so the key has to infer one. Striking
-   * nearer the front lip is harder, like a drum pad — which is the same bargain
-   * every mode wants, so it lives here rather than three times over.
+   * A mouse and a touchscreen send no velocity, so the key has to infer one.
+   * Striking nearer the front lip is harder, like a drum pad — which is the
+   * same bargain every mode wants, so it lives here rather than three times
+   * over.
+   *
+   * The span is deliberately narrow and centred. It used to run from 0.18 at
+   * the far edge to a value that saturated a third of the way down the key,
+   * which meant the whole lower half was one flat maximum and the upper half
+   * carried fifteen decibels — most of it on a voice's velocity curve, where
+   * the grand alone spans thirty-two. Clicking high on a key was barely
+   * audible and clicking low was indistinguishable from clicking lower. A
+   * pointer is not a hammer and cannot aim in decibels: what it wants is a
+   * solid note wherever it lands, with enough travel to be worth aiming.
    */
   strikeForce(k: K, x: number, y: number): number {
     const g = k.geom;
     const depth = (x - g.cx) * g.nx + (y - g.cy) * g.ny;
-    return clamp(0.42 + (depth + g.depth * 0.35) / (g.depth * 0.9), 0.18, 1);
+    return clamp(0.8 + (depth / g.depth) * 0.36, 0.6, 1);
   }
 
   /** Advance the key envelopes. */

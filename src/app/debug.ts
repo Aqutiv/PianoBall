@@ -22,6 +22,13 @@ export function installDebugApi(shell: Shell): void {
     overlay: shell.overlay,
 
     startAudio: () => shell.startAudio(),
+    /**
+     * The loudest peak to reach the master ceiling over the next `seconds`, as
+     * a multiple of full scale. Play something first: this listens, it does not
+     * make a sound. Over one is the soft clipper doing its job; well over one
+     * is a mix that has stopped fitting.
+     */
+    headroom: (seconds = 1) => shell.audio.headroom(seconds),
     mode: (id: GameModeId) => shell.play(id),
     newGame: () => shell.restartMode(),
 

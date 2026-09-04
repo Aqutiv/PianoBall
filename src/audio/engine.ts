@@ -9,7 +9,10 @@ import {
   stretchCents, unisonDetunes, velocityPeak,
   type Humanized, type KeyFactors,
 } from './shaping';
-import { REGISTERS, registerOf, spectrum, spectrumKey, type Register, type SpectrumRef } from './spectra';
+import {
+  REGISTERS, registerOf, spectrum, spectrumKey,
+  type Partials, type Register, type SpectrumRef,
+} from './spectra';
 import { Lru, renderString, velocityBucket, type Bucket, type StringSpec } from './strings';
 import {
   MECHS, SURFACES, ShotBudget, modeQ, type Click, type MechName, type Sweep, type Thump,
@@ -17,7 +20,7 @@ import {
 import type { SoundTag } from '../physics/colliders';
 import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
-  type BedSpec, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
+  type BedSpec, type Unison, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
 } from './voices';
 
 export interface AudioSettings {
@@ -140,6 +143,48 @@ const MALLET_WIDTH = 0.8;
 const DUCK_FLOOR = 0.8;
 const DUCK_HOLD = 0.06;
 const DUCK_RETURN = 0.22;
+
+/**
+ * The ceiling's shape: how far past full scale the curve is written for, where
+ * it stops being a straight line, and how finely it is drawn. See `softClip`.
+ */
+const CLIP_RANGE = 4;
+const CLIP_KNEE = 0.75;
+const CLIP_POINTS = 4096;
+
+/** Where the master stops carrying what only costs it headroom. */
+const RUMBLE_HZ = 28;
+
+/**
+ * The unison phase tables: one fixed seed so a voice sounds the same on every
+ * load, how many partials are placed, how hard a partial is retried before its
+ * best draw is taken, and how near the target a draw has to land to be kept.
+ * See `unisonPhases`.
+ */
+const UNISON_SEED = 0x9e37;
+const UNISON_PARTIALS = 64;
+const UNISON_TRIES = 24;
+const UNISON_TOLERANCE = 0.12;
+
+/** Phase tables by copy count, built on first use and kept. */
+const unisonTables = new Map<number, number[][]>();
+
+/**
+ * How a unison copy's level is scaled back against the number of copies:
+ * `level / copies ^ this`.
+ *
+ * A square root is what copies at independent phases want, since independent
+ * sources sum in power — but the copies were never independent. Every
+ * oscillator starts at phase zero and a spectrum's partials are all written in
+ * the same phase, so at the strike they were one loud oscillator and the
+ * square root left that four decibels hot. `unisonPhase` makes them
+ * independent for real, which is what the square root was always assuming.
+ *
+ * It is still set slightly under a half, by measurement rather than by theory:
+ * what a listener hears is the power sum and what the ceiling sees is the
+ * crest, and the two do not move together.
+ */
+const UNISON_SPREAD = 0.33;
 
 /** The rooms are rendered from noise; one fixed seed makes them the same rooms on every load. */
 const ROOM_SEED = 0x50a7;
@@ -346,6 +391,8 @@ export class AudioEngine {
   private master!: GainNode;
   private glue!: DynamicsCompressorNode;
   private clip!: WaveShaperNode;
+  /** The last node before the ceiling, which is where `headroom` listens. */
+  private toClip!: AudioNode;
   private musicBus!: GainNode;
   /**
    * Everything the chord bed makes, on its own fader.
@@ -424,8 +471,10 @@ export class AudioEngine {
   private tempo = 96;
   private voices = new Map<number, KeyVoice>();
   private active: KeyVoice[] = [];
-  /** Every periodic wave built so far, by spectrum and register. */
+  /** Every periodic wave built so far, by spectrum, register and turn. */
   private waves = new Map<string, PeriodicWave>();
+  /** What each spectrum is normalised by, so every turn of it shares one scale. */
+  private wavePeaks = new Map<string, number>();
   /** Rendered strings, by voice, note and pluck. */
   private strings = new Lru<AudioBuffer>(STRING_ENTRIES, STRING_BYTES);
   /** The table's one-shots sounding now, so a multiball never turns to noise. */
@@ -507,26 +556,41 @@ export class AudioEngine {
     // The master chain. One compressor, and only one: Chromium's carries six
     // milliseconds of look-ahead, which this chain already pays once, and a
     // second would put another six between a key and its note. So it is tuned
-    // as glue rather than as a wall — slow, gentle, a few decibels at most —
-    // and the ceiling is a soft clipper instead, which costs nothing in time.
+    // as glue rather than as a wall — a few decibels at most — and the ceiling
+    // is a soft clipper instead, which costs nothing in time. The attack is
+    // short because that look-ahead is already paid for: what four milliseconds
+    // buys over twenty is that a hammer's transient, which is over in two, is
+    // met here rather than handed whole to the ceiling.
     this.glue = ctx.createDynamicsCompressor();
     this.glue.threshold.value = -16;
     this.glue.knee.value = 10;
-    this.glue.ratio.value = 2.5;
-    this.glue.attack.value = 0.02;
-    this.glue.release.value = 0.25;
+    this.glue.ratio.value = 3;
+    this.glue.attack.value = 0.004;
+    this.glue.release.value = 0.18;
+    // Below this nothing is heard and everything costs headroom: the offset a
+    // plucked string's loop can circulate, the bottom of a solenoid's thump,
+    // the slowest part of a room's tail.
+    const rumble = ctx.createBiquadFilter();
+    rumble.type = 'highpass';
+    rumble.frequency.value = RUMBLE_HZ;
+    rumble.Q.value = 0.7;
     const air = ctx.createBiquadFilter();
     air.type = 'highshelf';
     air.frequency.value = 9000;
     air.gain.value = 1.5;
+    // The signal is scaled into the shaper's own range before it gets there,
+    // because a curve only exists over ±1 — see `softClip`.
+    const preClip = ctx.createGain();
+    preClip.gain.value = 1 / CLIP_RANGE;
     this.clip = ctx.createWaveShaper();
-    this.clip.curve = softClip(2048);
+    this.clip.curve = softClip(CLIP_POINTS);
     this.clip.oversample = this.lite ? 'none' : '2x';
-    this.glue.connect(air).connect(this.clip).connect(ctx.destination);
+    this.toClip = air;
+    rumble.connect(this.glue).connect(air).connect(preClip).connect(this.clip).connect(ctx.destination);
 
     this.master = ctx.createGain();
     this.master.gain.value = this.settings.master;
-    this.master.connect(this.glue);
+    this.master.connect(rumble);
 
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.settings.music;
@@ -718,12 +782,17 @@ export class AudioEngine {
   setSettings(patch: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...patch };
     save(AUDIO_STORAGE_KEY, this.settings);
-    if (!this.ready) return;
-    this.master.gain.value = this.settings.master;
-    this.musicBus.gain.value = this.settings.music;
-    this.fxBus.gain.value = this.settings.effects;
-    this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
-    this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
+    if (!this.ready || !this.ctx) return;
+    // Ramped rather than set, for the reason `applyLeadGain` gives: a slider
+    // drag and a volume knob both arrive as a dense stream of values, and a
+    // gain stepped sixty times a second is a staircase in the waveform.
+    const t = this.ctx.currentTime;
+    const to = (g: GainNode, value: number) => g.gain.setTargetAtTime(value, t, 0.02);
+    to(this.master, this.settings.master);
+    to(this.musicBus, this.settings.music);
+    to(this.fxBus, this.settings.effects);
+    to(this.hallWet, REVERB_MAX * this.settings.reverb);
+    to(this.cabWet, CAB_MAX * this.settings.reverb);
     this.applyLeadGain();
     this.applyBedGain();
     if (patch.bendRange !== undefined) this.setBend(this.bendValue);
@@ -964,6 +1033,40 @@ export class AudioEngine {
 
   get now(): number { return this.ctx ? this.ctx.currentTime : 0; }
 
+  /**
+   * The loudest thing to reach the ceiling over `seconds`, as a multiple of
+   * full scale.
+   *
+   * The one number that says whether the gain staging is still honest. One is
+   * the ceiling; a little over it is a peak the soft clipper rounds off and
+   * nobody hears; well over it is a mix that wants trimming rather than a
+   * ceiling asked to work harder. Measured here rather than in the debug panel
+   * because the tap has to sit inside the master chain.
+   */
+  async headroom(seconds = 1): Promise<number> {
+    if (!this.running || !this.ctx) return 0;
+    const ctx = this.ctx;
+    const meter = ctx.createAnalyser();
+    meter.fftSize = 2048;
+    this.toClip.connect(meter);
+    const window = new Float32Array(meter.fftSize);
+    const until = ctx.currentTime + seconds;
+    // The audio clock stops when the context does — a hidden tab, a device
+    // change — and a measurement that waited on it alone would never return.
+    const giveUp = Date.now() + (seconds + 1) * 1000;
+    let peak = 0;
+    try {
+      while (ctx.currentTime < until && Date.now() < giveUp) {
+        meter.getFloatTimeDomainData(window);
+        for (const s of window) peak = Math.max(peak, Math.abs(s));
+        await new Promise((done) => setTimeout(done, 16));
+      }
+    } finally {
+      this.toClip.disconnect(meter);
+    }
+    return peak;
+  }
+
   /** Measured round trip, for the diagnostics panel. */
   get latencyMs(): number {
     if (!this.ctx) return 0;
@@ -1163,10 +1266,12 @@ export class AudioEngine {
     const out: Pitched[] = [];
     const curve = layer.velCurve ? Math.pow(v, layer.velCurve) : 1;
     const level = Math.max(
-      0.0001, ((layer.level + v * (layer.velLevel ?? 0)) * curve * h.level) / Math.sqrt(detunes.length));
+      0.0001,
+      ((layer.level + v * (layer.velLevel ?? 0)) * curve * h.level) / Math.pow(detunes.length, UNISON_SPREAD));
     const attack = layer.attack ?? 0;
     const hold = layer.hold ?? 0;
-    for (const d of detunes) {
+    for (let j = 0; j < detunes.length; j++) {
+      const d = detunes[j];
       let osc: Pitched;
       if (layer.type === 'string' && str) {
         // Rendered at the note itself; a layer set above it plays the same
@@ -1177,7 +1282,9 @@ export class AudioEngine {
         osc = src;
       } else {
         const o = ctx.createOscillator();
-        if (layer.type === 'spectrum') o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register));
+        if (layer.type === 'spectrum') {
+          o.setPeriodicWave(this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, register, j, detunes.length));
+        }
         else if (layer.type !== 'string') o.type = layer.type;
         if (glide) {
           o.frequency.setValueAtTime(glide.from * layer.ratio, t);
@@ -1340,14 +1447,32 @@ export class AudioEngine {
     return taps;
   }
 
-  /** The wave for a spectrum layer in a register: built on the first request, kept after. */
-  private wave(ref: SpectrumRef, register: Register): PeriodicWave {
-    const key = spectrumKey(ref, register);
+  /**
+   * The wave for a spectrum layer in a register: built on the first request,
+   * kept after. `copy` is which unison copy is asking, out of `copies`, and
+   * each gets the same partials with their own phases — see `unisonPhases`.
+   */
+  private wave(ref: SpectrumRef, register: Register, copy = 0, copies = 1): PeriodicWave {
+    const base = spectrumKey(ref, register);
+    const key = `${base}:${copies}:${copy}`;
     let w = this.waves.get(key);
     if (!w) {
       const ctx = this.ctx!;
-      const { real, imag } = spectrum(ref, register, ctx.sampleRate);
-      w = ctx.createPeriodicWave(real, imag);
+      const partials = spectrum(ref, register, ctx.sampleRate);
+      // Moving a partial's phase does not change how loud it is, only where
+      // the waveform's peak falls — but `createPeriodicWave` normalises
+      // whatever it is handed to a peak of one, which would scale each copy
+      // differently and turn a phase change into a level change. So every
+      // copy of one spectrum is scaled by the *same* number, the one the
+      // spectrum as written would have been given, worked out here instead.
+      let peak = this.wavePeaks.get(base);
+      if (peak === undefined) {
+        peak = wavePeak(partials);
+        this.wavePeaks.set(base, peak);
+      }
+      const angles = unisonPhases(copies)[copy] ?? [];
+      const turned = shapePhase(partials, (k) => angles[k] ?? 0, 1 / peak);
+      w = ctx.createPeriodicWave(turned.real, turned.imag, { disableNormalization: true });
       this.waves.set(key, w);
     }
     return w;
@@ -1357,12 +1482,16 @@ export class AudioEngine {
    * Build every table a voice will ask for, now rather than on its first note.
    * A periodic wave is a few dozen band-limited tables and a millisecond or
    * two to make, which is a millisecond or two the note path does not have.
+   * Every unison copy, because each of them wants its own turn of the cycle.
    */
-  private warm(spec: { layers: readonly VoiceLayer[] }): void {
+  private warm(spec: { layers: readonly VoiceLayer[]; unison?: Unison }): void {
     if (!this.ready) return;
+    const copies = this.lite ? 1 : spec.unison?.voices ?? 1;
     for (const layer of spec.layers) {
       if (layer.type !== 'spectrum') continue;
-      for (const r of REGISTERS) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r);
+      for (const r of REGISTERS) {
+        for (let j = 0; j < copies; j++) this.wave(layer.spectrum ?? DEFAULT_SPECTRUM, r, j, copies);
+      }
     }
   }
 
@@ -2180,14 +2309,144 @@ export class AudioEngine {
 }
 
 /**
- * The ceiling: a hyperbolic tangent, unity through the middle and rounding
- * off towards full scale. Everything the game makes sums into this, so the
- * loudest multiball leans on it rather than on the converter's hard edge.
+ * The ceiling: unity through the middle and rounding off towards full scale.
+ * Everything the game makes sums into this, so the loudest multiball leans on
+ * it rather than on the converter's hard edge.
+ *
+ * The subtlety is that a shaper's curve is only defined over an input of ±1
+ * and *clamps* anything beyond it to the end point. A curve written straight
+ * across that range is therefore not a soft clipper at all: it is a wall at
+ * full scale with a corner in it, and a corner in the waveform is exactly what
+ * a squared-off peak sounds like. So the table spans `CLIP_RANGE` instead, and
+ * the signal is scaled into it on the way in.
+ *
+ * Below the knee the curve is the straight line y = x, so everything that
+ * already fits passes through untouched — the ceiling costs nothing until it
+ * is needed. Above it a tangent bends towards one, meeting the line with the
+ * same slope as well as the same value, which is what makes an overshoot
+ * inaudible rather than a crunch.
  */
-function softClip(points: number): Float32Array<ArrayBuffer> {
+export function softClip(points: number): Float32Array<ArrayBuffer> {
   const curve = new Float32Array(points);
-  for (let i = 0; i < points; i++) curve[i] = Math.tanh((i / (points - 1)) * 2 - 1);
+  const above = 1 - CLIP_KNEE;
+  for (let i = 0; i < points; i++) {
+    const x = ((i / (points - 1)) * 2 - 1) * CLIP_RANGE;
+    const a = Math.abs(x);
+    if (a <= CLIP_KNEE) curve[i] = x;
+    else curve[i] = Math.sign(x) * (CLIP_KNEE + above * Math.tanh((a - CLIP_KNEE) / above));
+  }
   return curve;
+}
+
+/**
+ * The same table, started somewhere else in its cycle.
+ *
+ * Unison copies are each scaled by the square root of their number, which is
+ * what independent sources sum to — but every oscillator starts at phase zero
+ * and a spectrum's partials are all written in the same phase, so at the
+ * strike the copies are identical and sum to all of it instead. Five cents
+ * apart they take a second to drift out of step, which is the whole attack and
+ * most of the decay: every unison note has been arriving five decibels hotter
+ * than the gain staging was told to expect, on the one transient the
+ * compressor is too slow to catch.
+ *
+ * Turning each copy makes the sum match the scaling from the first sample, and
+ * costs nothing after it: where a waveform starts in its cycle is inaudible,
+ * and the beating that unison is *for* is untouched. Fixed rather than random,
+ * so a note still sounds the same every time it is played — the drift that
+ * makes a repeated note human is `humanize`'s job, not this one's.
+ *
+ * Shifting a waveform by `angle` turns partial *k* by *k · angle*, which is
+ * the rotation below.
+ */
+function shapePhase({ real, imag }: Partials, angle: (k: number) => number, scale: number): Partials {
+  const r = new Float32Array(real.length);
+  const m = new Float32Array(imag.length);
+  for (let k = 0; k < real.length; k++) {
+    const a = angle(k);
+    const c = Math.cos(a) * scale;
+    const s = Math.sin(a) * scale;
+    r[k] = real[k] * c + imag[k] * s;
+    m[k] = imag[k] * c - real[k] * s;
+  }
+  return { real: r, imag: m };
+}
+
+/**
+ * Where every partial of every unison copy starts in its own cycle.
+ *
+ * The engine scales each copy by the copy count to a power near a half, which
+ * is what sources at independent phases sum to. So the phases have to actually
+ * be independent — and this is the part that is easy to get wrong.
+ *
+ * Sliding a whole waveform in time does not do it. A shift of one angle moves
+ * partial *k* by *k* times that angle, which is a rigid comb rather than a
+ * scatter: whatever angle is chosen, some partials come back into step and
+ * reinforce while others land opposite and cancel outright. A golden-ratio
+ * shift, about as non-resonant as one angle gets, still left three copies'
+ * fundamentals summing to 0.47 where independent sources give 1.73 — eleven
+ * decibels of hollow, on the attack, on the default piano.
+ *
+ * Nor does drawing every phase at random, which scatters correctly on average
+ * and still buries the odd partial in a null it happened to land in.
+ *
+ * So each partial's phases are drawn and then *checked*: kept when the copies
+ * sum to about the square root of their number, redrawn when they do not. The
+ * result is a different scatter for every partial — which is what keeps the
+ * summed waveform from being peaky, and is the whole headroom argument — with
+ * no partial anywhere near a null. Three strings under one hammer are three
+ * strings, not one string heard three times a moment apart.
+ *
+ * Seeded and built once, so a note sounds the same every time it is played.
+ * The variation that makes a repeated note human is `humanize`'s, not this.
+ */
+export function unisonPhases(copies: number): readonly (readonly number[])[] {
+  const found = unisonTables.get(copies);
+  if (found) return found;
+  const table: number[][] = [];
+  for (let j = 0; j < copies; j++) table.push(new Array<number>(UNISON_PARTIALS).fill(0));
+  if (copies > 1) {
+    const rng = makeRng(UNISON_SEED + copies);
+    const target = Math.sqrt(copies);
+    for (let k = 0; k < UNISON_PARTIALS; k++) {
+      // The first copy holds the spectrum as written, so a voice with no
+      // unison is untouched and the others are placed against something.
+      let best = [0];
+      let bestErr = Infinity;
+      for (let tries = 0; tries < UNISON_TRIES; tries++) {
+        const angles = [0];
+        for (let j = 1; j < copies; j++) angles.push(rng() * 2 * Math.PI);
+        let re = 0;
+        let im = 0;
+        for (const a of angles) { re += Math.cos(a); im += Math.sin(a); }
+        const err = Math.abs(Math.hypot(re, im) - target);
+        if (err < bestErr) { bestErr = err; best = angles; }
+        if (err < target * UNISON_TOLERANCE) break;
+      }
+      for (let j = 0; j < copies; j++) table[j][k] = best[j];
+    }
+  }
+  unisonTables.set(copies, table);
+  return table;
+}
+
+/**
+ * The tallest the waveform these partials describe ever gets, over one cycle.
+ *
+ * What `createPeriodicWave` normalises by, worked out here so that every turn
+ * of one spectrum can be given the same number — see `wave`. A cycle at this
+ * many points is finer than the partial count needs, and it is paid once per
+ * spectrum and register, during the warm-up.
+ */
+function wavePeak({ real, imag }: Partials, points = 4096): number {
+  let peak = 0;
+  for (let i = 0; i < points; i++) {
+    const t = (2 * Math.PI * i) / points;
+    let x = 0;
+    for (let k = 0; k < real.length; k++) x += real[k] * Math.cos(k * t) + imag[k] * Math.sin(k * t);
+    peak = Math.max(peak, Math.abs(x));
+  }
+  return peak || 1;
 }
 
 function makeNoise(ctx: BaseAudioContext, seconds: number): AudioBuffer {
