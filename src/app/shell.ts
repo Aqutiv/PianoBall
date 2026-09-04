@@ -246,6 +246,33 @@ export class Shell {
   }
 
   /**
+   * The window is no longer the one being played, so it stops making noise.
+   *
+   * A run pauses, which is what `suspend` has always done. The rest is what
+   * that missed: the menu's bed plays with no run under it, and a MIDI
+   * keyboard keeps delivering notes to a window that is not in front, so the
+   * player switching away and playing something else would still be heard.
+   * Everything sounding is put down and the master is held at zero, which
+   * also catches whatever a mode writes onto the audio clock after this.
+   */
+  private leaveFocus(): void {
+    this.suspend();
+    this.hush();
+    this.audio.setMuted(true);
+  }
+
+  /**
+   * Back in front: the output opens again, and the menu gets its bed back.
+   *
+   * Not while playing — losing focus mid-run put the pause panel up, and
+   * nothing sounds behind that until the player resumes.
+   */
+  private enterFocus(): void {
+    this.audio.setMuted(false);
+    if (!this.playing) this.wakeBed();
+  }
+
+  /**
    * Nothing sounds behind the pause panel.
    *
    * Each mode already stops what it knows it started — the drums, the rolling
@@ -496,10 +523,11 @@ export class Shell {
     // running, so anything timed against the audio clock would come back to a
     // run that carried on without it. Pause instead of returning to a ruin.
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.suspend();
-      else unlock();
+      if (document.hidden) this.leaveFocus();
+      else { unlock(); this.enterFocus(); }
     });
-    window.addEventListener('blur', () => this.suspend());
+    window.addEventListener('blur', () => this.leaveFocus());
+    window.addEventListener('focus', () => this.enterFocus());
     this.audio.onStateChange = () => this.refreshSound();
 
     // Controller messages that belong to the app rather than to a mode.
