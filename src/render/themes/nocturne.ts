@@ -105,6 +105,7 @@ export const NOCTURNE: Theme = {
   outline: null,
   bloom: { alphaA: 0.62, alphaB: 0.5 },
   glow: { coreLight: 96, midLight: 74, midSat: 92, midAlpha: 0.42 },
+  pool: { strength: 0.85, radius: 3.2 },
   glass: { sheen: '#bed7ff', vignette: 0.82 },
   fonts: { display: FONT, ui: FONT, mono: MONO },
 };

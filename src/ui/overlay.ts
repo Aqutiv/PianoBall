@@ -647,6 +647,7 @@ export class Overlay {
 
       <h2>Display</h2>
       <div class="row"><label>Bloom</label><button id="q-bloom">${stage.quality.bloom ? 'On' : 'Off'}</button></div>
+      <div class="row"><label>Playfield light</label><button id="q-pools">${stage.quality.pools ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Note labels</label><button id="q-labels">${stage.quality.labels ? 'On' : 'Off'}</button></div>
       <p class="diag">The C marked on each octave of the keys, and the note names
         on a table's bumpers and targets. PlayTune's falling auras carry their
@@ -743,12 +744,13 @@ export class Overlay {
       setPinballSettings({ drums: v });
       this.shell.applyModeSettings();
     });
-    const quality = (sel: string, key: 'bloom' | 'labels' | 'reducedMotion' | 'colorBlind') => {
+    const quality = (sel: string, key: 'bloom' | 'pools' | 'labels' | 'reducedMotion' | 'colorBlind') => {
       // Through setQuality, so the choice is remembered as a *preference* and
       // the adaptive-quality pass knows what to restore to.
       toggle(sel, () => stage.quality[key], (v) => stage.setQuality({ [key]: v }));
     };
     quality('#q-bloom', 'bloom');
+    quality('#q-pools', 'pools');
     quality('#q-labels', 'labels');
     quality('#q-motion', 'reducedMotion');
     quality('#q-cb', 'colorBlind');

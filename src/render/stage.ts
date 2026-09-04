@@ -1,7 +1,7 @@
 import { TableCamera } from './project';
 import { Particles } from './particles';
 import { ramp, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
-import { shadowSprite, glowSprite } from './sprites';
+import { shadowSprite, glowSprite, poolSprite } from './sprites';
 import { DEFAULT_THEME, type TablePalette, type Theme } from './theme';
 import { clamp01, TAU } from '../core/math';
 import { load, save } from '../core/storage';
@@ -13,6 +13,8 @@ export interface RenderQuality {
   labels: boolean;
   reducedMotion: boolean;
   colorBlind: boolean;
+  /** Light thrown onto the playfield by lit elements and charged balls. */
+  pools: boolean;
   /** How much of the screen the table takes, 1 being the size it was designed at. */
   tableSize: number;
 }
@@ -89,6 +91,7 @@ export const DEFAULT_QUALITY: RenderQuality = {
   labels: true,
   reducedMotion: false,
   colorBlind: false,
+  pools: true,
   tableSize: 1,
 };
 
@@ -432,14 +435,47 @@ export class Stage {
     ctx.stroke();
   }
 
+  /**
+   * Light thrown onto the playfield by something lit standing on it.
+   *
+   * Drawn to the *base* layer, not the emissive one, and before anything on the
+   * table — so the surface takes the tint and the object itself then paints
+   * over its own pool. Everything lit used to glow only in the air above the
+   * table, which is most of why the elements read as printed on it.
+   *
+   * `lighter` onto the base context is plain additive: that context is opaque
+   * (`alpha: false`), so there is no alpha to compound.
+   */
+  floorPool(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, hue: number, strength: number): void {
+    const cfg = this.theme.pool;
+    if (!cfg || !this.quality.pools || strength <= 0.004) return;
+    const p = { x: 0, y: 0 };
+    this.cam.project(x, y, 0, p);
+    const size = r * cfg.radius * 2 * this.cam.scaleAt(x, y);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = clamp01(strength * cfg.strength);
+    // Flattened the way the shadow is: this is light lying on a raked plane.
+    ctx.drawImage(poolSprite(hue, 128), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
+    ctx.restore();
+  }
+
+  /**
+   * The contact shadow under something standing on the playfield.
+   *
+   * The spread and the darkness both follow height, which is the whole cue:
+   * a thing sitting on the surface has a tight, dark shadow and a tall one has
+   * a wide, faint one. It used to be the same blob at the same strength for
+   * everything from a rollover button to a post twice its height.
+   */
   groundShadow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number, strength = 1): void {
     if (!this.quality.shadows) return;
     const p = { x: 0, y: 0 };
     const sx = x + LIGHT.x * z * 0.8, sy = y - LIGHT.y * z * 0.5;
     this.cam.project(sx, sy, 0, p);
     const scale = this.cam.scaleAt(sx, sy);
-    const size = r * 2.9 * scale;
-    ctx.globalAlpha = 0.55 * strength;
+    const size = r * (2.55 + z * 0.018) * scale;
+    ctx.globalAlpha = (0.66 / (1 + z / 60)) * strength;
     ctx.drawImage(shadowSprite(), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
     ctx.globalAlpha = 1;
   }

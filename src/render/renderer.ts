@@ -186,6 +186,21 @@ export class PinballRenderer {
       ctx.fillRect(p.x, p.y, 1.2, 1.2);
     }
     ctx.globalAlpha = 1;
+
+    // Depth haze, inside the clip so it stays on the playfield and off the
+    // cabinet. The far end of the table is a long way away and was lit exactly
+    // like the near end, leaving foreshortening as the only thing saying so.
+    // Air between the eye and the far edge says it as well, and says it for
+    // nothing: this is painted into the static layer once.
+    const nearH = { x: 0, y: 0 }, farH = { x: 0, y: 0 };
+    this.cam.project(game.def.width / 2, 0, 0, nearH);
+    this.cam.project(game.def.width / 2, H, 0, farH);
+    const haze = ctx.createLinearGradient(nearH.x, nearH.y, farH.x, farH.y);
+    haze.addColorStop(0, withAlpha(pal.void, 0));
+    haze.addColorStop(0.5, withAlpha(pal.void, 0.08));
+    haze.addColorStop(1, withAlpha(pal.void, 0.4));
+    ctx.fillStyle = haze;
+    ctx.fillRect(0, 0, this.cssW, this.cssH);
     ctx.restore();
 
     // --- Walls ---
@@ -335,6 +350,7 @@ export class PinballRenderer {
     const beat = hints?.beat ?? null;
     const env = beat ? Math.pow(1 - beat.phase, 4) * (beat.beat === 0 ? 1 : 0.55) : 0;
 
+    this.drawFloorLights(ctx, game, env);
     for (const el of this.depthSorted(game)) this.drawElement(ctx, em, game, el, env);
     this.drawPulse(em, game, env);
 
@@ -351,6 +367,50 @@ export class PinballRenderer {
     this.drawPops(ctx, game);
     stage.drawGlass();
     stage.endFrame();
+  }
+
+  /**
+   * The light every lit thing throws down onto the playfield.
+   *
+   * Runs before the elements and the balls, so each of them paints over its own
+   * pool and sits *in* its light rather than under a smear of it. Everything
+   * emissive on this table used to glow in the air only, which is most of why
+   * the elements read as printed on the surface rather than standing on it.
+   *
+   * Under reduced motion the light still varies — a brightness that changes is
+   * not motion — but the throbbing term is halved, the way `drawPulse` does it.
+   */
+  private drawFloorLights(ctx: CanvasRenderingContext2D, game: Game, env: number): void {
+    if (!this.stage.theme.pool || !this.quality.pools) return;
+    const still = this.quality.reducedMotion;
+
+    for (const el of game.table.elements) {
+      const energised = el.energisedUntil > game.time;
+      let lit = el.flash;
+      if (el.kind === 'bumper') {
+        const throb = energised ? 0.5 + Math.sin(this.t * 12) * (still ? 0 : 0.2) : 0;
+        lit = Math.max(lit, throb * 0.7 + env * (still ? 0.1 : 0.2));
+      } else if (el.kind === 'rollover') {
+        // Nothing at all when it is not lit. A rollover exists to say whether
+        // it has been taken, and a pool under an untaken one spends the very
+        // signal the light is supposed to be carrying.
+        lit = Math.max(lit, el.down ? 0.5 : 0);
+      } else if (energised) {
+        lit = Math.max(lit, 0.32);
+      }
+      if (lit <= 0.02) continue;
+      const hue = el.note !== null ? this.hue(el.note) : 205;
+      this.stage.floorPool(ctx, el.x, el.y, el.r || 26, hue, lit * 0.8);
+    }
+
+    // A ball carries the note of the key that threw it, so the light it drags
+    // across the table is the colour it is going to sound as.
+    for (const ball of game.balls) {
+      if (ball.note === null) continue;
+      const speed = Math.hypot(ball.v.x, ball.v.y);
+      this.stage.floorPool(ctx, ball.p.x, ball.p.y, ball.r, this.hue(ball.note),
+        0.3 + Math.min(0.3, speed / 3200));
+    }
   }
 
   private sorted: Game['table']['elements'] = [];

@@ -106,6 +106,7 @@ export const TOYBOX: Theme = {
   // Turned down hard: glow behind an outlined shape muddies the outline.
   bloom: { alphaA: 0.3, alphaB: 0.2 },
   glow: { coreLight: 96, midLight: 80, midSat: 100, midAlpha: 0.3 },
+  pool: null,
   glass: { sheen: '#ffffff', vignette: 0.45 },
   fonts: { display: UI, ui: UI, mono: MONO },
 };

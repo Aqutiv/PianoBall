@@ -116,6 +116,7 @@ export const VELVET: Theme = {
   // Candlelight: present, but nothing like Nocturne's electric halo.
   bloom: { alphaA: 0.44, alphaB: 0.34 },
   glow: { coreLight: 92, midLight: 68, midSat: 62, midAlpha: 0.34 },
+  pool: { strength: 0.5, radius: 3 },
   glass: { sheen: '#ffe6b8', vignette: 0.9 },
   fonts: { display: DISPLAY, ui: UI, mono: MONO },
 };

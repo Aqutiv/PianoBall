@@ -389,6 +389,13 @@ export class Shell {
       this.qualityHeld = 3;
       // The sound sheds its own expensive effects on the same signal.
       this.audio.setLite(true);
+    } else if (this.frameAvg > 13 && q.pools) {
+      // Between bloom and shadows: the floor light costs fill rate rather than
+      // geometry, so it is the next thing worth giving back on a machine that
+      // is struggling, and the last thing anyone notices going.
+      q.pools = false;
+      this.qualityHeld = 3;
+      this.audio.setLite(true);
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
       this.qualityHeld = 3;
@@ -396,9 +403,10 @@ export class Shell {
       // thing shed: the sound has to follow from here too.
       this.audio.setLite(true);
     } else if (this.frameAvg < 7
-      && (q.bloom !== want.bloom || q.shadows !== want.shadows)) {
+      && (q.bloom !== want.bloom || q.shadows !== want.shadows || q.pools !== want.pools)) {
       q.bloom = want.bloom;
       q.shadows = want.shadows;
+      q.pools = want.pools;
       this.stage.particles.budget = want.particles;
       this.qualityHeld = 6;
       this.audio.setLite(false);

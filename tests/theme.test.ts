@@ -87,6 +87,20 @@ describe('themes', () => {
     }
   });
 
+  it('gives every theme a sane playfield-light setting, or none at all', () => {
+    // Additive light needs somewhere dark to land. Opting out is a real answer
+    // — Toybox's playfield is bright indigo and its read depends on hard
+    // outlines — but a strength above 1 would blow the surface to white, and a
+    // radius of nothing would draw a point.
+    for (const t of THEMES) {
+      expect(t, `${t.id} does not say either way about pools`).toHaveProperty('pool');
+      if (t.pool === null) continue;
+      expect(t.pool.strength, t.id).toBeGreaterThan(0);
+      expect(t.pool.strength, t.id).toBeLessThanOrEqual(1);
+      expect(t.pool.radius, t.id).toBeGreaterThan(1);
+    }
+  });
+
   it('gives every theme six ball gradient stops', () => {
     // The renderer pairs these with a fixed list of gradient offsets.
     for (const t of THEMES) expect(t.ball.body, t.id).toHaveLength(6);

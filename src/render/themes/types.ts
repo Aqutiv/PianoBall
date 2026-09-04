@@ -164,6 +164,16 @@ export interface Theme {
   bloom: { alphaA: number; alphaB: number };
   /** The glow sprite ramp: how a point of light falls off. */
   glow: { coreLight: number; midLight: number; midSat: number; midAlpha: number };
+  /**
+   * How hard a lit thing throws light onto the playfield around it.
+   *
+   * Null for a look that does not want it. Additive light needs somewhere dark
+   * to land, so a theme with a bright playfield saturates to white almost at
+   * once — and a theme whose read depends on hard outlines does not want a
+   * glow softening the ground under them. `radius` is in table units, per unit
+   * of the thing's own radius.
+   */
+  pool: { strength: number; radius: number } | null;
   /** The pane of glass: diagonal sheen tint, and how hard the vignette closes. */
   glass: { sheen: string; vignette: number };
   /** Pushed to CSS as `--font-display` / `--font-ui` / `--font-mono`, and used
