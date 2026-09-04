@@ -423,7 +423,10 @@ export class Shell {
       fps: this.loop.stats.fps,
       stepMs: this.loop.stats.stepMs,
       drawMs: this.loop.stats.drawMs,
-      extra: this.active?.debugLines?.(),
+      // Only when something is going to read it. A mode's debug lines walk its
+      // live particles and build a handful of strings, and the readout they go
+      // to is off unless someone has pressed F3.
+      extra: this.hud.showFps ? this.active?.debugLines?.() : undefined,
     });
     if (this.overlay.visible) this.overlay.update();
     // Typing in a panel — or arrowing through a control in the HUD — must not

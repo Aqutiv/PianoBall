@@ -21,6 +21,8 @@ export class Hud {
 
   private bannerUntil = 0;
   showFps = false;
+  /** What `showFps` was when the readout's display was last written. */
+  private fpsShown: boolean | null = null;
 
   constructor(readonly root: HTMLElement) {
     root.innerHTML = `
@@ -87,7 +89,12 @@ export class Hud {
   update(stats: { fps: number; stepMs: number; drawMs: number; extra?: string }): void {
     if (this.bannerUntil && performance.now() > this.bannerUntil) this.clearBanner();
 
-    this.fpsEl.style.display = this.showFps ? 'block' : 'none';
+    // Only on a change. This is a style write on every frame otherwise, for a
+    // flag that moves when someone presses F3.
+    if (this.showFps !== this.fpsShown) {
+      this.fpsShown = this.showFps;
+      this.fpsEl.style.display = this.showFps ? 'block' : 'none';
+    }
     if (this.showFps) {
       this.fpsEl.textContent =
         `${stats.fps.toFixed(0)} fps\n` +
