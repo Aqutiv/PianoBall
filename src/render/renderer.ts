@@ -418,6 +418,13 @@ export class PinballRenderer {
         // it has been taken, and a pool under an untaken one spends the very
         // signal the light is supposed to be carrying.
         lit = Math.max(lit, el.down ? 0.5 : 0);
+      } else if (el.kind === 'target' && el.down) {
+        // `down` means the opposite of what it means on a rollover. A dropped
+        // target is gone, and `drawElement` paints it as a bare line on the
+        // playfield — but `refreshEnergised` goes on extending its energy for
+        // as long as the player holds a key of its pitch class, which is what
+        // put a lit pool under a target that was no longer standing there.
+        continue;
       } else if (energised) {
         lit = Math.max(lit, 0.32);
       }
