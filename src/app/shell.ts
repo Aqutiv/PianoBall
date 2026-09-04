@@ -23,6 +23,15 @@ import type { PlayTuneMode } from '../modes/playtune/playtune';
 /** Live particles allowed while the adaptive pass is shedding. */
 const SHED_PARTICLES = 500;
 
+/**
+ * How often the table behind an open panel is repainted, in seconds.
+ *
+ * Thirty a second: half the work on a sixty-hertz display and a fifth of it on
+ * a hundred-and-forty-four, for motion that is already being blurred by seven
+ * pixels before anyone sees it.
+ */
+const IDLE_FRAME = 1 / 30;
+
 export interface ModeResult {
   title: string;
   lines: { label: string; value: string }[];
@@ -81,6 +90,8 @@ export class Shell {
   private qualityHeld = 0;
   /** Pending coalesced resize, if any. See `queueResize`. */
   private resizeRaf = 0;
+  /** Time owed to the backdrop since it was last drawn. See `draw`. */
+  private idleDt = 0;
   /**
    * Whether the adaptive pass is holding anything back.
    *
@@ -419,7 +430,27 @@ export class Shell {
   private draw(alpha: number, frameDt: number): void {
     this.loop.timeScale = this.active?.timeScale ?? 1;
     this.adaptQuality(frameDt);
-    this.active?.draw(alpha, frameDt);
+
+    // Behind a panel the table is a backdrop under a seven-pixel blur, and the
+    // compositor re-blurs the whole canvas every time it changes. Something has
+    // to keep moving there — a frozen board reads as a crash, which is why the
+    // attract mode exists at all — but it does not have to move sixty times a
+    // second, and this is the *first* thing the app is asked to do: the home
+    // screen is up before the player has touched anything.
+    //
+    // Only `draw` is held back. The HUD and the panel still update every frame,
+    // and the simulation is on the loop's other callback, so nothing about the
+    // run changes — just how often the picture behind the glass is repainted.
+    this.idleDt += frameDt;
+    const idling = this.overlay.visible;
+    if (!idling || this.idleDt >= IDLE_FRAME) {
+      // The accumulated time, not this frame's slice. `beginFrame` advances the
+      // stage clock, the particles and the shake decay by whatever it is given,
+      // so passing one frame's worth on every third frame would run the whole
+      // backdrop at a third speed.
+      this.active?.draw(alpha, this.idleDt);
+      this.idleDt = 0;
+    }
     this.active?.hud();
     this.hud.update({
       fps: this.loop.stats.fps,
