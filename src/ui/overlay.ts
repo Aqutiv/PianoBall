@@ -649,9 +649,10 @@ export class Overlay {
       <div class="row"><label>Bloom</label><button id="q-bloom">${stage.quality.bloom ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Playfield light</label><button id="q-pools">${stage.quality.pools ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Note labels</label><button id="q-labels">${stage.quality.labels ? 'On' : 'Off'}</button></div>
-      <p class="diag">The C marked on each octave of the keys, and the note names
-        on a table's bumpers and targets. PlayTune's falling auras carry their
-        own names, switched separately under PlayTune.</p>
+      <p class="diag">The C marked on each octave of the keys, the note names on a
+        table's bumpers and targets, and the key a falling ball is named for.
+        PlayTune's falling auras carry their own names, switched separately
+        under PlayTune.</p>
       <div class="row"><label>Reduced motion</label><button id="q-motion">${stage.quality.reducedMotion ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Colour-blind palette</label><button id="q-cb">${stage.quality.colorBlind ? 'On' : 'Off'}</button></div>
       <div class="row"><label>Table size</label>
