@@ -89,6 +89,16 @@ const RETRIGGER_RELEASE = 0.02;
 const RELEASE_STOP_PAD = 0.02;
 /** Two Web Audio render quanta in which a prepared real-time graph can reach the audio thread. */
 const NOISE_LOOKAHEAD_FRAMES = 256;
+/**
+ * The most margin a note's onset may be given, in seconds.
+ *
+ * The margin exists so an envelope is not scheduled into a quantum the audio
+ * thread has already rendered -- but every millisecond of it is a millisecond
+ * between a key going down and a sound, in an engine whose whole scheduling
+ * design is about not having any. So it is capped, and deliberately well below
+ * where a player would start to feel it.
+ */
+const MAX_ONSET_MARGIN = 0.012;
 
 /**
  * A one-shot placed on the audio clock, which can still be taken back.
@@ -124,6 +134,8 @@ const BED_KEY_REVERB = 0.42;
 
 /** Hall wet gain at a full reverb setting. Half of it is the original fixed value. */
 const REVERB_MAX = 1.7;
+/** Seconds to take the hall send down and back around a room change. */
+const HALL_SWAP = 0.03;
 /** Cabinet wet gain at a full reverb setting: the table's box, under the same knob. */
 const CAB_MAX = 0.9;
 
@@ -132,6 +144,41 @@ const BED_MAX = 2;
 
 /** Key-voice gain at a full instrument setting. Half of it is unity, as above. */
 const LEAD_MAX = 2;
+/**
+ * How hard the lead bus is pulled down as more notes sound at once.
+ *
+ * Decorrelated voices sum roughly as the square root of their count, so an
+ * exponent of 0.5 would flatten polyphony completely -- sixteen notes exactly
+ * as loud as one, which is not how an instrument behaves. A quarter leaves the
+ * growth a square root of a square root: sixteen notes still arrive about six
+ * decibels above one, and the twelve decibels that used to land on the
+ * compressor do not.
+ *
+ * `pad()` has always done this for the bed, dividing by its note count. Nothing
+ * did it for the player's own hands, which is why the master compressor was the
+ * only thing standing between a two-handed chord and the ceiling.
+ */
+const POLY_EXPONENT = 0.25;
+/** Following the bus somewhere it is going anyway: a fader, or a note arriving. */
+const BUS_SMOOTH = 0.025;
+/**
+ * Giving the bus back after a note has been let go.
+ *
+ * Much slower than it is taken away, and deliberately asymmetric. Attenuation
+ * has to arrive before a note does, because the transient is what the
+ * compressor hears. Recovery has the opposite problem: the notes it stops
+ * sharing the bus with are still *sounding*. A half-pedalled release stretches
+ * to nearly three seconds (`HALF_PEDAL_STRETCH`), so lifting sixteen keys used
+ * to raise the bus from 0.5 towards 1 inside about seventy-five milliseconds
+ * while every one of those tails was still near full amplitude -- an audible
+ * swell on key-up, and a second helping of compression to go with it.
+ *
+ * The target is still counted over held voices only: a tail should not drag
+ * down the notes under the player's fingers. It is the approach that is slow,
+ * so the recovery is spread across the tail's own decay instead of racing it.
+ * Costing nothing when a new note arrives, because that path ramps outright.
+ */
+const BUS_RECOVER = 0.5;
 
 /**
  * How far a played note is allowed towards either speaker.
@@ -219,17 +266,57 @@ interface StringAt {
  * frame; smoothed on the audio side, so a frame's worth of change is a slope
  * rather than a step.
  */
+/**
+ * A reading of the master chain: what is reaching the ceiling, and what the
+ * compressor is doing to keep it there. See `AudioEngine.measure`.
+ */
+export interface MixReading {
+  /** Seconds the window covered. */
+  seconds: number;
+  /**
+   * Peak at the clipper's input. The soft clipper spans this directly, so 1 is
+   * the ceiling, up to ~1.3 is rounding nobody hears, and above that is a flat
+   * top -- and in lite mode, an aliased one.
+   */
+  peak: number;
+  /** RMS over the same window, for peak-to-average. */
+  rms: number;
+  /** Deepest gain reduction seen, in dB. Negative. */
+  reductionPeak: number;
+  /** Mean gain reduction, in dB. Negative. */
+  reductionMean: number;
+  /** How far the reduction travelled. This is the pumping figure. */
+  reductionRange: number;
+}
+
 export interface RollHandle {
-  /** `speed` in table units a second, `contact` how much of the ball is on the table, 0..1. */
-  update(speed: number, contact: number, pan: number, depth: number): void;
+  /**
+   * `speed` in table units a second, `pan` and `depth` where the ball is.
+   *
+   * `share` is this ball's portion of the one roll the table is allowed to
+   * make. It used to be `contact`, "how much of the ball is on the table" --
+   * which is meaningless in a simulation that never leaves the plane, and so
+   * was passed a hardcoded 1 by its only caller for as long as it existed.
+   * Rolls now sum to about one ball's worth however many are on the table,
+   * which is what stops multiball turning into four times the hiss.
+   */
+  update(speed: number, share: number, pan: number, depth: number): void;
   stop(): void;
 }
 
 /** A roll that never reached the graph. */
 const NO_ROLL: RollHandle = { update() {}, stop() {} };
 
-/** Speed at which a roll is as loud as it gets, and how loud that is. */
-const ROLL_FULL = 1800;
+/**
+ * Speed at which a roll is as loud as it gets, and how loud that is.
+ *
+ * `ROLL_FULL` used to be 1800 against a world `maxSpeed` of 3600, so a ball at
+ * half speed was already at the ceiling and everything above that sounded
+ * identical -- the roll spent an ordinary rally pinned flat, which is where the
+ * "one unwavering pitch" in the complaint came from. At the top speed the
+ * physics can actually produce, the roll now still has somewhere to go.
+ */
+const ROLL_FULL = 3200;
 const ROLL_GAIN = 0.12;
 /** Sliding speed at which a scrape is as loud as it gets, and how loud that is. */
 const SCRAPE_FULL = 1800;
@@ -407,6 +494,8 @@ export class AudioEngine {
 
   private master!: GainNode;
   private glue!: DynamicsCompressorNode;
+  /** Where the rooms and the delay return, downstream of the glue. */
+  private wetBus!: GainNode;
   private clip!: WaveShaperNode;
   /** The last node before the ceiling, which is where `headroom` listens. */
   private toClip!: AudioNode;
@@ -473,6 +562,8 @@ export class AudioEngine {
   private lite = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4;
   /** Rendered impulse responses, by spec. See `room`. */
   private readonly rooms = new Map<RoomSpec, AudioBuffer>();
+  /** Ticket for the in-flight hall swap, so a second one cannot strand the send. */
+  private swapping = 0;
   /** Held so the repeats can be retuned when the tempo changes. */
   private delayNode!: DelayNode;
   private noise!: AudioBuffer;
@@ -600,7 +691,17 @@ export class AudioEngine {
     // buys over twenty is that a hammer's transient, which is over in two, is
     // met here rather than handed whole to the ceiling.
     this.glue = ctx.createDynamicsCompressor();
-    this.glue.threshold.value = -16;
+    // Raised by the master fader's own default, because the fader now sits
+    // *after* this rather than before it. Feeding the compressor a signal that
+    // is 1.4 dB hotter through the same threshold made it work measurably
+    // harder for no reason -- sixteen notes went from 2.4 dB of reduction to
+    // 5.3 dB purely from the re-plumb. Moving the threshold by exactly the
+    // same amount puts the operating point back where it was tuned.
+    //
+    // It also makes the compression independent of the volume knob, which is
+    // how it should always have been: turning the output down used to reduce
+    // the amount of glue as a side effect.
+    this.glue.threshold.value = -16 + 20 * Math.log10(1 / DEFAULT_AUDIO.master);
     this.glue.knee.value = 10;
     this.glue.ratio.value = 3;
     this.glue.attack.value = 0.004;
@@ -622,21 +723,55 @@ export class AudioEngine {
     preClip.gain.value = 1 / CLIP_RANGE;
     this.clip = ctx.createWaveShaper();
     this.clip.curve = softClip(CLIP_POINTS);
-    this.clip.oversample = this.lite ? 'none' : '2x';
+    // Always oversampled, and never changed after this.
+    //
+    // Assigning `oversample` on a live node rebuilds its resampling filters
+    // with zeroed history and changes the node's latency -- a second pop on the
+    // master path, next to the hall's. And it was a false economy in the first
+    // place: this is one WaveShaper on the master bus against forty-eight
+    // voices, while the machines that get lite mode are precisely the ones
+    // whose mix is most likely to reach the flat top of the curve, where
+    // clipping without oversampling aliases and folds back inharmonically.
+    this.clip.oversample = '2x';
     this.toClip = air;
-    rumble.connect(this.glue).connect(air).connect(preClip).connect(this.clip).connect(ctx.destination);
+    air.connect(preClip).connect(this.clip).connect(ctx.destination);
 
+    // The master fader sits *after* the compressor, so that the reverb returns
+    // can join the mix without going through it and still be covered by the
+    // mute and the volume. Everything audible passes through here.
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.settings.master;
-    this.master.connect(rumble);
+    this.master.connect(air);
+
+    // Dry: the instruments and the table, which is what the glue is for.
+    const dryBus = ctx.createGain();
+    dryBus.connect(rumble);
+    rumble.connect(this.glue).connect(this.master);
+
+    // Wet: the rooms and the delay, which used to go through the compressor
+    // with everything else -- so every ball impact pulled the hall tail and the
+    // bed down with it at four milliseconds and let them back over a hundred
+    // and eighty. That is not glue, it is the reverb ducking to the ball, and
+    // it is most of what "the mix falls apart when a lot happens at once"
+    // sounds like. A tail is the one thing in the mix that should not flinch.
+    //
+    // It keeps its own rumble filter: the returns no longer pass through the
+    // dry one, and a room's longest, lowest tail is exactly the kind of thing
+    // that filter is there to keep out of the ceiling.
+    this.wetBus = ctx.createGain();
+    const wetRumble = ctx.createBiquadFilter();
+    wetRumble.type = 'highpass';
+    wetRumble.frequency.value = RUMBLE_HZ;
+    wetRumble.Q.value = 0.7;
+    this.wetBus.connect(wetRumble).connect(this.master);
 
     this.musicBus = ctx.createGain();
     this.musicBus.gain.value = this.settings.music;
-    this.musicBus.connect(this.master);
+    this.musicBus.connect(dryBus);
 
     this.fxBus = ctx.createGain();
     this.fxBus.gain.value = this.settings.effects;
-    this.fxBus.connect(this.master);
+    this.fxBus.connect(dryBus);
 
     // Two rooms, both rendered rather than recorded (see `rooms.ts`). The
     // music plays in a hall; the ball rolls inside a cabinet, whose whole tail
@@ -647,7 +782,7 @@ export class AudioEngine {
     this.hallConv.buffer = this.room(this.lite ? HALL_LITE : HALL);
     this.hallWet = ctx.createGain();
     this.hallWet.gain.value = REVERB_MAX * this.settings.reverb;
-    this.hallConv.connect(this.hallWet).connect(this.master);
+    this.hallConv.connect(this.hallWet).connect(this.wetBus);
     this.hallSend = ctx.createGain();
     this.hallSend.gain.value = 1;
     this.hallSend.connect(this.hallConv);
@@ -656,7 +791,7 @@ export class AudioEngine {
     cab.buffer = this.room(CAB);
     this.cabWet = ctx.createGain();
     this.cabWet.gain.value = CAB_MAX * this.settings.reverb;
-    cab.connect(this.cabWet).connect(this.master);
+    cab.connect(this.cabWet).connect(this.wetBus);
     this.cabSend = ctx.createGain();
     this.cabSend.gain.value = 1;
     this.cabSend.connect(cab);
@@ -686,7 +821,7 @@ export class AudioEngine {
     delay.connect(damp).connect(feedback).connect(delay);
     const delayOut = ctx.createGain();
     delayOut.gain.value = 0.6;
-    damp.connect(delayOut).connect(this.master);
+    damp.connect(delayOut).connect(this.wetBus);
     this.delaySend = ctx.createGain();
     this.delaySend.gain.value = 1;
     this.delaySend.connect(delay);
@@ -998,10 +1133,54 @@ export class AudioEngine {
    * Move the instrument's fader. Every way out carries the same value, and a
    * ramp rather than a set, so a drag reaches a held chord without zippering.
    */
-  private applyLeadGain(): void {
-    if (!this.ready || !this.ctx) return;
+  private applyLeadGain(at = 0, easing = false): void {
+    // `leadOut` as well as `ready`: this is now reached from the note path, and
+    // a note can arrive against an engine whose context has been handed to it
+    // without the graph having been built -- which is exactly what the tests do.
+    if (!this.ready || !this.ctx || !this.leadOut) return;
     const t = this.ctx.currentTime;
-    for (const g of Object.values(this.leadOut)) g.gain.setTargetAtTime(this.leadGain, t, 0.03);
+    const level = this.leadGain * this.polyScale;
+    for (const g of Object.values(this.leadOut)) {
+      // Unconditionally, and before anything else is written.
+      //
+      // A note shorter than its own onset margin releases while the ramp the
+      // note path scheduled is still in the future. A target curve does not
+      // displace a later ramp -- both stay on the timeline, and the ramp runs
+      // afterwards and lands the bus on the level that counted the note that
+      // has already gone. Nothing is scheduled after it, so it stays there:
+      // the instrument is left quiet until the next note or a settings change
+      // happens to recompute the bus.
+      holdAtTime(g.gain, t);
+      if (at > t) {
+        // Arriving *by* the onset, not heading towards it.
+        //
+        // A time constant cannot do this. `setTargetAtTime` is asymptotic, and
+        // the margin an onset waits out is capped at twelve milliseconds -- so
+        // with the 25ms constant this used, a chord's attacks began with the
+        // bus only about a third of the way down, and the transient still met
+        // the compressor at very nearly the old level. The transient is the
+        // whole point: it is what the compressor reacts to, and reacting to it
+        // is what the pumping was.
+        g.gain.linearRampToValueAtTime(level, at);
+      } else {
+        // No onset to meet -- a fader drag, or a note leaving. Smoothed, or a
+        // slider becomes a staircase in the waveform.
+        g.gain.setTargetAtTime(level, t, easing ? BUS_RECOVER : BUS_SMOOTH);
+      }
+    }
+  }
+
+  /**
+   * How far the lead bus is pulled down for the notes currently sounding.
+   *
+   * Counted over voices that are still held rather than over everything in the
+   * graph: a release tail is on its way out and should not be dragging the
+   * notes still under the player's fingers down with it.
+   */
+  private get polyScale(): number {
+    let held = 0;
+    for (const v of this.active) if (!v.releasing) held++;
+    return Math.pow(Math.max(1, held), -POLY_EXPONENT);
   }
 
   /** Where the pad bus belongs: the player's level, or nothing at all. */
@@ -1054,8 +1233,40 @@ export class AudioEngine {
     this.lite = on;
     this.shots.max = on ? MAX_SHOTS_LITE : MAX_SHOTS;
     if (!this.ready || !this.ctx) return;
-    this.hallConv.buffer = this.room(on ? HALL_LITE : HALL);
-    this.clip.oversample = on ? 'none' : '2x';
+    this.swapHall(on ? HALL_LITE : HALL);
+  }
+
+  /**
+   * Change the hall without a bang.
+   *
+   * Assigning a `ConvolverNode`'s buffer throws away its internal state, so a
+   * 2.4 second tail carrying the whole music bus stopped in one sample -- not a
+   * fade, the tail simply ceasing to exist. On the master path, that is a pop.
+   * It was audible every time the adaptive pass crossed the rung that turns
+   * lite mode on, in either direction, which on a marginal machine is often.
+   *
+   * So the send is taken down first, the buffer swapped while nothing is going
+   * through it, and the send brought back. What is lost is the tail that was in
+   * the air, which is what a room change costs anyway; what is gained is that
+   * it sounds like a room change rather than like a fault.
+   *
+   * `swapping` guards the pair, so a second flip arriving mid-swap does not
+   * leave the send parked at zero.
+   */
+  private swapHall(spec: RoomSpec): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const g = this.hallWet.gain;
+    const token = ++this.swapping;
+    holdAtTime(g, ctx.currentTime);
+    g.linearRampToValueAtTime(0, ctx.currentTime + HALL_SWAP);
+    setTimeout(() => {
+      if (!this.ctx || !this.ready || token !== this.swapping) return;
+      this.hallConv.buffer = this.room(spec);
+      const t = this.ctx.currentTime;
+      holdAtTime(g, t);
+      g.linearRampToValueAtTime(REVERB_MAX * this.settings.reverb, t + HALL_SWAP);
+    }, HALL_SWAP * 1000 + 30);
   }
 
   get isLite(): boolean { return this.lite; }
@@ -1137,6 +1348,127 @@ export class AudioEngine {
     return peak;
   }
 
+  /**
+   * Everything `headroom` says, plus what the compressor is doing to get there.
+   *
+   * `headroom` taps `toClip`, which is *after* the compressor — so by
+   * construction it cannot see the one fault it is most often reached for. A
+   * mix that pumps reads perfectly healthy there: the compressor is holding the
+   * peak down, which is exactly what makes the level look fine and the sound
+   * fall apart. `glue.reduction` is the missing number, and it is otherwise
+   * unreachable from outside this class.
+   *
+   * `reductionRange` is the pumping figure specifically. A compressor sitting at
+   * a steady −6 dB is glue; one swinging between 0 and −10 with every ball
+   * impact is a mix breathing in and out, and only the range tells them apart.
+   */
+  async measure(seconds = 2, opts: { silent?: boolean } = {}): Promise<MixReading> {
+    const empty: MixReading = {
+      seconds, peak: 0, rms: 0, reductionPeak: 0, reductionMean: 0, reductionRange: 0,
+    };
+    if (!this.running || !this.ctx) return empty;
+    const ctx = this.ctx;
+
+    // Measuring without listening.
+    //
+    // The mute a lost window applies sits on `master`, which is upstream of the
+    // tap — so an unfocused window measures perfect silence and says nothing
+    // about the mix. But simply unmuting to measure would put the sound through
+    // the speakers of whoever is working in another window, which is the thing
+    // the mute exists to prevent.
+    //
+    // So: take the speaker off the end of the chain and open the master behind
+    // it. The analyser keeps the sub-graph alive and reading, and nothing
+    // reaches the device. Restored to whatever the mute state says *now*, not
+    // to what it said when this started, so a mute arriving mid-measurement is
+    // not undone by the restore.
+    const silent = opts.silent ?? false;
+    if (silent) {
+      try { this.clip.disconnect(ctx.destination); } catch { /* already apart */ }
+      this.master.gain.cancelScheduledValues(ctx.currentTime);
+      this.master.gain.setValueAtTime(this.settings.master, ctx.currentTime);
+    }
+
+    const meter = ctx.createAnalyser();
+    meter.fftSize = 2048;
+    this.toClip.connect(meter);
+    const window = new Float32Array(meter.fftSize);
+    const until = ctx.currentTime + seconds;
+    const giveUp = Date.now() + (seconds + 1) * 1000;
+    let peak = 0, sumSq = 0, samples = 0;
+    let redMin = 0, redMax = -Infinity, redSum = 0, redN = 0;
+    try {
+      while (ctx.currentTime < until && Date.now() < giveUp) {
+        // Re-asserted every poll, not just at the start. The window losing
+        // focus mutes the master, and a measurement that began before that
+        // happened would otherwise quietly return silence -- which is a worse
+        // answer than no answer, because it looks like one.
+        if (silent) {
+          this.master.gain.cancelScheduledValues(ctx.currentTime);
+          this.master.gain.setValueAtTime(this.settings.master, ctx.currentTime);
+        }
+        meter.getFloatTimeDomainData(window);
+        for (const s of window) {
+          const a = Math.abs(s);
+          if (a > peak) peak = a;
+          sumSq += s * s;
+        }
+        samples += window.length;
+        // Reduction is negative dB, zero when the compressor is asleep.
+        const r = this.glue.reduction;
+        if (r < redMin) redMin = r;
+        if (r > redMax) redMax = r;
+        redSum += r;
+        redN++;
+        await new Promise((done) => setTimeout(done, 16));
+      }
+    } finally {
+      this.toClip.disconnect(meter);
+      if (silent) {
+        this.clip.connect(ctx.destination);
+        this.master.gain.setValueAtTime(
+          this.muted ? 0 : this.settings.master, ctx.currentTime,
+        );
+      }
+    }
+    return {
+      seconds,
+      peak,
+      rms: samples ? Math.sqrt(sumSq / samples) : 0,
+      reductionPeak: redMin,
+      reductionMean: redN ? redSum / redN : 0,
+      reductionRange: redN ? (redMax === -Infinity ? 0 : redMax - redMin) : 0,
+    };
+  }
+
+  /**
+   * How far ahead of `currentTime` an envelope has to be anchored to survive.
+   *
+   * `currentTime` is the *start* of the last completed render quantum, so an
+   * event scheduled at it is already behind the quantum being rendered now.
+   * When the whole envelope lands in the past both endpoints are clamped, and
+   * the gain steps from silence to full amplitude at the next quantum boundary
+   * -- on oscillators that have been free-running since the note began, so the
+   * step lands wherever in the cycle they happen to be. That is a click, on
+   * every note.
+   *
+   * This used to be applied only to voices that happened to carry a noise
+   * layer, which left every other instrument with no margin at all.
+   *
+   * `baseLatency` and not `outputLatency`: the question is how far ahead the
+   * *render head* is, which is what `baseLatency` describes. `outputLatency`
+   * adds the whole device pipeline -- tens of milliseconds on some drivers --
+   * and putting that between a key and its note would trade a click for a
+   * sluggish instrument, which is a worse bargain and the opposite of what this
+   * engine is for.
+   */
+  private get onsetMargin(): number {
+    const ctx = this.ctx;
+    if (!ctx) return 0;
+    const quanta = NOISE_LOOKAHEAD_FRAMES / ctx.sampleRate;
+    return Math.min(MAX_ONSET_MARGIN, Math.max(quanta, ctx.baseLatency ?? 0));
+  }
+
   /** Measured round trip, for the diagnostics panel. */
   get latencyMs(): number {
     if (!this.ctx) return 0;
@@ -1193,8 +1525,7 @@ export class AudioEngine {
     // Node construction can take several milliseconds on a busy machine.
     // Anchor the audible attack only after the graph is ready; the sources
     // have been running silently behind makeChain's muted amplifier.
-    const onset = this.ctx.currentTime
-      + (bursts.length ? NOISE_LOOKAHEAD_FRAMES / this.ctx.sampleRate : 0);
+    const onset = this.ctx.currentTime + this.onsetMargin;
     const peak = velocityPeak(v, spec.velDb) * spec.gain * k.level * h.level;
     this.applyEnvelope(chain, spec, freq, v, onset, k, h, peak);
     this.duck(onset);
@@ -1209,6 +1540,10 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
+    // After `cull`, so the count the bus is set from is the one that survived,
+    // and aimed at this note's own onset so the new level is in place before
+    // its attack rather than on its way there.
+    this.applyLeadGain(onset);
   }
 
   /**
@@ -1280,6 +1615,10 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
+    // After `cull`, so the count the bus is set from is the one that survived,
+    // and aimed at this note's own onset so the new level is in place before
+    // its attack rather than on its way there.
+    this.applyLeadGain(onset);
   }
 
   // ------------------------------------------------------- voice builders ---
@@ -1734,6 +2073,9 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const firstRelease = !voice.releasing;
     voice.releasing = true;
+    // One fewer note held is one fewer note to share the bus with -- eased,
+    // because this note is on its way out rather than gone.
+    if (firstRelease) this.applyLeadGain(0, true);
     const requestedStop = t + seconds + RELEASE_STOP_PAD + reprieve;
     const previousStop = voice.stopAt;
     // A voice already on a quicker fade needs no new automation. Holding and
@@ -1826,6 +2168,11 @@ export class AudioEngine {
       this.sustained.add(voice.note);
     }
     this.fading = [];
+    // Those voices are held again, so they count towards the share again. The
+    // releases that let them go had already raised the bus on the way down;
+    // without this the recaught chord sits at the one-note level until some
+    // unrelated note or release happens to correct it, and then jumps.
+    this.applyLeadGain();
   }
 
   /** Oldest-first voice stealing, so a two-handed run never runs out. */
@@ -1927,9 +2274,12 @@ export class AudioEngine {
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     src.connect(bp).connect(ng).connect(out);
     src.start(t, Math.random() * 0.8, 0.06);
-    // Everything above reaches the buses through the panner, so cutting it
-    // loose silences the strike whether it has started yet or not.
-    return { cancel: () => pannerNode.disconnect() };
+    // Taken back with a ramp rather than by pulling the node out of the graph.
+    // `disconnect` on a sounding voice is full scale to zero in one sample, and
+    // this is reached from `pause` and from leaving the mode -- so pausing
+    // mid-flourish used to truncate whatever was ringing. `cutShort` is the
+    // same few milliseconds the shot budget already uses to take a slot back.
+    return { cancel: () => cutShort(out, ctx.currentTime) };
   }
 
   // ------------------------------------------------------------ the table ---
@@ -2022,7 +2372,7 @@ export class AudioEngine {
     if (m.sweep) this.sweep(out, m.sweep, level, t);
     this.place(out, pan, MECH_HALL, MECH_CAB);
     if (m.surface) this.hit(m.surface.tag, m.surface.energy * IMPACT_FULL * level, { pan, at: t });
-    return { cancel: () => out.disconnect() };
+    return { cancel: () => cutShort(out, ctx.currentTime) };
   }
 
   /**
@@ -2050,17 +2400,30 @@ export class AudioEngine {
     const panner = ctx.createStereoPanner();
     src.connect(hp).connect(bp).connect(g).connect(panner);
     panner.connect(this.fxBus);
+    // The cabinet send, well down from where it was.
+    //
+    // `CAB` carries a 420 Hz resonance, and convolving *continuous* noise with
+    // a resonant impulse puts a steady tone on top of the hiss. Every other
+    // caller of this send is a one-shot, which is over before the resonance can
+    // establish itself; the roll is the only thing that ever drives it without
+    // stopping, and that tone is the "hum" half of the complaint. Kept rather
+    // than cut, because a ball should sound like it is inside a box -- but at a
+    // quarter of what it was.
     const box = ctx.createGain();
-    box.gain.value = 0.4;
+    box.gain.value = 0.1;
     panner.connect(box).connect(this.cabSend);
-    src.start();
+    // Every other noise user in this file starts somewhere random in the
+    // buffer; this one did not. Four rolls opened in the same frame -- which is
+    // what a multiball spawn is -- therefore played *identical* noise and summed
+    // coherently, at four times the amplitude instead of twice.
+    src.start(ctx.currentTime, Math.random() * 0.9);
     let stopped = false;
     return {
-      update: (speed, contact, pan, depth) => {
+      update: (speed, share, pan, depth) => {
         if (stopped) return;
         const t = ctx.currentTime;
         const s = clamp01(speed / ROLL_FULL);
-        const level = Math.pow(s, 1.3) * clamp01(contact) * ROLL_GAIN * (1 - 0.35 * clamp01(depth));
+        const level = Math.pow(s, 1.3) * clamp01(share) * ROLL_GAIN * (1 - 0.35 * clamp01(depth));
         g.gain.setTargetAtTime(level, t, 0.05);
         bp.frequency.setTargetAtTime(300 + 1500 * s, t, 0.08);
         panner.pan.setTargetAtTime(clamp(pan, -1, 1), t, 0.05);
@@ -2185,16 +2548,23 @@ export class AudioEngine {
     const shorten = 1 - (spec.velDecay ?? 0) * (1 - v);
     const brighten = Math.pow(2, (spec.velBright ?? 0) * (v - 0.5));
 
-    const out = ctx.createStereoPanner();
-    out.pan.value = clamp(spec.pan, -1, 1);
-    out.connect(this.musicBus);
+    // A gain in front of the panner, purely so there is something to ramp: a
+    // drum placed ahead on the clock can be taken back, and taking it back by
+    // disconnecting the panner is full scale to zero in one sample. Every
+    // source below still connects to `out`, which is now this rather than the
+    // panner.
+    const out = ctx.createGain();
+    const pannerNode = ctx.createStereoPanner();
+    pannerNode.pan.value = clamp(spec.pan, -1, 1);
+    out.connect(pannerNode);
+    pannerNode.connect(this.musicBus);
     const rev = ctx.createGain();
     rev.gain.value = spec.reverb;
-    out.connect(rev).connect(this.hallSend);
+    pannerNode.connect(rev).connect(this.hallSend);
     const box = ctx.createGain();
     box.gain.value = 0.18;
-    out.connect(box).connect(this.cabSend);
-    const handle: Scheduled = { cancel: () => out.disconnect() };
+    pannerNode.connect(box).connect(this.cabSend);
+    const handle: Scheduled = { cancel: () => cutShort(out, ctx.currentTime) };
 
     if (spec.noiseFreq > 0) {
       // A handclap is several bursts a few milliseconds apart; every other

@@ -76,7 +76,7 @@ interface EngineInternals {
 }
 
 interface GraphInternals {
-  leadOut: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', FakeNode>;
+  leadOut: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', FakeGainNode>;
   padDuck: FakeGainNode;
   padGen: FakeNode;
   lfoColour: FakeNode;
@@ -142,9 +142,12 @@ function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
   engine.ready = true;
 
   const state = engine as unknown as EngineInternals & GraphInternals;
+  // With gains, because the note path now sets them: the lead bus is pulled
+  // down as more notes are held, so `noteOn` reaches `applyLeadGain`.
   state.leadOut = {
-    dry: connectable({}), hall: connectable({}), cab: connectable({}),
-    delay: connectable({}), body: connectable({}),
+    dry: connectable({ gain: param(1) }), hall: connectable({ gain: param(1) }),
+    cab: connectable({ gain: param(1) }), delay: connectable({ gain: param(1) }),
+    body: connectable({ gain: param(1) }),
   };
   state.padDuck = connectable({ gain: param(1) });
   state.padGen = connectable({});
@@ -289,10 +292,34 @@ describe('voice attack envelopes', () => {
 
     engine.noteOn(60, 0.5);
 
+    // Past the moment the graph finished, and by a margin: `currentTime` is
+    // the start of the last *completed* quantum, so anchoring exactly on it
+    // puts the envelope inside a quantum the audio thread has already
+    // rendered. Bounded, because the margin is latency a player can feel.
     const gain = gains[0]!.gain;
-    expect(gain.setValueAtTime).toHaveBeenCalledWith(0.0001, 1.008);
-    expect(gain.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeGreaterThan(1.008);
-    expect(state.active[0]!.startedAt).toBe(1.008);
+    const onset = gain.setValueAtTime.mock.calls[0]![1] as number;
+    expect(onset).toBeGreaterThan(1.008);
+    expect(onset).toBeLessThanOrEqual(1.008 + 0.012);
+    expect(gain.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeGreaterThan(onset);
+    expect(state.active[0]!.startedAt).toBe(onset);
+  });
+
+  it('gives a voice with no noise layer the same margin as one with', () => {
+    // The margin used to be added only when a voice happened to carry a noise
+    // burst, which left every other instrument anchored on a bare
+    // `currentTime` -- and a full-amplitude step from silence on every note.
+    const quiet = graphHarness(1, { lead: 'sub-bass' });
+    quiet.state.addLayer = vi.fn(() => { quiet.ctx.currentTime = 1.008; return []; });
+    quiet.engine.noteOn(60, 0.5);
+    const quietOnset = quiet.gains[0]!.gain.setValueAtTime.mock.calls[0]![1] as number;
+
+    const noisy = graphHarness(1, { lead: 'grand' });
+    noisy.state.addLayer = vi.fn(() => []);
+    noisy.state.prepareNoise = vi.fn(() => { noisy.ctx.currentTime = 1.008; return vi.fn(); });
+    noisy.engine.noteOn(60, 0.5);
+    const noisyOnset = noisy.gains[0]!.gain.setValueAtTime.mock.calls[0]![1] as number;
+
+    expect(quietOnset).toBeCloseTo(noisyOnset, 6);
   });
 
   it('starts prepared key noise and its voice envelope at one guarded onset', () => {
@@ -754,5 +781,227 @@ describe('room caching', () => {
     expect(state.room(HALL)).toBe(full);
     expect(state.room(HALL_LITE)).toBe(lite);
     expect(made()).toBe(2);
+  });
+});
+
+/**
+ * Lite mode used to change two live nodes on the master path: the convolver's
+ * buffer, which throws away a 2.4 second tail in one sample, and the
+ * WaveShaper's oversampling, which rebuilds its filters with zeroed history and
+ * moves its latency. Both are pops, and the adaptive quality ladder crosses the
+ * rung that triggers them in both directions.
+ */
+describe('changing rooms', () => {
+  function liteHarness() {
+    vi.useFakeTimers();
+    const engine = new AudioEngine();
+    const wetGain = param(1.7);
+    const conv: { buffer: unknown } = { buffer: 'the full hall' };
+    const clip = { oversample: '2x' };
+    const state = engine as unknown as {
+      ctx: unknown; ready: boolean; hallWet: unknown; hallConv: unknown;
+      clip: unknown; rooms: Map<unknown, unknown>; shots: { max: number };
+    };
+    state.ctx = { currentTime: 5, sampleRate: 48000 };
+    state.ready = true;
+    state.hallWet = { gain: wetGain };
+    state.hallConv = conv;
+    state.clip = clip;
+    // Pre-seed the cache so the swap does not try to render a real room.
+    state.rooms.set(HALL_LITE, 'the short hall');
+    return { engine, wetGain, conv, clip };
+  }
+
+  it('takes the hall send down before the buffer changes, and brings it back', () => {
+    const { engine, wetGain, conv } = liteHarness();
+    engine.setLite(true);
+
+    // Down first, and the tail still the old one.
+    expect(wetGain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+    expect(conv.buffer).toBe('the full hall');
+
+    vi.runAllTimers();
+    expect(conv.buffer).toBe('the short hall');
+    // And back up to where the reverb setting says it belongs.
+    const last = wetGain.linearRampToValueAtTime.mock.calls.at(-1);
+    expect(last?.[0]).toBeGreaterThan(0);
+    vi.useRealTimers();
+  });
+
+  it('leaves the oversampling on the clipper alone', () => {
+    const { engine, clip } = liteHarness();
+    engine.setLite(true);
+    vi.runAllTimers();
+    expect(clip.oversample).toBe('2x');
+    vi.useRealTimers();
+  });
+});
+
+/**
+ * The bed has always divided its gain by its note count. The player's own
+ * hands never were, so the master compressor was the only thing standing
+ * between a two-handed chord and the ceiling -- and it paid for that with
+ * several decibels of movement on every chord, which is what a mix breathing
+ * sounds like.
+ */
+describe('polyphony on the lead bus', () => {
+  /**
+   * The bus is written two ways -- ramped to a note's onset, smoothed when a
+   * note leaves or a fader moves -- so the last value scheduled has to be read
+   * across both rather than out of one mock.
+   */
+  const rig = () => {
+    const h = graphHarness(1, { lead: 'sub-bass' });
+    h.state.addLayer = vi.fn(() => []);
+    // The pedal touches the soundboard send on its way through.
+    (h.state as unknown as { bodyWet: unknown }).bodyWet = connectable({ gain: param(0.35) });
+    const log: number[] = [];
+    // A small model of the parameter's own timeline, because one of these
+    // faults is not about which call was made but about which of two events
+    // runs last. Events carry a time, and a cancellation drops everything from
+    // its own time onwards, exactly as the real parameter does.
+    const timeline: { time: number; value: number; tc?: number }[] = [];
+    const drop = (from: number) => {
+      for (let i = timeline.length - 1; i >= 0; i--) if (timeline[i]!.time >= from) timeline.splice(i, 1);
+    };
+    const gain = h.state.leadOut.dry.gain;
+    gain.linearRampToValueAtTime = vi.fn((v: number, time: number) => {
+      log.push(v); timeline.push({ time, value: v });
+    });
+    gain.setTargetAtTime = vi.fn((v: number, time: number, tc: number) => {
+      log.push(v); timeline.push({ time, value: v, tc });
+    });
+    gain.cancelAndHoldAtTime = vi.fn((from: number) => { drop(from); });
+    gain.cancelScheduledValues = vi.fn((from: number) => { drop(from); });
+    // The pin `holdAtTime` writes afterwards is not a destination, so it must
+    // not be mistaken for one when the last event is read back.
+    gain.setValueAtTime = vi.fn(() => {});
+    return { ...h, log, timeline };
+  };
+  const busLevel = (h: { log: number[] }) => h.log.at(-1) as number;
+  /** Where the timeline actually leaves the bus, once every event has run. */
+  const settlesAt = (h: { timeline: { time: number; value: number }[] }) =>
+    [...h.timeline].sort((a, b) => a.time - b.time).at(-1)?.value;
+
+  it('pulls the bus down as more notes are held', () => {
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const one = busLevel(h);
+    for (const n of [62, 64, 65, 67, 69, 71, 72]) h.engine.noteOn(n, 0.5);
+    const eight = busLevel(h);
+
+    expect(eight).toBeLessThan(one);
+    // A quarter power of the count: eight notes at about 0.59 of one.
+    expect(eight / one).toBeCloseTo(Math.pow(8, -0.25), 3);
+  });
+
+  it('gives the level back as notes are let go', () => {
+    const h = rig();
+    for (const n of [60, 62, 64, 65]) h.engine.noteOn(n, 0.5);
+    const four = busLevel(h);
+    h.engine.noteOff(62);
+    h.engine.noteOff(64);
+    const two = busLevel(h);
+    expect(two).toBeGreaterThan(four);
+  });
+
+  it('has the new level in place by the time the note is audible', () => {
+    // A time constant cannot do this: the margin an onset waits out is capped
+    // at twelve milliseconds, so a 25ms constant leaves a chord's attacks
+    // beginning with the bus only a third of the way down -- and the transient,
+    // which is the thing the compressor reacts to, still arrives at nearly the
+    // old level.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const ramps = h.state.leadOut.dry.gain.linearRampToValueAtTime.mock.calls;
+    expect(ramps.length).toBeGreaterThan(0);
+    const [, arrivesAt] = ramps.at(-1)!;
+    const onset = h.state.active[0]!.startedAt;
+    // Arrives by the onset, not after it.
+    expect(arrivesAt).toBeLessThanOrEqual(onset + 1e-9);
+  });
+
+  it('puts the bus back when the pedal recatches a chord', () => {
+    // Releasing the notes raised the bus as the held count fell. Recatching
+    // them makes them count again, and without telling the bus the recaught
+    // chord sits at the one-note level until something unrelated corrects it.
+    const h = rig();
+    const notes = [60, 64, 67, 72];
+    for (const n of notes) h.engine.noteOn(n, 0.5);
+    const four = busLevel(h);
+
+    // Pedal down, keys let go: still four notes held, so nothing moves.
+    h.engine.setSustain(1);
+    for (const n of notes) h.engine.noteOff(n);
+    expect(busLevel(h)).toBeCloseTo(four, 6);
+
+    // Pedal up: they start releasing, stop counting, and the bus comes back up.
+    h.engine.setSustain(0);
+    expect(busLevel(h)).toBeGreaterThan(four);
+
+    // Pedal straight back down catches them, so they count again.
+    h.engine.setSustain(1);
+    expect(busLevel(h)).toBeCloseTo(four, 6);
+  });
+
+  it('does not leave a stale ramp behind when a note is shorter than its onset', () => {
+    // The note path schedules the bus to arrive at a future onset. A note
+    // released before that onset used to write its target curve *underneath*
+    // that pending ramp rather than cancelling it -- and a target does not
+    // displace a later ramp. Both ran, the ramp ran last, and it landed the
+    // bus on the level that counted the note that had already gone. Nothing
+    // was scheduled after it, so it stayed there: an instrument left quiet
+    // until some unrelated thing recomputed the bus.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const alone = settlesAt(h);
+
+    h.engine.noteOn(64, 0.5);
+    const onset = h.state.active[1]!.startedAt;
+    // The clock has not reached the onset, so the second note's ramp is still
+    // in the future when the key comes back up. That is the whole scenario.
+    expect(onset).toBeGreaterThan(h.ctx.currentTime);
+    h.engine.noteOff(64);
+
+    // One note is held, so the bus belongs back where one note left it.
+    expect(settlesAt(h)).toBeCloseTo(alone as number, 6);
+  });
+
+  it('gives the bus back slowly, because the notes it gave it back for are still sounding', () => {
+    // Attenuation has to beat a note to the compressor. Recovery has the
+    // opposite problem: a half-pedalled release runs for nearly three seconds,
+    // and racing the bus back up in seventy-five milliseconds while every one
+    // of those tails is still near full amplitude is an audible swell on
+    // key-up -- with a second helping of compression behind it.
+    const h = rig();
+    for (const n of [60, 64, 67, 72]) h.engine.noteOn(n, 0.5);
+    const held = h.timeline.at(-1)!;
+
+    // Half pedal: the releases are the stretched ones, and the tails outlive
+    // the key-up by seconds rather than milliseconds.
+    h.engine.setSustain(0.5);
+    for (const n of [60, 64, 67, 72]) h.engine.noteOff(n);
+    const letGo = h.timeline.at(-1)!;
+    expect(letGo.value).toBeGreaterThan(held.value);
+    expect(letGo.tc).toBeGreaterThanOrEqual(0.4);
+
+    // The other direction keeps its hurry. The pedal going down catches those
+    // notes, so they count again and the bus goes back *down* -- and down is
+    // the direction a transient is waiting on.
+    h.engine.setSustain(1);
+    const caught = h.timeline.at(-1)!;
+    expect(caught.value).toBeLessThan(letGo.value);
+    expect(caught.tc).toBeLessThanOrEqual(0.05);
+  });
+
+  it('does not count a note that is already on its way out', () => {
+    // A release tail is leaving and should not go on holding down the notes
+    // still under the player's fingers.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const one = busLevel(h);
+    h.engine.noteOn(64, 0.5);
+    h.engine.noteOff(64);
+    expect(busLevel(h)).toBeCloseTo(one, 6);
   });
 });
