@@ -57,9 +57,7 @@ function wallColors(style: WallStyle, theme: Theme): [string, string] {
  *
  * Every one of them lands on a halo laid down at the same point a line earlier,
  * and a bumper's cap has a 96%-lightness disc under it besides — so a near-white
- * glyph had nothing to read against. Worse than the same problem in PlayTune,
- * in fact: these are drawn *before* `composite()`, so the additive bloom goes
- * over the letter rather than under it.
+ * glyph had nothing to read against.
  *
  * One object, rewritten in place rather than allocated per label per frame, in
  * the same spirit as `TableCamera.project` writing into a point it was handed.
@@ -69,6 +67,15 @@ const INK_EDGE: LabelStyle = { edge: '' };
 function inkEdge(pal: TablePalette): LabelStyle {
   INK_EDGE.edge = pal.void;
   return INK_EDGE;
+}
+
+/** A pitch name, held back until the emissive layer has been composited. */
+interface QueuedLabel {
+  x: number;
+  y: number;
+  z: number;
+  text: string;
+  alpha: number;
 }
 
 /**
@@ -92,6 +99,38 @@ export class PinballRenderer {
   private get bounds(): { minX: number; maxX: number; minY: number; maxY: number } { return this.stage.bounds; }
   private get t(): number { return this.stage.t; }
   private hue(note: number): number { return this.stage.hue(note); }
+
+  /**
+   * Pitch names, collected during the frame and drawn once it is composited.
+   *
+   * They used to be drawn where they are computed, in the middle of the element
+   * pass — which is before `composite()`, whose additive blend then laid a
+   * bumper's near-white halo core straight over the letter. At the exact moment
+   * a bumper flashes, which is when a player most wants to read which note it
+   * just played, the name vanished: outline, fill and all. Queueing them puts
+   * them after the composite, where PlayTune has always drawn its aura names
+   * and for the same reason.
+   *
+   * The slots are reused between frames rather than reallocated, so a table
+   * full of labelled elements does not churn an object each per frame.
+   */
+  private readonly labels: QueuedLabel[] = [];
+  private labelCount = 0;
+
+  private queueLabel(x: number, y: number, z: number, text: string, alpha: number): void {
+    const slot = this.labels[this.labelCount] ??= { x: 0, y: 0, z: 0, text: '', alpha: 0 };
+    slot.x = x; slot.y = y; slot.z = z; slot.text = text; slot.alpha = alpha;
+    this.labelCount++;
+  }
+
+  private drawQueuedLabels(ctx: CanvasRenderingContext2D): void {
+    const pal = this.stage.palette;
+    for (let i = 0; i < this.labelCount; i++) {
+      const l = this.labels[i];
+      this.stage.label(ctx, l.x, l.y, l.z, l.text, pal.ink, l.alpha, undefined, inkEdge(pal));
+    }
+    this.labelCount = 0;
+  }
 
   // ------------------------------------------------------------- baking ---
 
@@ -306,6 +345,9 @@ export class PinballRenderer {
     stage.particles.draw(em, stage.cam);
 
     stage.composite();
+    // Above the composited glow, so a flashing bumper cannot brighten its own
+    // name away. Before the roll and the glass, as PlayTune orders it too.
+    this.drawQueuedLabels(ctx);
     stage.drawRoll();
     this.drawPops(ctx, game);
     stage.drawGlass();
@@ -327,7 +369,6 @@ export class PinballRenderer {
     hints: DrawHints,
   ): void {
     const stage = this.stage;
-    const pal = stage.palette;
 
     for (const L of hints.landings) {
       const near = clamp01((1.4 - L.t) / 1.1);
@@ -349,10 +390,9 @@ export class PinballRenderer {
       const k = game.keybed.keys[L.lane];
       if (!k) continue;
       const g = k.geom;
-      stage.label(
-        ctx,
+      this.queueLabel(
         g.drawCx + g.nx * 12, g.drawCy + g.ny * 12, g.z + 18,
-        noteName(g.note), pal.ink, 0.75 * near, undefined, inkEdge(pal),
+        noteName(g.note), 0.75 * near,
       );
     }
   }
@@ -443,7 +483,7 @@ export class PinballRenderer {
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 0.38, el.z * squash + 2, tone(capHue, 100, 96, 0.5 + pulse * 0.5));
 
         this.stage.halo(em, el.x, el.y, el.z, capHue, el.r * 2.6, flash * 0.9 + pulse * 0.5 + env * 0.35);
-        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 14, noteName(el.note), pal.ink, 0.55, undefined, inkEdge(pal));
+        if (this.quality.labels && el.note !== null) this.queueLabel(el.x, el.y, el.z + 14, noteName(el.note), 0.55);
         break;
       }
 
@@ -481,7 +521,7 @@ export class PinballRenderer {
         ctx.lineWidth = 3.5 * scale;
         ctx.stroke();
         this.stage.halo(em, el.x, el.y, el.z, hue, 54, flash + (energised ? 0.4 : 0));
-        if (this.quality.labels && el.note !== null) this.stage.label(ctx, el.x, el.y, el.z + 12, noteName(el.note), pal.ink, 0.6, undefined, inkEdge(pal));
+        if (this.quality.labels && el.note !== null) this.queueLabel(el.x, el.y, el.z + 12, noteName(el.note), 0.6);
         break;
       }
 
