@@ -17,11 +17,14 @@ import { findBedVoice, findLeadVoice } from '../audio/voices';
 import { THEMES } from '../render/theme';
 import { TABLE_SIZE } from '../render/stage';
 import { themeSettings } from '../render/themeSettings';
+import { buildLine } from '../app/build';
+import { updates } from '../app/updates';
 
 export type Screen =
   | 'home'
   | 'settings'
   | 'calibrate'
+  | 'about'
   | 'paused'
   | 'gameover'
   | 'songs'
@@ -44,7 +47,7 @@ export class Overlay {
   /** Index of the highlighted mode card on the home screen. */
   private cursor = 0;
   /**
-   * Where Back should go from settings or calibration.
+   * Where Back should go from settings, calibration or About.
    *
    * Settings can be opened from the menu, from a pause, or from the song list,
    * and it has to return to whichever it was — inferring it from "is a mode
@@ -66,13 +69,27 @@ export class Overlay {
         else this.back();
       }
     });
+
+    // An update can arrive at any moment, and the two screens that say so are
+    // both static once drawn. Redrawing whichever is up is enough: it costs
+    // nothing per frame, and re-showing About over About keeps `returnTo`.
+    updates.onChange(() => {
+      if (this.screen === 'home' || this.screen === 'about') this.show(this.screen);
+    });
   }
 
   get visible(): boolean { return this.screen !== null; }
 
   show(screen: Screen): void {
-    const sub = screen === 'settings' || screen === 'calibrate';
-    const wasSub = this.screen === 'settings' || this.screen === 'calibrate';
+    // The sub screens are the ones that came from somewhere and owe it a way
+    // back. Note what that rules out: a sub screen may not offer a button to
+    // another sub screen, because `wasSub` would then keep the older return
+    // address and Back would skip a step. Settings and Calibrate already work
+    // around it by hardcoding where Cancel goes; About sidesteps it by being
+    // reachable only from home, and offering only Back.
+    const sub = screen === 'settings' || screen === 'calibrate' || screen === 'about';
+    const wasSub = this.screen === 'settings' || this.screen === 'calibrate'
+      || this.screen === 'about';
     if (sub && !wasSub) this.returnTo = this.screen ?? (this.shell.playing ? 'paused' : 'home');
     this.screen = screen;
     this.live = null;
@@ -91,6 +108,7 @@ export class Overlay {
     if (screen === 'home') this.renderHome();
     else if (screen === 'settings') this.renderSettings();
     else if (screen === 'calibrate') this.renderCalibrate();
+    else if (screen === 'about') this.renderAbout();
     else if (screen === 'paused') this.renderPaused();
     else if (screen === 'gameover') this.renderGameOver();
     else if (screen === 'songs') this.renderSongs();
@@ -118,6 +136,17 @@ export class Overlay {
     } else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') {
       this.cursor = (this.cursor - 1 + modes.length) % modes.length;
     } else if (e.code === 'Enter' || e.code === 'Space') {
+      // Enter and Space are how a focused button is pressed, so while one has
+      // the keyboard they belong to it rather than to the mode cards. Without
+      // this, tabbing to Settings or About and pressing Enter started the
+      // highlighted mode first and opened the panel over the run — and Back
+      // from there led to a pause screen for a game nobody asked to play. A
+      // focused mode card is the same bug quietly: it would start whichever
+      // mode the cursor was on rather than the one under the finger.
+      //
+      // Only these two keys. The arrows and digits below are not how a button
+      // is activated, so they stay shortcuts wherever the focus happens to be.
+      if (this.hasControlFocus()) return;
       this.shell.play(modes[this.cursor].id);
       return;
     } else if (/^Digit[1-9]$/.test(e.code)) {
@@ -130,6 +159,17 @@ export class Overlay {
     e.preventDefault();
     const cards = this.body.querySelectorAll('.mode-card');
     cards.forEach((el, i) => el.classList.toggle('on', i === this.cursor));
+  }
+
+  /**
+   * True while a control in the panel has the keyboard.
+   *
+   * The same claim `Shell.hudHasFocus` makes for the HUD, on the other piece
+   * of chrome that can hold focus.
+   */
+  private hasControlFocus(): boolean {
+    const el = document.activeElement;
+    return el !== null && el !== document.body && this.body.contains(el);
   }
 
   private deviceLine(): string {
@@ -174,6 +214,8 @@ export class Overlay {
 
       <div class="actions">
         <button id="btn-settings">Settings</button>
+        <button id="btn-about">About${updates.state === 'ready'
+          ? '<span class="dot" title="An update is ready"></span>' : ''}</button>
         <span class="diag"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> to choose &middot; <kbd>Enter</kbd> to play</span>
       </div>
     `;
@@ -182,6 +224,86 @@ export class Overlay {
       el.addEventListener('click', () => this.shell.play(el.dataset.mode as GameModeId));
     }
     this.body.querySelector('#btn-settings')!.addEventListener('click', () => this.show('settings'));
+    this.body.querySelector('#btn-about')!.addEventListener('click', () => this.show('about'));
+  }
+
+  // --------------------------------------------------------------- about ---
+
+  /**
+   * What this is, and which copy of it you are running.
+   *
+   * The build rows are not vanity. This installs as a PWA, so what you are
+   * running is whatever the service worker last cached — and a worker still
+   * handing out an old bundle looks exactly like a bug that was never fixed.
+   * These are the lines to quote when something looks wrong, and the button
+   * beneath them is how you get out of it without clearing site data.
+   *
+   * Nothing here is live. Every value is read once as the panel is built, the
+   * way home and pause are; when an update lands, `updates.onChange` in the
+   * constructor redraws the whole screen rather than this keeping a ticker.
+   */
+  private renderAbout(): void {
+    const repo = 'https://github.com/Aqutiv/PianoBall';
+
+    // Four states, four different things worth saying. `unsupported` is the
+    // honest answer under `npm run dev`, where no service worker is built at
+    // all, and on any browser that has none — better than a button that would
+    // quietly do nothing.
+    const update = {
+      unsupported: '<span class="diag">Not available here</span>',
+      idle: '<span class="diag">You\'re on the latest build</span> <button id="btn-check">Check</button>',
+      checking: '<span class="diag">Checking&hellip;</span>',
+      ready: '<span class="diag">An update is ready</span> <button class="primary" id="btn-update">Update now</button>',
+    }[updates.state];
+
+    this.body.innerHTML = `
+      <h1>PianoBall</h1>
+      <p class="lede">Your MIDI keyboard, three ways.</p>
+
+      <p>PianoBall started from a small complaint: a piano keyboard is one of the
+        most expressive input devices ever mass-produced, and almost nothing
+        outside of music software does anything with it. If every key can tell how
+        hard you hit it and where, what else could a key be?</p>
+      <p>A flipper, it turns out. The answer needed a pinball table with
+        thirty-two of them, a synthesiser with no recordings in it, and a collision
+        solver that cannot tunnel by construction rather than by tuning. The first
+        commit was on 29 August 2026.</p>
+      <p><strong>Nothing is sampled.</strong> The rooms are impulse responses
+        written from a handful of numbers at start-up, a plucked string is a
+        Karplus&ndash;Strong loop rendered the first time you ask for that note,
+        and a piano is three strings a few cents apart over a rendered soundboard.
+        It is more work than a folder of samples, and it is why no two notes come
+        out quite the same.</p>
+      <p><strong>One shell, three modes</strong> &mdash; the same canvas, the same
+        audio graph, the same thirty-two keys along the near edge of the same raked
+        table. What changes is what the keys are for.</p>
+
+      <h2>This build</h2>
+      <div class="row"><label>Build</label><span class="diag">${buildLine()}</span></div>
+      <div class="row"><label>Updates</label><span>${update}</span></div>
+      <div class="row"><label>Source</label>
+        <span><a href="${repo}" target="_blank" rel="noopener noreferrer">GitHub</a></span></div>
+      <p class="diag">A new build installs itself quietly and waits &mdash; nothing
+        is ever taken while you are playing. Closing the app takes it too.</p>
+
+      <h2>Credits</h2>
+      <p class="lede">Typefaces: Archivo, Cormorant Garamond, Jost and Fredoka,
+        used under the SIL Open Font License 1.1. The classic melodies are public
+        domain; the originals are the author's.</p>
+      <p class="lede">Settings, scores and unlocked tunes are kept in this browser
+        and are never sent anywhere.</p>
+      <p class="colophon">&copy; 2026 Idan Robbins</p>
+
+      <div class="actions">
+        <button class="primary" id="btn-back">Back</button>
+      </div>
+    `;
+
+    const on = (sel: string, fn: () => void) =>
+      this.body.querySelector(sel)?.addEventListener('click', fn);
+    on('#btn-back', () => this.back());
+    on('#btn-check', () => void updates.check());
+    on('#btn-update', () => void updates.applyNow());
   }
 
   // -------------------------------------------------------------- paused ---

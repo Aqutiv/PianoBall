@@ -538,7 +538,7 @@ export class Shell {
     // Escape is a step backwards: out of a sub-screen, out of play, out to the
     // menu — never a shortcut into settings from somewhere you can't return to.
     const screen = this.overlay.screen;
-    if (screen === 'settings' || screen === 'calibrate') {
+    if (screen === 'settings' || screen === 'calibrate' || screen === 'about') {
       this.overlay.back();
     } else if (screen === 'paused') {
       this.resumeMode();

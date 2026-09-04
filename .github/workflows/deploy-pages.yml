@@ -20,6 +20,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          # The About screen shows a commit count, and the default shallow
+          # clone makes `git rev-list --count HEAD` answer 1 without erroring —
+          # so every deploy would quietly claim to be the first. See BUILD_RUN
+          # in vite.config.ts before changing this back.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
