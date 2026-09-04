@@ -58,6 +58,9 @@ export class VoicePicker {
     this.button.className = 'hud-select voice-button';
     this.button.setAttribute('aria-haspopup', 'listbox');
     this.button.setAttribute('aria-expanded', 'false');
+    // `setValue` rewrites this to include the chosen voice, so the control
+    // announces "Instrument, Vibraphone" the way the select it replaced did.
+    // A bare label here would override the child text and say only the former.
     this.button.setAttribute('aria-label', ariaLabel);
     this.label = document.createElement('span');
     this.label.className = 'voice-name';
@@ -74,16 +77,22 @@ export class VoicePicker {
     this.list.hidden = true;
 
     for (const family of families) {
+      // `role="group"` is what an `<optgroup>` was: without it the family is
+      // painted but not spoken, and a screen reader walking thirty-five voices
+      // cannot tell Keys from Synth. The heading itself is then decoration,
+      // because the group's own label already says it.
+      const group = document.createElement('div');
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', family);
       const head = document.createElement('div');
       head.className = 'voice-family';
       head.textContent = family;
-      // A group heading is decoration to a screen reader that is already told
-      // the group by the row itself.
       head.setAttribute('aria-hidden', 'true');
-      this.list.append(head);
+      group.append(head);
       for (const item of items.filter((i) => i.family === family)) {
-        this.list.append(this.buildRow(item, inline));
+        group.append(this.buildRow(item, inline));
       }
+      this.list.append(group);
     }
 
     // The card is a pointer affordance; on touch there is nothing to hover it.
@@ -111,6 +120,7 @@ export class VoicePicker {
     if (!row) return;
     this.selected = row.dataset.id!;
     this.label.textContent = row.dataset.name!;
+    this.button.setAttribute('aria-label', `${this.ariaLabel}, ${row.dataset.name}`);
     for (const r of this.rows) {
       const on = r === row;
       r.classList.toggle('picked', on);
@@ -206,12 +216,20 @@ export class VoicePicker {
 
   private onButtonKey(e: KeyboardEvent): void {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+      // Same reason as `onListKey`: opening the list must not also reach the
+      // window listener and play a note under it.
+      e.stopPropagation();
       e.preventDefault();
       this.show();
     }
   }
 
   private onListKey(e: KeyboardEvent): void {
+    // The list only has focus while it is open, and while it is open it owns
+    // the keyboard. Without this the window listener in `Shell.wireKeys` still
+    // sees every key: Escape would close the picker *and* pause the mode, and
+    // the letters typed at the type-ahead would play notes underneath it.
+    e.stopPropagation();
     const last = this.rows.length - 1;
     switch (e.key) {
       case 'ArrowDown': e.preventDefault(); this.setActive(Math.min(this.activeIndex + 1, last), true); return;
