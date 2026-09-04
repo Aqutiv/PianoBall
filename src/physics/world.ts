@@ -98,6 +98,13 @@ export class World {
   private readonly cand: Collider[] = [];
   private readonly hit: SweepHit = { t: 0, nx: 0, ny: 0 };
   private readonly probe: SweepHit = { t: 0, nx: 0, ny: 0 };
+  /**
+   * Which sensors this ball is touching, for the duration of one call to
+   * `updateSensors`. Shared rather than made fresh each time: at four balls and
+   * 240 Hz a new set per ball per step is a thousand of them a second, and the
+   * only thing that ever reads it is the exit sweep at the end of that call.
+   */
+  private readonly seen = new Set<number>();
   private rand: () => number;
   private dirty = true;
 
@@ -395,7 +402,8 @@ export class World {
 
     const vx = (ball.p.x - ball.prev.x) / dt;
     const vy = (ball.p.y - ball.prev.y) / dt;
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
 
     for (let i = 0; i < this.cand.length; i++) {
       const s = this.cand[i];
