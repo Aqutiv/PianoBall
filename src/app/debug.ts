@@ -77,6 +77,50 @@ export function installDebugApi(shell: Shell): void {
       return { n, speed, share, rms: on.rms, peak: on.peak, floorRms: off.rms };
     },
     /**
+     * A fixed number of notes and table hits, with no game underneath.
+     *
+     * The audit's whole-mix scenes turned out to be useless for before-and-
+     * after work: a live table has a different number of balls, different
+     * impacts, different drum rungs and a bed at a different point of its loop
+     * every run, and two runs of the same code came out four times apart. This
+     * plays a written-down score instead -- `voices` notes struck together,
+     * then `shots` surface hits evenly spaced -- so the only thing that differs
+     * between two runs is what changed in the engine.
+     *
+     * `floorRms` is the validity check, as in `rollBench`: it is the same
+     * scene with nothing fired, and a run where it is not near zero caught
+     * something still decaying and should be discarded.
+     */
+    mixBench: async (voices = 8, shots = 12, seconds = 2) => {
+      await shell.startAudio();
+      shell.play('freestyle');
+      shell.bed.stop();
+      shell.audio.hush();
+      await new Promise((done) => setTimeout(done, 1600));
+      const floor = await shell.audio.measure(0.4, { silent: true });
+
+      const reading = shell.audio.measure(seconds, { silent: true });
+      await new Promise((done) => setTimeout(done, 40));
+      // A chord wide enough to be a chord, struck at once.
+      const chord = [36, 43, 48, 55, 60, 64, 67, 72, 76, 79, 84, 88];
+      for (let i = 0; i < voices; i++) api.noteOn(chord[i % chord.length]! + (i >= chord.length ? 1 : 0), 110);
+      // And the table over the top of it, evenly spaced so the count is the
+      // only variable.
+      const tags = ['metal', 'bumper', 'rubber', 'plastic'] as const;
+      for (let i = 0; i < shots; i++) {
+        setTimeout(() => shell.audio.hit(tags[i % tags.length]!, 900, { pan: (i % 5) / 2 - 1 }),
+          40 + i * ((seconds * 1000 * 0.7) / Math.max(1, shots)));
+      }
+      const on = await reading;
+      for (let i = 0; i < voices; i++) api.noteOff(chord[i % chord.length]! + (i >= chord.length ? 1 : 0));
+      return {
+        voices, shots,
+        peak: on.peak, rms: on.rms,
+        reductionPeak: on.reductionPeak, reductionRange: on.reductionRange,
+        floorRms: floor.rms,
+      };
+    },
+    /**
      * The same six scenes, measured the same way, every time.
      *
      * Three audio faults were reported from play — a continuous whoosh in

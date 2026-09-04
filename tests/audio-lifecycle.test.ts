@@ -76,7 +76,7 @@ interface EngineInternals {
 }
 
 interface GraphInternals {
-  leadOut: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', FakeNode>;
+  leadOut: Record<'dry' | 'hall' | 'cab' | 'delay' | 'body', FakeGainNode>;
   padDuck: FakeGainNode;
   padGen: FakeNode;
   lfoColour: FakeNode;
@@ -142,9 +142,12 @@ function graphHarness(now = 1, voices: { lead?: string; bed?: string } = {}) {
   engine.ready = true;
 
   const state = engine as unknown as EngineInternals & GraphInternals;
+  // With gains, because the note path now sets them: the lead bus is pulled
+  // down as more notes are held, so `noteOn` reaches `applyLeadGain`.
   state.leadOut = {
-    dry: connectable({}), hall: connectable({}), cab: connectable({}),
-    delay: connectable({}), body: connectable({}),
+    dry: connectable({ gain: param(1) }), hall: connectable({ gain: param(1) }),
+    cab: connectable({ gain: param(1) }), delay: connectable({ gain: param(1) }),
+    body: connectable({ gain: param(1) }),
   };
   state.padDuck = connectable({ gain: param(1) });
   state.padGen = connectable({});
@@ -831,5 +834,59 @@ describe('changing rooms', () => {
     vi.runAllTimers();
     expect(clip.oversample).toBe('2x');
     vi.useRealTimers();
+  });
+});
+
+/**
+ * The bed has always divided its gain by its note count. The player's own
+ * hands never were, so the master compressor was the only thing standing
+ * between a two-handed chord and the ceiling -- and it paid for that with
+ * several decibels of movement on every chord, which is what a mix breathing
+ * sounds like.
+ */
+describe('polyphony on the lead bus', () => {
+  const busLevel = (h: ReturnType<typeof graphHarness>) => {
+    const calls = h.state.leadOut.dry.gain.setTargetAtTime.mock.calls;
+    return calls.at(-1)?.[0] as number;
+  };
+
+  /** A harness whose layers are stubbed out, as the attack tests do. */
+  const rig = () => {
+    const h = graphHarness(1, { lead: 'sub-bass' });
+    h.state.addLayer = vi.fn(() => []);
+    return h;
+  };
+
+  it('pulls the bus down as more notes are held', () => {
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const one = busLevel(h);
+    for (const n of [62, 64, 65, 67, 69, 71, 72]) h.engine.noteOn(n, 0.5);
+    const eight = busLevel(h);
+
+    expect(eight).toBeLessThan(one);
+    // A quarter power of the count: eight notes at about 0.59 of one.
+    expect(eight / one).toBeCloseTo(Math.pow(8, -0.25), 3);
+  });
+
+  it('gives the level back as notes are let go', () => {
+    const h = rig();
+    for (const n of [60, 62, 64, 65]) h.engine.noteOn(n, 0.5);
+    const four = busLevel(h);
+    h.engine.noteOff(62);
+    h.engine.noteOff(64);
+    const two = busLevel(h);
+    expect(two).toBeGreaterThan(four);
+  });
+
+  it('does not count a note that is already on its way out', () => {
+    // A release tail is leaving and should not go on holding down the notes
+    // still under the player's fingers.
+    const h = rig();
+    h.engine.noteOn(60, 0.5);
+    const one = busLevel(h);
+    h.engine.noteOn(64, 0.5);
+    h.engine.noteOff(64);
+    expect(busLevel(h)).toBeCloseTo(one, 6);
   });
 });

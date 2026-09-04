@@ -144,6 +144,21 @@ const BED_MAX = 2;
 
 /** Key-voice gain at a full instrument setting. Half of it is unity, as above. */
 const LEAD_MAX = 2;
+/**
+ * How hard the lead bus is pulled down as more notes sound at once.
+ *
+ * Decorrelated voices sum roughly as the square root of their count, so an
+ * exponent of 0.5 would flatten polyphony completely -- sixteen notes exactly
+ * as loud as one, which is not how an instrument behaves. A quarter leaves the
+ * growth a square root of a square root: sixteen notes still arrive about six
+ * decibels above one, and the twelve decibels that used to land on the
+ * compressor do not.
+ *
+ * `pad()` has always done this for the bed, dividing by its note count. Nothing
+ * did it for the player's own hands, which is why the master compressor was the
+ * only thing standing between a two-handed chord and the ceiling.
+ */
+const POLY_EXPONENT = 0.25;
 
 /**
  * How far a played note is allowed towards either speaker.
@@ -1062,9 +1077,29 @@ export class AudioEngine {
    * ramp rather than a set, so a drag reaches a held chord without zippering.
    */
   private applyLeadGain(): void {
-    if (!this.ready || !this.ctx) return;
+    // `leadOut` as well as `ready`: this is now reached from the note path, and
+    // a note can arrive against an engine whose context has been handed to it
+    // without the graph having been built -- which is exactly what the tests do.
+    if (!this.ready || !this.ctx || !this.leadOut) return;
     const t = this.ctx.currentTime;
-    for (const g of Object.values(this.leadOut)) g.gain.setTargetAtTime(this.leadGain, t, 0.03);
+    const level = this.leadGain * this.polyScale;
+    // Faster than the fader's own ramp: this one has to be in place before the
+    // note that caused it is audible, and 25 ms is under the margin every
+    // onset already waits out. Slow enough not to be a step.
+    for (const g of Object.values(this.leadOut)) g.gain.setTargetAtTime(level, t, 0.025);
+  }
+
+  /**
+   * How far the lead bus is pulled down for the notes currently sounding.
+   *
+   * Counted over voices that are still held rather than over everything in the
+   * graph: a release tail is on its way out and should not be dragging the
+   * notes still under the player's fingers down with it.
+   */
+  private get polyScale(): number {
+    let held = 0;
+    for (const v of this.active) if (!v.releasing) held++;
+    return Math.pow(Math.max(1, held), -POLY_EXPONENT);
   }
 
   /** Where the pad bus belongs: the player's level, or nothing at all. */
@@ -1416,6 +1451,8 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
+    // After `cull`, so the count the bus is set from is the one that survived.
+    this.applyLeadGain();
   }
 
   /**
@@ -1487,6 +1524,8 @@ export class AudioEngine {
     this.active.push(voice);
     this.trackVoice(voice);
     this.cull();
+    // After `cull`, so the count the bus is set from is the one that survived.
+    this.applyLeadGain();
   }
 
   // ------------------------------------------------------- voice builders ---
@@ -1941,6 +1980,8 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     const firstRelease = !voice.releasing;
     voice.releasing = true;
+    // One fewer note held is one fewer note to share the bus with.
+    if (firstRelease) this.applyLeadGain();
     const requestedStop = t + seconds + RELEASE_STOP_PAD + reprieve;
     const previousStop = voice.stopAt;
     // A voice already on a quicker fade needs no new automation. Holding and
