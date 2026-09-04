@@ -20,6 +20,9 @@ import { FACTORIES, availableModes, type ModeInfo } from './registry';
 import type { GameMode, GameModeId, ModeContext } from './mode';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 
+/** Live particles allowed while the adaptive pass is shedding. */
+const SHED_PARTICLES = 500;
+
 export interface ModeResult {
   title: string;
   lines: { label: string; value: string }[];
@@ -392,6 +395,24 @@ export class Shell {
    * manages and shed the expensive effects only when the frame budget is
    * genuinely under pressure.
    */
+  /**
+   * Everything that happens whichever rung of the ladder fires.
+   *
+   * The particle cap used to live in the bloom branch alone, so a session that
+   * already had Bloom off by preference shed pools and then shadows and went on
+   * stepping and drawing all fourteen hundred particles — the one cost on the
+   * list that no quality flag gates, and so the one that is always there to
+   * give back. Capping particles is not a bloom setting; it is what shedding
+   * means, and it belongs where the other three lines already were.
+   */
+  private shed(): void {
+    this.stage.particles.budget = SHED_PARTICLES;
+    this.shedding = true;
+    this.qualityHeld = 3;
+    // The sound sheds its own expensive effects on the same signal.
+    this.audio.setLite(true);
+  }
+
   private adaptQuality(dt: number): void {
     const s = this.loop.stats;
     const q = this.stage.quality;
@@ -401,11 +422,7 @@ export class Shell {
     if (this.qualityHeld > 0) return;
     if (this.frameAvg > 13 && q.bloom) {
       q.bloom = false;
-      this.stage.particles.budget = 500;
-      this.shedding = true;
-      this.qualityHeld = 3;
-      // The sound sheds its own expensive effects on the same signal.
-      this.audio.setLite(true);
+      this.shed();
     } else if (this.frameAvg > 13 && q.pools && this.stage.theme.pool !== null) {
       // Between bloom and shadows: the floor light costs fill rate rather than
       // geometry, so it is the next thing worth giving back on a machine that
@@ -417,16 +434,10 @@ export class Shell {
       // frame stays over budget and shadows, the next thing that would really
       // help, go untouched.
       q.pools = false;
-      this.shedding = true;
-      this.qualityHeld = 3;
-      this.audio.setLite(true);
+      this.shed();
     } else if (this.frameAvg > 13 && q.shadows) {
       q.shadows = false;
-      this.shedding = true;
-      this.qualityHeld = 3;
-      // Bloom may already be off by choice, which makes this the first
-      // thing shed: the sound has to follow from here too.
-      this.audio.setLite(true);
+      this.shed();
     } else if (this.frameAvg < 7 && this.shedding) {
       q.bloom = want.bloom;
       q.shadows = want.shadows;

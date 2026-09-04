@@ -16,12 +16,21 @@ async function raw(file) {
 // alone means a shot that exists only under `b` — because the `a` capture
 // stopped partway through, say — is never looked at, and the run still reports
 // success on the pairs it did manage.
-function shotsUnder(prefix) {
+//
+// One prefix may extend the other — `base` against `base-new` is the obvious
+// way to name a before and an after — and then every one of the longer
+// prefix's files also matches the shorter one. `base-new-pinball.png` would
+// yield the name `new-pinball` under `base`, sending the script looking for a
+// `base-new-new-pinball.png` that was never going to exist, and failing a
+// comparison whose real pair was sitting there identical.
+function shotsUnder(prefix, other) {
+  const rival = other.startsWith(prefix + '-') ? other + '-' : null;
   return fs.readdirSync(dir)
     .filter((f) => f.startsWith(prefix + '-') && f.endsWith('.png'))
+    .filter((f) => rival === null || !f.startsWith(rival))
     .map((f) => f.slice(prefix.length + 1, -4));
 }
-const names = [...new Set([...shotsUnder(a), ...shotsUnder(b)])].sort();
+const names = [...new Set([...shotsUnder(a, b), ...shotsUnder(b, a)])].sort();
 
 // A comparison that could not be made is a failure, not a pass. Printing a
 // diagnostic and carrying on left `worst` at zero, so a run whose every other
