@@ -238,6 +238,12 @@ and the choice follows you across all three modes. Nine scales: major, minor and
 major pentatonic, dorian, natural minor, lydian, mixolydian, blues and kumoi —
 or **Random each game**, which draws a fresh one every time you start.
 
+Either can be left to chance, and both are by default: the key's **?** draws a
+new tonic every time you start, the same moment a random scale is drawn, so a
+run stays in one key from serve to game over. The line under the two controls
+names whatever you landed in. Pin either one and it holds; in Freestyle the die
+beside them draws again without waiting for the next game.
+
 Plain **major** and **natural minor** are there for the beginning: set the key
 to C and the scale to major, or to A and natural minor, and every white key
 belongs and no black key does.

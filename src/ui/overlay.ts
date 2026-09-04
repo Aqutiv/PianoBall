@@ -1,6 +1,6 @@
 import { noteLabel, noteName, NOTE_NAMES } from '../midi/notes';
 import { MODES } from '../audio/music';
-import { RANDOM } from '../audio/musicState';
+import { RANDOM, toKeyChoice } from '../audio/musicState';
 import type { CurveName } from '../midi/velocityCurve';
 import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
@@ -408,9 +408,13 @@ export class Overlay {
     const opts = midi.devices.map((dv) =>
       `<option value="${dv.id}" ${dv.id === midi.selectedId ? 'selected' : ''}>${dv.name}</option>`).join('');
     const curves: CurveName[] = ['soft', 'linear', 'hard', 'gamma', 'fixed'];
-    const nowKey = ((music.root % 12) + 12) % 12;
-    const keys = NOTE_NAMES
-      .map((n, i) => `<option value="${i}" ${i === nowKey ? 'selected' : ''}>${n}</option>`).join('');
+    // The preference, not what it resolved to — a player on random who saw a
+    // named key here would have no way to tell, or to get back.
+    const nowKey = music.keyChoice;
+    const keys = [`<option value="${RANDOM}" ${nowKey === RANDOM ? 'selected' : ''}>? &mdash; random each game</option>`]
+      .concat(NOTE_NAMES.map((n, i) =>
+        `<option value="${i}" ${i === nowKey ? 'selected' : ''}>${n}</option>`))
+      .join('');
     const scales = [`<option value="${RANDOM}" ${music.choice === RANDOM ? 'selected' : ''}>Random each game</option>`]
       .concat(MODES.map((mode) =>
         `<option value="${mode.id}" ${music.choice === mode.id ? 'selected' : ''}>${mode.label}</option>`))
@@ -573,7 +577,7 @@ export class Overlay {
     $<HTMLSelectElement>('#scale').addEventListener('change', (e) =>
       music.setChoice((e.target as HTMLSelectElement).value));
     $<HTMLSelectElement>('#key').addEventListener('change', (e) =>
-      music.setRoot(Number((e.target as HTMLSelectElement).value)));
+      music.setKey(toKeyChoice((e.target as HTMLSelectElement).value)));
 
     type Level = 'master' | 'music' | 'leadLevel' | 'bedLevel' | 'effects' | 'reverb';
     const bindSlider = (sel: string, key: Level) => {
@@ -707,9 +711,12 @@ export class Overlay {
     const scaleNow = $('#scale-now');
     this.live = () => {
       for (const follow of levels) follow();
-      // Under Random the picked scale is only knowable at run time, so say it.
+      // Under Random the key and scale are only knowable at run time, so say
+      // them. This line is the only place a `?` player learns what they landed
+      // in, so either preference being random has to reach it.
+      const drawn = music.choice === RANDOM || music.keyChoice === RANDOM;
       scaleNow.textContent = `Playing ${noteName(music.root)} ${music.label}`
-        + (music.choice === RANDOM ? ' — a new one is drawn each game' : '');
+        + (drawn ? ' — a new one is drawn each game' : '');
       const lines = input.monitor.slice(-14).map((x) => `${x.label}`);
       mon.textContent = lines.length ? lines.join('\n') : 'waiting for messages…';
       const peak = input.histogram.peak;

@@ -9,6 +9,13 @@ const STORAGE_KEY = 'music';
 /** What the player picked in settings: a `MODES` id, or 'random'. */
 export const RANDOM = 'random';
 
+/** A key preference: a pitch class, or a fresh one drawn each game. */
+export type KeyChoice = number | typeof RANDOM;
+
+/** A key select's value back to a preference. */
+export const toKeyChoice = (value: string): KeyChoice =>
+  (value === RANDOM ? RANDOM : Number(value));
+
 /** Travel of the tempo control: a slow ballad through to hardcore. */
 export const MIN_BPM = 50;
 export const MAX_BPM = 200;
@@ -42,8 +49,8 @@ export interface MusicStateEvents {
 
 interface StoredMusic {
   mode: string;
-  /** Pitch class of the tonic, or null to follow whatever names the default. */
-  key: number | null;
+  /** Pitch class of the tonic, or `RANDOM` to draw one each game. */
+  key: number | string | null;
 }
 
 export interface MusicDefaults {
@@ -59,11 +66,17 @@ export interface MusicDefaults {
  * Scale choice used to belong to the pinball table, which meant it could not
  * follow the player into a mode that has no table. It lives here instead: the
  * settings panel writes to it, and whichever mode is running listens.
+ *
+ * Key and scale are each a *preference* — `keyChoice` and `choice`, either of
+ * which may be `RANDOM` — resolved into the concrete `root` and `scale` that
+ * everything downstream reads.
  */
 export class MusicState {
   readonly bus = new EventBus<MusicStateEvents>();
   /** The saved preference, which may be `RANDOM`. */
   choice: string;
+  /** The saved key, which may be `RANDOM`. */
+  keyChoice: KeyChoice;
 
   root: number;
   bpm: number;
@@ -79,17 +92,18 @@ export class MusicState {
 
   constructor(defaults: MusicDefaults) {
     this.defaults = defaults;
-    this.root = defaults.root;
     this.bpm = defaults.bpm;
-    // Random by default: a fresh player should meet a different colour each
-    // game rather than the one the table happens to be authored in. The key is
-    // remembered as a plain pitch class so a saved D survives whatever octave
-    // the table happens to be authored in.
-    const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: null });
+    // Random by default, the key as well as the scale: a fresh player should
+    // meet a different colour each game rather than the one the table happens
+    // to be authored in. A saved pitch class is a deliberate pin and is kept —
+    // a record written before the key had a random option, or one holding
+    // anything out of range, falls to random with everybody else.
+    const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: RANDOM });
     this.choice = stored.mode;
-    if (stored.key !== null && stored.key >= 0 && stored.key < 12) {
-      this.root = nearestRoot(defaults.root, stored.key);
-    }
+    this.keyChoice = typeof stored.key === 'number' && stored.key >= 0 && stored.key < 12
+      ? stored.key
+      : RANDOM;
+    this.root = this.resolveKey();
     this.set(this.resolve(), true);
   }
 
@@ -115,19 +129,22 @@ export class MusicState {
   }
 
   /**
-   * Move the tonic to a pitch class, staying in the register the app is
-   * written around rather than leaping an octave to reach it.
+   * Pin the tonic to a pitch class, or hand it back to chance.
+   *
+   * A pinned key stays in the register the app is written around rather than
+   * leaping an octave to reach it, and so does a drawn one.
    */
-  setRoot(pitchClass: number): void {
-    const root = nearestRoot(this.defaults.root, pitchClass);
+  setKey(choice: KeyChoice): void {
+    this.keyChoice = choice;
+    this.persist();
+    const root = this.resolveKey();
     if (root === this.root) return;
     this.root = root;
-    this.persist();
     this.bus.emit('change', this.active);
   }
 
   private persist(): void {
-    save(STORAGE_KEY, { mode: this.choice, key: ((this.root % 12) + 12) % 12 });
+    save(STORAGE_KEY, { mode: this.choice, key: this.keyChoice });
   }
 
   /**
@@ -171,21 +188,45 @@ export class MusicState {
    */
   resetSettings(): void {
     this.choice = RANDOM;
-    this.root = this.defaults.root;
+    this.keyChoice = RANDOM;
     this.bpm = this.defaults.bpm;
     this.persist();
-    this.set(this.resolve());
+    this.redraw();
   }
 
-  /** Back to the tonic and tempo the app starts in. */
+  /** Back to the tempo the app starts in, and the tonic the player asked for. */
   resetTuning(): void {
-    this.setTuning(this.defaults.root, this.defaults.bpm);
-    this.persist();
+    this.setTuning(this.resolveKey(), this.defaults.bpm);
   }
 
-  /** Re-draw the scale. Under `RANDOM` this is a fresh one; otherwise a no-op. */
+  /** Re-draw whatever the player left to chance. */
   roll(): void {
-    if (this.choice === RANDOM) this.set(this.resolve());
+    if (this.choice === RANDOM || this.keyChoice === RANDOM) this.redraw();
+  }
+
+  /**
+   * The die: hand the scale back to chance and draw again.
+   *
+   * Re-picking the option already selected fires no change event, so this is
+   * the only way to ask for another draw without leaving the mode. It forces
+   * the scale and re-draws the key only if the key was already on random — a
+   * deliberate pin belongs to the player, not to the die.
+   */
+  drawAgain(): void {
+    this.choice = RANDOM;
+    this.persist();
+    this.redraw();
+  }
+
+  /**
+   * Resolve both preferences, and announce them as a single `change`.
+   *
+   * Not two: the bed tears its progression down on that event, and doing that
+   * twice at the top of a game is audible.
+   */
+  private redraw(): void {
+    this.root = this.resolveKey();
+    this.set(this.resolve());
   }
 
   private resolve(): string {
@@ -193,5 +234,13 @@ export class MusicState {
     // whereas which scale you land in should genuinely vary.
     if (this.choice === RANDOM) return MODES[Math.floor(Math.random() * MODES.length)].id;
     return this.choice;
+  }
+
+  /** The same draw, whichever the key came from: pinned, or off the top. */
+  private resolveKey(): number {
+    const pitchClass = this.keyChoice === RANDOM
+      ? Math.floor(Math.random() * 12)
+      : this.keyChoice;
+    return nearestRoot(this.defaults.root, pitchClass);
   }
 }
