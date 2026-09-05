@@ -24,7 +24,7 @@ export function readProvenance(root: string, env: NodeJS.ProcessEnv = process.en
 }
 
 /** Refuse tracked/unignored outputs in the source tree instead of changing its dirty state. */
-export function checkOutputDirectory(root: string, output: string, catalogFilename: string): void {
+export function checkOutputDirectory(root: string, output: string, filenames: readonly string[]): void {
   let top: string;
   try {
     top = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], {
@@ -34,9 +34,9 @@ export function checkOutputDirectory(root: string, output: string, catalogFilena
   const relative = path.relative(top, output);
   if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) return;
   try {
-    // Check both actual filenames: a manifest-only rule or catalogue negation is unsafe.
+    // Check every planned filename, including temporary files that can survive termination.
     // Run separately: check-ignore -q with multiple paths succeeds if ANY is ignored.
-    for (const filename of ['manifest.json', catalogFilename]) {
+    for (const filename of filenames) {
       const target = path.join(output, filename);
       execFileSync('git', ['-C', top, 'check-ignore', '-q', '--', target], {
         stdio: 'ignore', windowsHide: true,
@@ -50,8 +50,7 @@ export function checkOutputDirectory(root: string, output: string, catalogFilena
 const jsonBytes = (value: unknown): Buffer => Buffer.from(JSON.stringify(value, null, 2) + '\n', 'utf8');
 const digest = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
-async function atomicWrite(file: string, bytes: Buffer): Promise<void> {
-  const temporary = `${file}.${randomUUID()}.tmp`;
+async function atomicWrite(file: string, bytes: Buffer, temporary: string): Promise<void> {
   try {
     await writeFile(temporary, bytes, { flag: 'wx' });
     await rename(temporary, file);
@@ -72,7 +71,15 @@ export async function writeCatalog(output: string, catalog: unknown, sourceRoot?
   validateManifest(manifest);
   const manifestBytes = jsonBytes(manifest);
   requireValue(manifestBytes.length <= MAX_MANIFEST_BYTES, 'manifest bytes', `exceeds ${MAX_MANIFEST_BYTES}`);
-  if (sourceRoot !== undefined) checkOutputDirectory(sourceRoot, output, manifest.url);
+  // Keep the JSON suffix for rules such as output/*.json. Still check the exact names:
+  // a negation can expose temporary files, and abrupt termination can leave them behind.
+  const temporaryFiles = {
+    catalog: `${manifest.url}.${randomUUID()}.tmp.json`,
+    manifest: `manifest.json.${randomUUID()}.tmp.json`,
+  };
+  if (sourceRoot !== undefined) {
+    checkOutputDirectory(sourceRoot, output, ['manifest.json', manifest.url, ...Object.values(temporaryFiles)]);
+  }
   await mkdir(output, { recursive: true });
   const file = path.join(output, manifest.url);
   let existing: Buffer | undefined;
@@ -81,10 +88,10 @@ export async function writeCatalog(output: string, catalog: unknown, sourceRoot?
   if (existing) {
     requireValue(existing.equals(bytes), file, 'immutable catalogue already exists with different bytes');
   } else {
-    await atomicWrite(file, bytes);
+    await atomicWrite(file, bytes, path.join(output, temporaryFiles.catalog));
   }
   const written = await readFile(file);
   requireValue(written.equals(bytes) && digest(written) === revision, file, 'written catalogue hash mismatch');
-  await atomicWrite(path.join(output, 'manifest.json'), manifestBytes);
+  await atomicWrite(path.join(output, 'manifest.json'), manifestBytes, path.join(output, temporaryFiles.manifest));
   return { manifest, catalogBytes: bytes.length, manifestBytes: manifestBytes.length };
 }

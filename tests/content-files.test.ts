@@ -30,6 +30,20 @@ async function initGit(directory: string) {
   git(directory, ['-c', 'user.name=Content Test', '-c', 'user.email=content-test@example.invalid', 'commit', '-m', 'Fixture']);
 }
 
+async function sourceCheckout(ignoreRules = 'dist/\n'): Promise<string> {
+  const checkout = path.join(await temp(), 'source with spaces');
+  await mkdir(checkout);
+  await cp(path.join(root, 'src'), path.join(checkout, 'src'), { recursive: true });
+  await mkdir(path.join(checkout, 'scripts'));
+  for (const file of ['content-files.ts', 'export-content.mjs']) {
+    await cp(path.join(root, 'scripts', file), path.join(checkout, 'scripts', file));
+  }
+  await writeFile(path.join(checkout, 'package.json'), '{"type":"module"}\n');
+  await writeFile(path.join(checkout, '.gitignore'), ignoreRules);
+  await initGit(checkout);
+  return checkout;
+}
+
 describe('published content files', () => {
   it('hashes exact UTF-8 bytes, uses LF/final LF, and produces identical independent exports', async () => {
     const first = await temp(), second = await temp();
@@ -89,16 +103,7 @@ describe('published content files', () => {
   });
 
   it('keeps provenance clean across repeated headless CLI runs, including checkout paths with spaces', async () => {
-    const checkout = path.join(await temp(), 'source with spaces');
-    await mkdir(checkout);
-    await cp(path.join(root, 'src'), path.join(checkout, 'src'), { recursive: true });
-    await mkdir(path.join(checkout, 'scripts'));
-    for (const file of ['content-files.ts', 'export-content.mjs']) {
-      await cp(path.join(root, 'scripts', file), path.join(checkout, 'scripts', file));
-    }
-    await writeFile(path.join(checkout, 'package.json'), '{"type":"module"}\n');
-    await writeFile(path.join(checkout, '.gitignore'), 'dist/\n');
-    await initGit(checkout);
+    const checkout = await sourceCheckout();
     const { GITHUB_SHA: _sha, ...env } = process.env;
     const run = () => JSON.parse(execFileSync(process.execPath, [path.join(checkout, 'scripts/export-content.mjs')], {
       cwd: os.tmpdir(), encoding: 'utf8', env, windowsHide: true,
@@ -109,14 +114,16 @@ describe('published content files', () => {
     expect(readProvenance(checkout, env)).toEqual(before);
     await writeFile(path.join(checkout, 'new-source.ts'), '// new track\n');
     expect(readProvenance(checkout, env).sourceDirty).toBe(true);
-    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'unignored-output'), 'catalog.fixture.json')).toThrow(/Git-ignored/);
-    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'dist/content/v1'), 'catalog.fixture.json')).not.toThrow();
+    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'unignored-output'), ['manifest.json', 'catalog.fixture.json'])).toThrow(/Git-ignored/);
+    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'dist/content/v1'), ['manifest.json', 'catalog.fixture.json'])).not.toThrow();
     expect(readProvenance(checkout, { GITHUB_SHA: 'b'.repeat(40) }).sourceCommit).toBe('b'.repeat(40));
   }, 20_000);
 
   it.each([
     ['only the manifest is ignored', 'output/manifest.json\n'],
     ['catalogues are re-included', 'output/*\n!output/catalog.*.json\n'],
+    ['catalogue temporary files are re-included', 'output/*.json\n!output/catalog.*.tmp.json\n'],
+    ['manifest temporary files are re-included', 'output/*.json\n!output/manifest.json.*.tmp.json\n'],
   ])('rejects custom output when %s without writing or dirtying the checkout', async (_name, rules) => {
     const checkout = await temp();
     await writeFile(path.join(checkout, '.gitignore'), rules);
@@ -146,12 +153,47 @@ describe('published content files', () => {
     expect(readProvenance(checkout, {})).toEqual(before);
     // Force-tracked manifests must still be rejected even under an ignored directory.
     git(checkout, ['add', '-f', 'output/manifest.json']);
-    expect(() => checkOutputDirectory(checkout, output, first.manifest.url)).toThrow(/Git-ignored/);
+    expect(() => checkOutputDirectory(checkout, output, ['manifest.json', first.manifest.url])).toThrow(/Git-ignored/);
   });
+
+  it.each(['catalogue', 'manifest'])('keeps provenance clean after termination during the %s write', async (target) => {
+    const checkout = await sourceCheckout('output/*.json\n');
+    const output = path.join(checkout, 'output');
+    const { GITHUB_SHA: _sha, ...env } = process.env;
+    const cli = [path.join(checkout, 'scripts/export-content.mjs'), '--out-dir', output];
+    const options = { cwd: os.tmpdir(), encoding: 'utf8' as const, env, windowsHide: true };
+    const run = () => JSON.parse(execFileSync(process.execPath, cli, options));
+    const before = readProvenance(checkout, env);
+    expect(before.sourceDirty).toBe(false);
+    const expected = await writeCatalog(await temp(), compilePublishedCatalog(before));
+    // An existing immutable catalogue skips its write, so the next write is the manifest.
+    if (target === 'manifest') expect(run().manifest).toEqual(expected.manifest);
+    const abortAfterWrite = `
+      import fs from 'node:fs/promises';
+      import { syncBuiltinESMExports } from 'node:module';
+      const originalWrite = fs.writeFile;
+      fs.writeFile = async (...args) => {
+        await originalWrite(...args);
+        process.exit(23); // Abrupt exit: the writer's finally cleanup cannot run.
+      };
+      syncBuiltinESMExports();
+    `;
+    const hook = 'data:text/javascript;base64,' + Buffer.from(abortAfterWrite).toString('base64');
+    let failure: unknown;
+    try { execFileSync(process.execPath, ['--import', hook, ...cli], options); }
+    catch (error) { failure = error; }
+    expect(failure).toMatchObject({ status: 23 });
+    const leftovers = (await readdir(output)).filter((file) => file.includes('.tmp'));
+    expect(leftovers).toHaveLength(1);
+    expect(leftovers[0].startsWith(target === 'catalogue' ? 'catalog.' : 'manifest.json.')).toBe(true);
+    expect(readProvenance(checkout, env)).toEqual(before);
+    expect(run().manifest).toEqual(expected.manifest);
+    expect(readProvenance(checkout, env)).toEqual(before);
+  }, 20_000);
 
   it('uses explicit null provenance without Git and accepts an external output path', async () => {
     const directory = await temp();
     expect(readProvenance(directory, {})).toEqual({ sourceCommit: null, sourceDirty: null });
-    expect(() => checkOutputDirectory(root, directory, 'catalog.fixture.json')).not.toThrow();
+    expect(() => checkOutputDirectory(root, directory, ['manifest.json', 'catalog.fixture.json'])).not.toThrow();
   });
 });

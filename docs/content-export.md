@@ -26,10 +26,12 @@ npm run export:content -- --out-dir <temporary-directory>
 ```
 
 All generated files inside a Git checkout must be ignored (as `dist/` already
-is). The writer checks both `manifest.json` and the actual digest-named catalogue
-before writing either file. Ignoring only the manifest or re-including the
-catalogue is rejected, so the export cannot dirty the next run. Keep generated
-JSON out of source control.
+is). Before writing, the writer checks `manifest.json`, the actual digest-named
+catalogue and both exact temporary filenames. Temporary files end in `.tmp.json`
+so a rule such as `output/*.json` covers them too. Negation rules exposing any
+of these files are rejected. Even if termination prevents temporary-file cleanup,
+the leftovers stay ignored and cannot dirty the next run. Keep generated JSON
+out of source control.
 
 The existing `.github/workflows/deploy-pages.yml` runs tests, builds the site,
 then exports once, **after Vite empties dist and before Pages uploads dist**.
