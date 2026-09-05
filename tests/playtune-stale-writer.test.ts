@@ -82,6 +82,39 @@ for (const role of Object.values(ROLES)) describe(`${role.id}: an old bundle sta
     expect(loadProgress(role.storageKey, role.order)).toEqual(reset);
   });
 
+  it.each([0, 2])('honors an epoch-less reset with protected epoch %i', epoch => {
+    for (let i = 0; i < epoch; i++) resetProgress(role.storageKey, role.order);
+    const before = completedNewTune();
+    expect(before.epoch).toBe(epoch);
+    // Verified against resetProgress in historical commit 64bd3dd.
+    localStorage.setItem('pianoball.' + role.storageKey, JSON.stringify({
+      unlocked: [LEGACY_ORDERS[role.storageKey][0]], best: {},
+    }));
+    const reset = loadProgress(role.storageKey, role.order);
+    expect(reset).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: epoch + 1 });
+    expect(raw(role.storageKey)).toEqual(reset);
+    expect(loadProgress(role.storageKey, role.order)).toEqual(reset);
+    recordRun(role.storageKey, reset, role.order[0], role.order, pass);
+    expect(loadProgress(role.storageKey, role.order).best[role.order[0]]).toBeDefined();
+  });
+
+  it('migrates an empty legacy save once without inventing repeated resets', () => {
+    localStorage.setItem('pianoball.' + role.storageKey, JSON.stringify({
+      unlocked: [LEGACY_ORDERS[role.storageKey][0]], best: {},
+    }));
+    const fresh = loadProgress(role.storageKey, role.order);
+    expect(fresh).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: 0 });
+    expect(loadProgress(role.storageKey, role.order)).toEqual(fresh);
+  });
+
+  it('does not treat a missing or corrupt primary store as a confirmed old reset', () => {
+    const before = completedNewTune();
+    localStorage.removeItem('pianoball.' + role.storageKey);
+    expect(loadProgress(role.storageKey, role.order)).toEqual(before);
+    localStorage.setItem('pianoball.' + role.storageKey, '{broken');
+    expect(loadProgress(role.storageKey, role.order)).toEqual(before);
+  });
+
   it('merges recovered achievements into a subsequent current-client run', () => {
     completedNewTune();
     oldClientWrite(role.storageKey);

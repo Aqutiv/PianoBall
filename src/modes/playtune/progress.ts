@@ -160,6 +160,16 @@ function readProgress(key: string, order: readonly string[], legacyKey = key): P
   return progress;
 }
 
+/** The exact reset payload written before reset epochs existed (64bd3dd). */
+function isEpochlessReset(key: string): boolean {
+  const raw = load<Partial<Progress> | null>(key, null);
+  const first = LEGACY_ORDERS[key]?.[0];
+  return !!raw && typeof raw === 'object' && !Object.hasOwn(raw, 'epoch')
+    && Array.isArray(raw.unlocked) && raw.unlocked.length === 1 && raw.unlocked[0] === first
+    && !!raw.best && typeof raw.best === 'object' && !Array.isArray(raw.best)
+    && Object.keys(raw.best).length === 0;
+}
+
 /**
  * Merge current and protected saves before either can lose an unfamiliar ID.
  * Equal epochs only accumulate achievements, including runs in an older tab.
@@ -169,8 +179,19 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   let progress = readProgress(key, order);
   const protectedKey = Object.hasOwn(PROTECTED_STORES, key) ? PROTECTED_STORES[key] : undefined;
   if (!protectedKey) return progress;
+  const epochlessReset = isEpochlessReset(key);
   if (stored(protectedKey)) {
     const protectedProgress = readProgress(protectedKey, order, key);
+    if (epochlessReset) {
+      progress = {
+        unlocked: order.slice(0, OPENING_TUNES), best: {},
+        epoch: Math.max(progress.epoch, protectedProgress.epoch) + 1,
+      };
+      // Acknowledge the old reset in BOTH copies. Otherwise every subsequent
+      // load would see the same epoch-less payload as another fresh reset.
+      saveProgress(key, progress);
+      return progress;
+    }
     if (protectedProgress.epoch > progress.epoch) progress = protectedProgress;
     else if (protectedProgress.epoch === progress.epoch) absorbProgress(progress, protectedProgress);
   }
@@ -178,6 +199,8 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   // Seeds the protected copy on first load, and imports subsequent old-tab
   // achievements or deliberate resets without rewriting that tab's store.
   save(protectedKey, progress);
+  // An empty first migration is not a second reset on the next load.
+  if (epochlessReset) save(key, progress);
   return progress;
 }
 
