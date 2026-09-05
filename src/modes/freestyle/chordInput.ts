@@ -36,7 +36,10 @@ export class ChordInput {
     this.hold = hold;
     if (!hold && !this.fingers.size) this.player.clearManualChord();
     const chord = this.player.manualChord;
-    if (changedQuality && chord) this.player.setManualChord(chord.root, quality, chord.velocity);
+    // Held multi-key gestures take precedence over the one-finger selector.
+    if (changedQuality && chord && this.fingers.size <= 1) {
+      this.player.setManualChord(chord.root, quality, chord.velocity);
+    }
   }
 
   remap(base: number, count: number): void {

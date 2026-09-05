@@ -87,6 +87,45 @@ describe('Freestyle chord switches', () => {
     expect(player.manualChord).toBeNull();
   });
 
+  it.each([
+    { count: 2, quality: 'min' },
+    { count: 3, quality: 'dom7' },
+    { count: 4, quality: 'min7' },
+  ] as const)('preserves a held $count-key gesture when the selector changes', ({ count, quality }) => {
+    const { input, player } = inputRig();
+    input.configure(true, 'min', true);
+    const notes = [48, 49, 51, 54].slice(0, count);
+    notes.forEach((note) => input.noteOn(note, 0.7));
+    player.setManualChord.mockClear();
+
+    input.configure(true, 'maj', true);
+    expect(player.manualChord).toEqual({ root: 48, quality, velocity: 0.7 });
+    expect(player.setManualChord).not.toHaveBeenCalled();
+
+    notes.forEach((note) => input.noteOff(note));
+    expect(player.manualChord?.quality).toBe(quality);
+    input.noteOn(59, 0.4);
+    expect(player.manualChord).toEqual({ root: 59, quality: 'maj', velocity: 0.4 });
+  });
+
+  it('preserves the gesture while multiple fingers lift, then revoices a released latch', () => {
+    const { input, player } = inputRig();
+    [48, 49, 51, 54].forEach((note) => input.noteOn(note, 0.7));
+    input.noteOff(54);
+    input.noteOff(51);
+    player.setManualChord.mockClear();
+
+    input.configure(true, 'min', true);
+    expect(player.manualChord?.quality).toBe('min7');
+    expect(player.setManualChord).not.toHaveBeenCalled();
+
+    input.noteOff(49);
+    input.noteOff(48);
+    input.configure(true, 'dom7', true);
+    expect(player.manualChord).toEqual({ root: 48, quality: 'dom7', velocity: 0.7 });
+    expect(player.setManualChord).toHaveBeenCalledOnce();
+  });
+
   it('Stop ignores old fingers until they lift and lets a fresh chord begin', () => {
     const { input, player } = inputRig(48, 32, false);
     input.noteOn(48, 1);
