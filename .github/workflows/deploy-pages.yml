@@ -36,8 +36,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test source and content contract
+        run: npm test
+
       - name: Build site
         run: npm run build
+
+      - name: Export shared PianoBall content
+        run: npm run export:content
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

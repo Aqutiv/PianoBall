@@ -476,3 +476,10 @@ npm run icons      # regenerate app icons
   cabinet, with a piano roll of your own playing scrolling up both sides.
 - PlayTune restarts a tune from the top rather than resuming mid-phrase. A tune
   picked up halfway through is not a tune you have played.
+
+## Shared track export
+
+The Pages build also publishes a versioned JSON catalogue for the native Windows
+game, compiled from the existing Melody and Chords libraries. Run `npm run
+export:content` after `npm run build`. See [the content contract and publishing
+workflow](docs/content-export.md) for authoring, validation and consumer details.
