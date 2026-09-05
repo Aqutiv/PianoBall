@@ -182,6 +182,8 @@ function connector() {
 function harness(now = 1) {
   const clock = { currentTime: now, sampleRate: 48000, state: 'running' };
   const engine = new AudioEngine();
+  // Release tests exercise damper noise, which Lite mode disables on small hosts.
+  engine.setLite(false);
   engine.ctx = clock as unknown as AudioContext;
   engine.ready = true;
   const state = engine as unknown as EngineInternals;
@@ -795,6 +797,8 @@ describe('changing rooms', () => {
   function liteHarness() {
     vi.useFakeTimers();
     const engine = new AudioEngine();
+    // Match the full-hall fixture before testing the transition to Lite mode.
+    engine.setLite(false);
     const wetGain = param(1.7);
     const conv: { buffer: unknown } = { buffer: 'the full hall' };
     const clip = { oversample: '2x' };
