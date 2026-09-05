@@ -4,7 +4,7 @@
 
 ## Automated checks
 
-- `npm test`: 42 files, 828 tests passed.
+- `npm test`: 43 files, 840 tests passed.
 - `npm run build`: TypeScript, Vite and PWA build passed.
 - `npm run export:content`: schema v1, 19 Melody + 22 Chords = 41 entries.
 - Independent SHA256 check matched the manifest. Local catalogue approximately
@@ -17,6 +17,10 @@
   historical successor boundary, the last legacy grade, explicit false flags,
   failed replays, round trips and independent role stores. Old scores, plays,
   earned passes, unlocks and reset epochs are retained.
+- Stale-writer tests reproduce an old bundle filtering new IDs out of the
+  original store. A protected copy restores their results and imports later
+  old-tab achievements; reset epochs prevent resurrection after deliberate
+  resets from either version. Both roles are covered.
 
 ## Chart measurements
 

@@ -1,5 +1,5 @@
 import { LEGACY_ORDERS } from './legacyOrder';
-import { load, save } from '../../core/storage';
+import { load, save, stored } from '../../core/storage';
 import type { Grade } from './judge';
 
 /**
@@ -11,6 +11,13 @@ import type { Grade } from './judge';
  */
 export const MELODY_STORE = 'playtune';
 export const CHORD_STORE = 'playchords';
+
+// Old bundles filter out unfamiliar IDs before saving the original keys.
+// Keep the same Progress format in a second key those bundles cannot overwrite.
+const PROTECTED_STORES: Readonly<Record<string, string>> = {
+  [MELODY_STORE]: 'playtune.expanded',
+  [CHORD_STORE]: 'playchords.expanded',
+};
 
 /**
  * How many tunes are open before anything has been passed.
@@ -113,7 +120,7 @@ function openEarned(progress: Progress, order: readonly string[]): void {
  * Anything unreadable in storage is treated as a fresh start rather than an
  * error — losing progress is bad, but refusing to launch is worse.
  */
-export function loadProgress(key: string, order: readonly string[]): Progress {
+function readProgress(key: string, order: readonly string[], legacyKey = key): Progress {
   const raw = load<Progress>(key, { unlocked: [], best: {}, epoch: 0 });
   const known = new Set(order);
   const unlocked = Array.isArray(raw.unlocked)
@@ -135,7 +142,7 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
     // thing that ever opened it. A letter is the fallback for the last tune in
     // the chain, which has no next to have opened.
     // Infer old records using the order that produced them, before insertions.
-    const legacy = LEGACY_ORDERS[key];
+    const legacy = LEGACY_ORDERS[legacyKey];
     const evidenceOrder = legacy?.includes(id) ? legacy : order;
     const next = evidenceOrder[evidenceOrder.indexOf(id) + 1];
     best[id] = {
@@ -153,7 +160,30 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   return progress;
 }
 
+/**
+ * Merge current and protected saves before either can lose an unfamiliar ID.
+ * Equal epochs only accumulate achievements, including runs in an older tab.
+ * A higher epoch is an explicit reset and replaces the other copy outright.
+ */
+export function loadProgress(key: string, order: readonly string[]): Progress {
+  let progress = readProgress(key, order);
+  const protectedKey = Object.hasOwn(PROTECTED_STORES, key) ? PROTECTED_STORES[key] : undefined;
+  if (!protectedKey) return progress;
+  if (stored(protectedKey)) {
+    const protectedProgress = readProgress(protectedKey, order, key);
+    if (protectedProgress.epoch > progress.epoch) progress = protectedProgress;
+    else if (protectedProgress.epoch === progress.epoch) absorbProgress(progress, protectedProgress);
+  }
+  openEarned(progress, order);
+  // Seeds the protected copy on first load, and imports subsequent old-tab
+  // achievements or deliberate resets without rewriting that tab's store.
+  save(protectedKey, progress);
+  return progress;
+}
+
 export function saveProgress(key: string, progress: Progress): void {
+  // Protect first: an old tab may overwrite the original immediately after it.
+  if (Object.hasOwn(PROTECTED_STORES, key)) save(PROTECTED_STORES[key], progress);
   save(key, progress);
 }
 

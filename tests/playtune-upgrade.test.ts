@@ -74,12 +74,16 @@ for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`,
     expect(new Set(p.unlocked)).toEqual(new Set(role.order));
   });
 
-  it('respects explicit false and never infers passes from automatic opening tracks', () => {
+  it('respects explicit false even when the successor is unlocked', () => {
     const id = old[0];
     localStorage.setItem(`pianoball.${role.storageKey}`, JSON.stringify({
       unlocked: old, best: { [id]: { ...record, passed: false } },
     }));
     expect(loadProgress(role.storageKey, role.order).best[id].passed).toBe(false);
+  });
+
+  it('never infers passes from automatic opening tracks', () => {
+    const id = old[0];
     localStorage.setItem(`pianoball.${role.storageKey}`, JSON.stringify({
       unlocked: [id], best: { [id]: { accuracy: 0.1, score: 20, plays: 1, grade: null } },
     }));
