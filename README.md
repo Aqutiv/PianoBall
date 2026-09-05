@@ -198,8 +198,9 @@ bursts into light, late or early it still counts for less, and one you never
 reach **shatters**. There is no failing — a tune always plays to its last bar,
 because the point is to have played it.
 
-Fourteen tunes, arriving in order, from three notes on the beat to Bach in
-continuous quavers. **Three are open at any time** — pass any of them and the
+Nineteen melody tracks and twenty-two chord tracks, each in its own course.
+The melody tracks arrive in order, from three notes on the beat to Bach in
+continuous quavers. **Three are open at the start** — pass any of them and the
 next one joins the list, so a step you cannot take yet is walked around rather
 than stared at:
 
@@ -208,17 +209,40 @@ than stared at:
 | 1 | First Light | Three notes, one to a beat |
 | 2 | Ode to Joy | Neighbouring keys, one step at a time |
 | 3 | Twinkle, Twinkle | Jumping a fifth and landing on it |
-| 4 | Amazing Grace | Counting in three, starting before the bar |
-| 5 | Scarborough Fair | A minor mode that is not quite minor |
-| 6 | Drift | Holding a key for the whole tail |
-| 7 | Greensleeves | A lilting six, and a note from outside the key |
-| 8 | Für Elise | Alternating semitones at speed |
-| 9 | Londonderry Air | A phrase spanning more than an octave |
-| 10 | Minuet in G | Running quavers between the beats |
-| 11 | Gymnopédie No. 1 | Waiting, and coming in exactly on time |
-| 12 | Two Hands | Two notes at once, on a tune you already know |
-| 13 | Canon in D | Holding a long form as it doubles in speed |
-| 14 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
+| 4 | Frère Jacques | Repeated phrases and the low bell motif |
+| 5 | Amazing Grace | Counting in three, starting before the bar |
+| 6 | Scarborough Fair | A minor mode that is not quite minor |
+| 7 | Drift | Holding a key for the whole tail |
+| 8 | Drunken Sailor | Repeated notes, minor melody, and an answering chorus |
+| 9 | Greensleeves | A lilting six, and a note from outside the key |
+| 10 | Für Elise | Alternating semitones at speed |
+| 11 | Londonderry Air | A phrase spanning more than an octave |
+| 12 | Can-Can | Repeated notes, leaps, and the dance refrain |
+| 13 | Minuet in G | Running quavers between the beats |
+| 14 | Gymnopédie No. 1 | Waiting, and coming in exactly on time |
+| 15 | Two Hands | Two notes at once, on a tune you already know |
+| 16 | The Blue Danube | Waltz rests and wide arpeggios |
+| 17 | Canon in D | Holding a long form as it doubles in speed |
+| 18 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
+| 19 | The Entertainer | Chromatic pickups and tied syncopation |
+
+**PlayChords** uses a separate 22-track curve and progress store. Frère Jacques
+is the third opening chord track. The five new classics add one track at every
+difficulty (1–5) in each role: slow C/G blocks, a D-minor/C-major march, a C/F/G
+pulse, waltz triads and sevenths, and faster ragtime changes. They last 48–72
+seconds at practice tempos and finish at a cadence. Melody and Chords have
+their own teaching descriptions and pass marks.
+
+Historical editions, selected passages, beat units, instrument choices and the
+public-domain basis for the US, UK, EU and Israel are in the
+[source ledger](docs/tune-sources.md). Playback is synthesized from our own
+reductions; no recordings, downloaded MIDI, modern arrangements or lyrics ship.
+Existing scores, earned passes and unlocks survive the expansion, including
+older saves without explicit pass flags. The expanded courses copy existing progress once into versioned stores using
+the same format. Older app versions then keep their own saves: their runs and
+resets do not change the expanded courses. Continue in the updated app after
+upgrading; current-version tabs still share progress and reset epochs. The unchanged schema v1 exporter
+supplies **41 course entries** (19 melody + 22 chords) to the Windows game.
 
 The classics are public-domain melodies; the three originals sit where a new
 mechanic has to be introduced on something you have no expectations about.

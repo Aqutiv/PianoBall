@@ -1,4 +1,5 @@
-import { load, save } from '../../core/storage';
+import { LEGACY_ORDERS } from './legacyOrder';
+import { load, save, stored } from '../../core/storage';
 import type { Grade } from './judge';
 
 /**
@@ -8,8 +9,15 @@ import type { Grade } from './judge';
  * the chord chain are separate courses, they are reset separately, and a player
  * who has never touched one should not carry an empty half of it around.
  */
-export const MELODY_STORE = 'playtune';
-export const CHORD_STORE = 'playchords';
+export const MELODY_STORE = 'playtune.v2';
+export const CHORD_STORE = 'playchords.v2';
+
+// Course generations have separate writers. Old bundles cannot safely merge
+// unfamiliar IDs or communicate reset lineage, so import each old store once.
+const LEGACY_STORES: Readonly<Record<string, string>> = {
+  [MELODY_STORE]: 'playtune',
+  [CHORD_STORE]: 'playchords',
+};
 
 /**
  * How many tunes are open before anything has been passed.
@@ -113,7 +121,9 @@ function openEarned(progress: Progress, order: readonly string[]): void {
  * error — losing progress is bad, but refusing to launch is worse.
  */
 export function loadProgress(key: string, order: readonly string[]): Progress {
-  const raw = load<Progress>(key, { unlocked: [], best: {}, epoch: 0 });
+  const legacyKey = Object.hasOwn(LEGACY_STORES, key) ? LEGACY_STORES[key] : undefined;
+  const migrating = legacyKey !== undefined && !stored(key);
+  const raw = load<Progress>(migrating ? legacyKey : key, { unlocked: [], best: {}, epoch: 0 });
   const known = new Set(order);
   const unlocked = Array.isArray(raw.unlocked)
     ? raw.unlocked.filter((id) => known.has(id))
@@ -133,7 +143,10 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
     // this one being open is the strong evidence, because passing was the only
     // thing that ever opened it. A letter is the fallback for the last tune in
     // the chain, which has no next to have opened.
-    const next = order[order.indexOf(id) + 1];
+    // Infer old records using the order that produced them, before insertions.
+    const legacy = LEGACY_ORDERS[legacyKey ?? key];
+    const evidenceOrder = legacy?.includes(id) ? legacy : order;
+    const next = evidenceOrder[evidenceOrder.indexOf(id) + 1];
     best[id] = {
       accuracy: Number(rec.accuracy) || 0,
       score: Number(rec.score) || 0,
@@ -146,6 +159,9 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   }
   const progress: Progress = { unlocked, best, epoch: Number(raw.epoch) || 0 };
   openEarned(progress, order);
+  // Even an empty upgrade is acknowledged; later old-tab writes belong only
+  // to the old course, and cannot be mistaken for a new migration or reset.
+  if (migrating) save(key, progress);
   return progress;
 }
 
