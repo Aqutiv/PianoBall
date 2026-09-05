@@ -145,6 +145,30 @@ html, body {
   height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
 }
 
+/* Game chrome should not start iOS selection, magnification or link callouts.
+   Keep panning/pinch zoom available in menus; the canvas opts out below. */
+#app {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Preserve native editing and copy/paste where text can actually be entered. */
+#app input,
+#app textarea,
+#app [contenteditable]:not([contenteditable="false"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+#app img,
+#table {
+  -webkit-user-drag: none;
+}
+
 #playfield { position: absolute; inset: 0; }
 
 #table {
