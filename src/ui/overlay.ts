@@ -110,6 +110,8 @@ export class Overlay {
       || this.screen === 'about';
     if (sub && !wasSub) this.returnTo = this.screen ?? (this.shell.playing ? 'paused' : 'home');
     this.screen = screen;
+    // Controls behind a menu must not remain in the keyboard/VoiceOver order.
+    this.shell.hud.root.inert = screen !== null;
     this.live = null;
     this.board = null;
     this.offInput?.();
