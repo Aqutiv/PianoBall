@@ -27,7 +27,7 @@ export interface KeyboardOptions {
 
 export class KeyboardFallback {
   enabled = true;
-  private held = new Set<string>();
+  private held = new Map<string, number>();
   private opts: KeyboardOptions;
   private bendTarget = 0;
   /** Held ramp for the mod wheel: the arrow keys have no travel of their own. */
@@ -51,6 +51,10 @@ export class KeyboardFallback {
 
   private onDown(e: KeyboardEvent): void {
     if (!this.enabled || e.repeat || e.metaKey || e.ctrlKey) return;
+    // Focus can move between animation frames. Native controls own their keys
+    // immediately, before the shell's next frame updates `enabled`.
+    const target = e.target as Element | null;
+    if (target?.closest?.('input, select, textarea, button, summary, [contenteditable="true"], [role="radio"], [role="switch"]')) return;
     const now = performance.now();
 
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
@@ -77,11 +81,12 @@ export class KeyboardFallback {
 
     const semi = SEMITONES[e.code];
     if (semi === undefined || this.held.has(e.code)) return;
-    this.held.add(e.code);
+    const note = this.opts.baseNote() + semi;
+    this.held.set(e.code, note);
     // Shift and Alt stand in for hitting the key harder or softer.
     const raw = e.shiftKey ? 122 : e.altKey ? 42 : 92;
     this.opts.emit({
-      type: 'noteon', note: this.opts.baseNote() + semi,
+      type: 'noteon', note,
       velocity: raw, raw, time: now, source: 'keyboard',
     });
     e.preventDefault();
@@ -109,19 +114,19 @@ export class KeyboardFallback {
       this.opts.emit({ type: 'cc', controller: 64, value: 0, time: now, source: 'keyboard' });
       return;
     }
-    const semi = SEMITONES[e.code];
-    if (semi === undefined || !this.held.has(e.code)) return;
+    const note = this.held.get(e.code);
+    if (note === undefined) return;
     this.held.delete(e.code);
-    this.opts.emit({ type: 'noteoff', note: this.opts.baseNote() + semi, time: now, source: 'keyboard' });
+    // A range shift changes future presses, never the identity of a held key.
+    if (![...this.held.values()].includes(note)) {
+      this.opts.emit({ type: 'noteoff', note, time: now, source: 'keyboard' });
+    }
   }
 
   releaseAll(): void {
     const now = performance.now();
-    for (const code of this.held) {
-      const semi = SEMITONES[code];
-      if (semi !== undefined) {
-        this.opts.emit({ type: 'noteoff', note: this.opts.baseNote() + semi, time: now, source: 'keyboard' });
-      }
+    for (const note of new Set(this.held.values())) {
+      this.opts.emit({ type: 'noteoff', note, time: now, source: 'keyboard' });
     }
     this.held.clear();
     if (this.bendTarget !== 0) {

@@ -52,23 +52,42 @@ waves it as it opens the filter. Range and destination are in **Settings → Gam
 key belongs to the pinball table; Freestyle plays exactly what you press, so a
 note from outside the scale is a note from outside the scale.
 
-**What you play is on the left; what plays with you is on the right.**
-Instrument and its level sit under the chord your hands are making; Scale,
-Rhythm and Backing bed are a column of panels on the other side. All four say
-what they are, and the two whose titles are pills — Rhythm, Backing bed — say
-it that way because they are also switches. All of it is on screen, because
+**Backing is on the left; Instrument and Rhythm are on the right.**
+The large chord label follows Backing while it is on and your melody chords
+while it is off. Rhythm has its own
+switch; Backing has an On/Off switch and an **Auto / Manual** choice. All of it is on screen, because
 having to leave what you are playing in order to change what you are playing it
 on is the opposite of freestyle. The two levels are the ones Settings shows, so
 they read the same wherever you last moved them.
 
-**The scale is not the bed's.** It gets a panel of its own rather than living
-inside the backing, because it does two jobs: it writes the bed's progression,
-and it lights the tones of the scale faintly on the keybed so the key is
-findable under your hands. The second is still true with the bed switched off —
-which is how Freestyle starts. **Random** is one of the scales,
+**Key & scale lives inside Auto Backing.** It writes the automatic progression
+and colors the faces of matching keys while Auto backing is on, with a brighter
+shade and outline on the tonic. Manual backing and playing with Backing off have no scale
+highlights. Freestyle remembers its own key and scale independently of Pinball;
+both default to **Random**. Random is one of the scales,
 and the die beside it draws again; whatever it lands on is named underneath.
 **The bed starts off** — you came here to make your own sound, so the backing is
 offered rather than assumed.
+
+**Two ways to play the backing.** Auto follows the selected scale's progression.
+Manual turns the first twelve visible semitones into **Chord keys**, with the
+remaining keys playing melody. One key plays the root's selected chord type
+(Major by default); hold it and add one key to its right for minor, two for 7,
+or three for m7. Black and white modifiers both work. The **Chord type** selector
+makes all four qualities available with one finger, including at the split's
+upper edge. Manual chords are independent of the selected scale.
+
+**Hold chord** starts on: the last chord continues after release. Pads sustain;
+harp, guitar and Felt Piano repeat gently every two bars, following the tempo
+and selected rhythm's meter even with drums off. Turn Hold off to release with
+the last finger, or use **Stop chord** to clear the backing. A compact Stop
+remains visible when phone controls are closed.
+
+The chord area follows the visible range. **−8 / +8** move the keyboard and
+transpose a latched chord immediately; hardware octave buttons are detected by
+the existing end-note auto-latch. A range change finishes the old gesture, so
+lift and press again to choose another chord. Pause and restart clear the
+manual chord. Switching Backing off restores the whole keyboard to melody.
 
 **Twenty-seven instruments and fourteen backings**, grouped the way the rhythms
 are. The keys can be a grand piano, a Rhodes, a drawbar organ through a rotary
@@ -235,9 +254,9 @@ you are landing early.
 
 ## The music
 
-**Musical key** and **Scale** are chosen in **Settings → Sound & music → Key & scale**,
-or on screen in Freestyle. Pinball and Freestyle share the choice; PlayTune follows
-the song’s key. Nine scales: major, minor and
+Pinball's **Musical key** and **Scale** are chosen in
+**Settings → Sound & music → Pinball key & scale**. Freestyle has separate choices
+on screen under **Backing → Auto → Key & scale**. PlayTune follows the song’s key. Nine scales: major, minor and
 major pentatonic, dorian, natural minor, lydian, mixolydian, blues and kumoi —
 or **Random each game**, which draws a fresh one every time you start.
 

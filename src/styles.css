@@ -552,6 +552,73 @@ kbd {
   background: linear-gradient(96deg, rgba(87, 220, 255, 0.2), rgba(166, 120, 255, 0.2));
 }
 
+/* Freestyle backing shares the cabinet's material, typography and accent. */
+.fs-backing [hidden], .fs-compact[hidden] { display: none !important; }
+.fs-backing { gap: 8px; }
+.fs-auto { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.fs-auto .card-head .hud-select { flex: 1; min-width: 0; }
+.fs-backing button, .fs-backing select { min-height: 44px; }
+.fs-backing button { min-width: 44px; }
+.fs-mode { display: flex; border: 1px solid var(--stroke); border-radius: 8px; overflow: hidden; }
+.fs-mode label { position: relative; flex: 1; min-width: 0; cursor: pointer; }
+.fs-mode input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.fs-mode span { display: grid; place-items: center; min-height: 44px; font-size: 12px; font-weight: 700; }
+.fs-mode input:checked + span { background: color-mix(in srgb, var(--neon) 20%, transparent); color: var(--ink); box-shadow: inset 0 -2px var(--neon); }
+.fs-mode input:disabled + span { opacity: 0.45; cursor: not-allowed; }
+.fs-mode input:focus-visible + span { outline: 2px solid var(--neon); outline-offset: -3px; }
+.fs-backing :is(button, select, input, summary):focus-visible,
+.fs-compact button:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
+.fs-hint { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.5; }
+.fs-manual { display: flex; flex-direction: column; gap: 6px; }
+.fs-quality, .fs-hold { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
+.fs-quality select { width: 84px; min-width: 0; }
+.fs-hold { min-height: 44px; cursor: pointer; }
+.fs-hold input { width: 20px; height: 20px; accent-color: var(--neon); }
+.fs-current { color: var(--ink); font-size: 12px; line-height: 1.4; min-height: 2.8em; display: flex; align-items: center; }
+.fs-range { display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: 10px; color: var(--dim); }
+.fs-range b { display: block; color: var(--ink); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.fs-range > div { display: flex; }
+.fs-range button { min-width: 44px; padding: 5px; }
+.fs-backing .fs-help {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 10px 0 2px; text-align: left;
+  font-size: 11px; font-weight: 500; letter-spacing: normal; text-transform: none;
+  color: var(--fs-help-ink, var(--dim)); background: transparent;
+  border: 0; border-top: 1px solid var(--stroke); border-radius: 0; box-shadow: none;
+}
+.fs-backing .fs-help svg { flex-shrink: 0; }
+.fs-backing .fs-help:hover { color: var(--fs-help-ink, var(--ink)); }
+.fs-backing .fs-help:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.fs-help-dialog {
+  width: min(480px, calc(100vw - 32px)); max-width: none;
+  max-height: calc(100dvh - 32px); padding: 0; margin: auto;
+  color: var(--ink); background: var(--panel); border: 1px solid var(--stroke);
+  border-radius: 16px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  font-family: var(--font); font-size: 14px; text-align: left;
+  overflow: hidden; pointer-events: auto; backdrop-filter: blur(20px);
+}
+.fs-help-dialog[open] { display: flex; flex-direction: column; }
+.fs-help-dialog::backdrop { background: rgba(0, 0, 0, 0.58); }
+.fs-help-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--stroke); flex-shrink: 0; }
+.fs-help-head h2 { margin: 0; font-family: var(--font-display); font-size: 21px; line-height: 1.2; }
+.fs-help-head button { flex-shrink: 0; }
+.fs-help-body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px 16px; line-height: 1.6; }
+.fs-help-body:focus-visible { outline: 2px solid var(--neon); outline-offset: -4px; }
+.fs-help-body p { margin: 12px 0; }
+.fs-help-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fs-help-body th, .fs-help-body td { padding: 8px; border-bottom: 1px solid var(--stroke); text-align: left; }
+.fs-help-body tbody th { font-weight: 500; }
+.fs-help-body thead { background: color-mix(in srgb, var(--neon) 12%, transparent); }
+.fs-muted { color: var(--accent); }
+.fs-muted button { width: 100%; margin-top: 6px; font-size: 11px; }
+.fs-compact { display: none; pointer-events: auto; align-items: center; gap: 8px; color: var(--ink); background: var(--floor-deep); border: 1px solid var(--stroke); border-radius: 8px; padding: 0 0 0 10px; font-size: 12px; }
+.fs-compact button { min-height: 44px; min-width: 48px; }
+@media (min-width: 701px) {
+  .hud-freestyle :is(.hud-left, .hud-right) { max-height: calc(100dvh - 190px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 2px 6px 6px; }
+  .hud-freestyle :is(.hud-left, .hud-right) > * { flex-shrink: 0; }
+  .hud-freestyle :is(.hud-left, .hud-right) .voice-list { position: static; width: 100%; }
+}
+
 /* ---------------------------------------------------- freestyle rhythm --- */
 
 /*
@@ -674,9 +741,9 @@ kbd {
 }
 
 .voice-card {
-  position: absolute;
+  /* Viewport positioning keeps the preview outside scrolling HUD cards. */
+  position: fixed;
   z-index: 31;
-  left: calc(100% + 8px);
   width: 190px;
   overflow: hidden;
   border: 1px solid var(--stroke);
@@ -702,9 +769,6 @@ kbd {
   text-transform: uppercase;
   color: var(--dim);
 }
-
-/* The right-hand cards would push their preview off the screen. */
-.hud-right .voice-card { left: auto; right: calc(100% + 8px); }
 
 .hud-knob { display: flex; align-items: center; gap: 8px; }
 .hud-knob b {
@@ -1585,6 +1649,7 @@ kbd {
    never got this and was drawn in a pale ink on a pale ground. */
 [data-theme="toybox"] .hud-toggle,
 [data-theme="toybox"] .card-head button,
+[data-theme="toybox"] .fs-backing button:not(.fs-help),
 [data-theme="toybox"] .hud-select {
   background: #ded0b6;
   color: var(--void);
@@ -1622,6 +1687,14 @@ kbd {
 [data-theme="toybox"] .card-title,
 [data-theme="toybox"] .hud-knob b { color: #5a4a95; }
 [data-theme="toybox"] .rhythm-bpm b { color: var(--void); }
+[data-theme="toybox"] .fs-current,
+[data-theme="toybox"] .fs-range b,
+[data-theme="toybox"] .fs-mode input:checked + span { color: var(--void); }
+[data-theme="toybox"] .fs-mode input:checked + span { background: var(--ok); box-shadow: inset 0 -2px var(--stroke); }
+[data-theme="toybox"] .fs-range,
+[data-theme="toybox"] .fs-hint { color: #5a4a95; }
+[data-theme="toybox"] .fs-help { --fs-help-ink: #5a4a95; }
+[data-theme="toybox"] .fs-help-dialog { color: var(--void); border-width: 3px; box-shadow: 0 6px 0 var(--stroke), 0 24px 80px rgba(0, 0, 0, 0.45); }
 
 /* ============================================================= MOTION === */
 /*
@@ -1834,6 +1907,8 @@ kbd {
   #playfield { bottom: 44px; }
   .hud { padding: 10px; }
   .hud-freestyle #hud-controls { display: block; }
+  .hud-freestyle:not(.controls-open) .fs-compact:not([hidden]) { display: flex; }
+  .hud-freestyle.controls-open .fs-compact { display: none; }
   .hud-freestyle:not(.controls-open) .hud-card,
   .hud-freestyle:not(.controls-open) .hud-right { display: none; }
 

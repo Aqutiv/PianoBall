@@ -55,6 +55,7 @@ export class Shell {
   readonly input = new InputHub();
   readonly audio = new AudioEngine();
   readonly music: MusicState;
+  readonly freestyleMusic: MusicState;
   readonly bed: ChordBed;
   readonly hud: Hud;
   readonly overlay: Overlay;
@@ -107,6 +108,7 @@ export class Shell {
     applyTheme(this.stage.theme);
 
     this.music = new MusicState({ ...AURORA.music });
+    this.freestyleMusic = new MusicState({ ...AURORA.music }, 'freestyleMusic');
     this.bed = new ChordBed(this.audio, this.music);
     // The bed is played by a hand, not a sequencer: a few milliseconds of
     // drift, a tenth of a gain, chords rolled from the bottom and a lean on
@@ -121,7 +123,10 @@ export class Shell {
       bed: this.bed,
       music: this.music,
       hud: this.hud,
-      openScreen: (s) => this.overlay.show(s),
+      openScreen: (s) => {
+        if (s === 'sound-settings') this.suspend();
+        this.overlay.show(s);
+      },
       setResult: (r) => { this.lastResult = r; },
     };
 
@@ -235,13 +240,18 @@ export class Shell {
     // and since Freestyle can pick its own they are no longer a timbre the
     // next mode would have chosen.
     this.audio.stopPads();
+    this.bed.setMusic(id === 'freestyle' ? this.freestyleMusic : this.music);
     this.bed.reset();
     this.stage.reset();
     this.hud.clearPanels();
     this.hud.clearBanner();
 
     let mode = this.built.get(id);
-    if (!mode) { mode = factory(this.ctx); this.built.set(id, mode); }
+    if (!mode) {
+      const ctx = id === 'freestyle' ? { ...this.ctx, music: this.freestyleMusic } : this.ctx;
+      mode = factory(ctx);
+      this.built.set(id, mode);
+    }
     this.active = mode;
     this.modeId = id;
     this.hud.setFreestyle(id === 'freestyle');
@@ -415,6 +425,7 @@ export class Shell {
     this.input.resetVelocitySettings();
     this.input.midi.resetSettings();
     this.music.resetSettings();
+    this.freestyleMusic.resetSettings();
     resetFreestyleSettings();
     resetRhythmSettings();
     resetPlayTuneSettings();

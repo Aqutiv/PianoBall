@@ -1,5 +1,6 @@
 import { load, save } from '../../core/storage';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
+import type { BedControlMode, ManualChordQuality } from '../../audio/bed';
 
 const KEY = 'freestyleSettings';
 
@@ -12,6 +13,9 @@ export interface FreestyleSettings {
    * to decide for themselves — so it is offered rather than assumed.
    */
   bed: boolean;
+  bedMode: BedControlMode;
+  manualChordQuality: ManualChordQuality;
+  holdChord: boolean;
   /**
    * What the keys sound like, and what the bed sounds like under them.
    *
@@ -25,6 +29,9 @@ export interface FreestyleSettings {
 
 export const DEFAULT_FREESTYLE: FreestyleSettings = {
   bed: false,
+  bedMode: 'auto',
+  manualChordQuality: 'maj',
+  holdChord: true,
   voiceId: DEFAULT_LEAD_VOICE,
   bedVoiceId: DEFAULT_BED_VOICE,
 };

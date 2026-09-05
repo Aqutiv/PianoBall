@@ -12,6 +12,7 @@ import { Field } from './field';
 import { FreestyleHud } from './hud';
 import { freestyleSettings } from './settings';
 import { rhythmSettings } from './rhythmSettings';
+import { ChordInput } from './chordInput';
 
 /**
  * Playing for the sound of it.
@@ -28,6 +29,9 @@ export class FreestyleMode extends ModeBase implements GameMode {
   private readonly panel: FreestyleHud;
   private readonly box: RhythmBox;
   private readonly ctx: ModeContext;
+  private readonly chords: ChordInput;
+  private entered = false;
+  private mappingRevision = -1;
   /** Notes the player is holding, in the order they were pressed. */
   private held: number[] = [];
   /** The tempo the app was in before Freestyle borrowed it. */
@@ -47,6 +51,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
+    this.chords = new ChordInput(ctx.bed);
     this.field = new Field(ctx.stage);
     const r = rhythmSettings();
     this.box = new RhythmBox(ctx.audio, () => ctx.music.bpm, findPattern(r.patternId));
@@ -55,7 +60,13 @@ export class FreestyleMode extends ModeBase implements GameMode {
     // A drummer, not a machine: a few milliseconds and a few percent either way.
     this.box.human = { rng: Math.random, jitter: 0.006, gain: 0.08 };
     this.panel = new FreestyleHud(
-      ctx.hud, ctx.music, ctx.audio, this.box, () => this.applyBed(),
+      ctx.hud, ctx.music, ctx.audio, this.box, {
+        bed: ctx.bed, mapping: ctx.input.mapping,
+        change: () => this.applyBed(),
+        stop: () => this.chords.stop(),
+        shift: (dir) => { ctx.input.mapping.shiftOctave(dir); this.remap(); },
+        openSound: () => ctx.openScreen('sound-settings'),
+      },
     );
     this.remap();
   }
@@ -63,6 +74,13 @@ export class FreestyleMode extends ModeBase implements GameMode {
   remap(): void {
     const m = this.ctx.input.mapping.settings;
     this.deck.build(m.baseNote, m.count);
+    this.mappingRevision = this.ctx.input.mapping.revision;
+    if (this.entered) {
+      this.chords.remap(m.baseNote, m.count);
+      this.applyBed();
+      // Rebuilding the deck must not release a melody already under the hands.
+      for (const note of this.held) this.deck.noteOn(note, 0.6);
+    }
   }
 
   /** Start or silence the bed to match what the player last chose. */
@@ -70,7 +88,15 @@ export class FreestyleMode extends ModeBase implements GameMode {
     // Deliberately no allNotesOff here: the bed's pads are not key voices, so
     // it would not silence them — it would only cut the note the player is
     // holding, which is not what switching off a backing track should do.
-    this.ctx.bed.setEnabled(freestyleSettings().bed);
+    const s = freestyleSettings();
+    const supported = this.ctx.input.mapping.settings.count >= 12;
+    this.ctx.bed.setControlMode(s.bedMode);
+    this.ctx.bed.setEnabled(s.bed && (s.bedMode !== 'manual' || supported));
+    this.chords.configure(s.bed && s.bedMode === 'manual' && supported, s.manualChordQuality, s.holdChord);
+    this.ctx.bed.setManualMeter(this.box.pattern.beats);
+    // A pause stops the shared scheduler. If Backing was off at resume, the
+    // shell leaves it asleep; enabling it here must wake Auto and repeats.
+    if (this.running && this.ctx.bed.enabled) this.ctx.bed.start();
   }
 
   /** Hand the engine the instruments this mode remembers being set to. */
@@ -85,6 +111,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   private applyRhythm(): void {
     const r = rhythmSettings();
     this.box.setPattern(findPattern(r.patternId));
+    this.ctx.bed.setManualMeter(this.box.pattern.beats);
     this.box.swing = r.swing;
     this.box.level = r.level;
     if (this.running && r.on) this.box.start(); else this.box.stop();
@@ -99,6 +126,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
    * cleared.
    */
   applySettings(): void {
+    this.chords.stop();
     this.applyBed();
     this.applyVoices();
     this.applyRhythm();
@@ -109,6 +137,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   enter(): void {
+    this.entered = true;
     const { stage, input, audio, music } = this.ctx;
     stage.cam.configure({ width: FIELD.width, height: FIELD.height });
     stage.resize(stage.cssW, stage.cssH, stage.dpr);
@@ -124,8 +153,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     }));
     this.track(music.bus.on('tempo', (bpm) => audio.setTempo(bpm)));
 
-    // Freestyle borrows the shared tempo while it is running and hands it back
-    // on the way out, so a tempo chosen here does not follow you to a table.
+    // Restore Freestyle's remembered rhythm tempo on its own music state.
     this.enteredBpm = music.bpm;
     music.setBpm(rhythmSettings().bpm);
     audio.setTempo(music.bpm);
@@ -143,12 +171,16 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   exit(): void {
+    this.panel.destroy();
+    this.chords.reset();
+    this.entered = false;
     this.release();
     this.running = false;
     this.box.stop();
     const { audio, music } = this.ctx;
     // Leave the bed, and the sound of the thing, as the next mode expects to
     // find them: a choir chosen here is Freestyle's, not the app's.
+    this.ctx.bed.setControlMode('auto');
     this.ctx.bed.setEnabled(true);
     audio.setLeadVoice(DEFAULT_LEAD_VOICE);
     audio.setBedVoice(DEFAULT_BED_VOICE);
@@ -162,7 +194,12 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   /** Nothing should keep drumming behind the pause panel. */
-  pause(): void { this.box.stop(); }
+  pause(): void {
+    this.panel.closeHelp();
+    this.running = false;
+    this.chords.stop();
+    this.box.stop();
+  }
 
   /**
    * Back from a panel that may have moved something this HUD is showing — the
@@ -170,6 +207,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
    * so the controls are re-read rather than left on what they said going in.
    */
   resume(): void {
+    this.running = true;
+    this.applyBed();
     this.applyRhythm();
     this.panel.sync();
   }
@@ -179,7 +218,10 @@ export class FreestyleMode extends ModeBase implements GameMode {
    * moment the table calls a new game — so it is where a random scale is drawn.
    */
   newGame(): void {
+    this.panel.closeHelp();
+    this.chords.stop();
     this.running = true;
+    this.applyBed();
     this.ctx.music.roll();
     this.field.reset();
     this.applyRhythm();
@@ -188,7 +230,13 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.panel.sync();
   }
 
+  restart(): boolean {
+    this.newGame();
+    return true;
+  }
+
   step(dt: number): void {
+    if (this.mappingRevision !== this.ctx.input.mapping.revision) this.remap();
     this.deck.update(dt);
     const { input, audio } = this.ctx;
     // The wheels drive the sound here, rather than the table.
@@ -210,7 +258,12 @@ export class FreestyleMode extends ModeBase implements GameMode {
     stage.beginFrame(frameDt);
     const em = stage.emissive.ctx;
     this.field.draw(em);
-    drawKeys(stage.ctx, em, stage, this.deck, { highlight: (n) => this.highlight(n) });
+    drawKeys(stage.ctx, em, stage, this.deck, {
+      highlight: (n) => this.highlight(n),
+      keyTint: freestyleSettings().bed && freestyleSettings().bedMode === 'auto',
+      chordSplit: this.chords.active ? this.ctx.input.mapping.low + 12 : undefined,
+      chordRoot: this.chords.active ? this.ctx.bed.manualChord?.root : undefined,
+    });
     stage.particles.draw(em, stage.cam);
     stage.composite();
     stage.drawRoll();
@@ -242,19 +295,26 @@ export class FreestyleMode extends ModeBase implements GameMode {
 
   // ------------------------------------------------------------- playing ---
 
-  /** Tones of the scale glow faintly, so the key is findable on the keyboard. */
+  /** Auto backing lights its scale; free playing and Manual have no scale guide. */
   private highlight(note: number): number {
+    const s = freestyleSettings();
+    if (!s.bed || s.bedMode !== 'auto') return 0;
     const m = this.ctx.music;
     if (!inScale(note, m.root, m.scale)) return 0;
-    return (note - m.root) % 12 === 0 ? 0.2 : 0.09;
+    return (note - m.root) % 12 === 0 ? 0.48 : 0.28;
   }
 
   private onInput(e: InputEvent): void {
     const { audio, input, stage, bed } = this.ctx;
     if (e.type === 'noteon') {
+      if (!this.running) return;
+      if (this.mappingRevision !== input.mapping.revision) this.remap();
       const force = input.force(e.raw);
+      if (input.mapping.laneFor(e.note) < 0) return;
+      const role = this.chords.noteOn(e.note, force);
+      if (role === 'ignore') return;
       const key = this.deck.noteOn(e.note, force);
-      if (!key) return;
+      if (!key || role === 'chord') return;
       // Never snapped, whatever the assist setting says. The point of the mode
       // is that the keyboard does exactly what the player asks of it.
       audio.noteOn(e.note, force, this.pan(key.geom.cx));
@@ -268,6 +328,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
       if (audio.running && bed.groove.judge(audio.now)) this.field.onBeat();
     } else if (e.type === 'noteoff') {
       this.deck.noteOff(e.note);
+      if (this.chords.noteOff(e.note) !== 'lead') return;
       audio.noteOff(e.note);
       this.field.noteOff(e.note);
       stage.endNote(e.note);

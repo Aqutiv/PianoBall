@@ -4,8 +4,6 @@ import { clamp } from '../core/math';
 import { load, save } from '../core/storage';
 import { MODES, findMode, type ActiveMusic, type MusicMode } from './music';
 
-const STORAGE_KEY = 'music';
-
 /** What the player picked in settings: a `MODES` id, or 'random'. */
 export const RANDOM = 'random';
 
@@ -61,11 +59,10 @@ export interface MusicDefaults {
 }
 
 /**
- * The key everything is playing in, shared by all three modes.
+ * Musical preferences and their resolved key and scale.
  *
- * Scale choice used to belong to the pinball table, which meant it could not
- * follow the player into a mode that has no table. It lives here instead: the
- * settings panel writes to it, and whichever mode is running listens.
+ * Pinball and Freestyle each own an instance and a separate storage key.
+ * PlayTune temporarily tunes the Pinball instance to the song it is playing.
  *
  * Key and scale are each a *preference* — `keyChoice` and `choice`, either of
  * which may be `RANDOM` — resolved into the concrete `root` and `scale` that
@@ -90,7 +87,7 @@ export class MusicState {
 
   private readonly defaults: MusicDefaults;
 
-  constructor(defaults: MusicDefaults) {
+  constructor(defaults: MusicDefaults, private readonly storageKey = 'music') {
     this.defaults = defaults;
     this.bpm = defaults.bpm;
     // Random by default, the key as well as the scale: a fresh player should
@@ -98,7 +95,7 @@ export class MusicState {
     // to be authored in. A saved pitch class is a deliberate pin and is kept —
     // a record written before the key had a random option, or one holding
     // anything out of range, falls to random with everybody else.
-    const stored = load<StoredMusic>(STORAGE_KEY, { mode: RANDOM, key: RANDOM });
+    const stored = load<StoredMusic>(this.storageKey, { mode: RANDOM, key: RANDOM });
     this.choice = stored.mode;
     this.keyChoice = typeof stored.key === 'number' && stored.key >= 0 && stored.key < 12
       ? stored.key
@@ -144,7 +141,7 @@ export class MusicState {
   }
 
   private persist(): void {
-    save(STORAGE_KEY, { mode: this.choice, key: this.keyChoice });
+    save(this.storageKey, { mode: this.choice, key: this.keyChoice });
   }
 
   /**

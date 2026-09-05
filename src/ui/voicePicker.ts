@@ -31,12 +31,17 @@ export class VoicePicker {
 
   private open = false;
   private activeIndex = -1;
+  private previewRow: HTMLElement | null = null;
   /** Type-ahead buffer, cleared once the player stops typing. */
   private typed = '';
   private typedAt = 0;
 
   private readonly onDocPointer = (e: PointerEvent) => {
     if (!this.el.contains(e.target as Node)) this.close(false);
+  };
+
+  private readonly onViewportChange = () => {
+    if (this.previewRow) this.positionCard(this.previewRow);
   };
 
   constructor(
@@ -129,7 +134,7 @@ export class VoicePicker {
   }
 
   destroy(): void {
-    document.removeEventListener('pointerdown', this.onDocPointer);
+    this.close(false);
   }
 
   // ---------------------------------------------------------------- build ---
@@ -189,6 +194,8 @@ export class VoicePicker {
     this.button.setAttribute('aria-expanded', 'true');
     this.el.classList.add('is-open');
     document.addEventListener('pointerdown', this.onDocPointer);
+    window.addEventListener('scroll', this.onViewportChange, true);
+    window.addEventListener('resize', this.onViewportChange);
     const i = this.rows.findIndex((r) => r.dataset.id === this.selected);
     this.setActive(i < 0 ? 0 : i, true);
     this.list.tabIndex = -1;
@@ -203,6 +210,8 @@ export class VoicePicker {
     this.el.classList.remove('is-open');
     this.hideCard();
     document.removeEventListener('pointerdown', this.onDocPointer);
+    window.removeEventListener('scroll', this.onViewportChange, true);
+    window.removeEventListener('resize', this.onViewportChange);
     if (focusButton) this.button.focus();
   }
 
@@ -307,19 +316,36 @@ export class VoicePicker {
     card.querySelector('.voice-cap-family')!.textContent = row.dataset.family!;
     card.hidden = false;
 
-    // Sit the card beside its row, then pull it back inside the viewport. The
-    // list is anchored to a HUD corner, so near the bottom of a short window
-    // an un-clamped card would hang off the screen.
+    this.previewRow = row;
+    this.positionCard(row);
+  }
+
+  private positionCard(row: HTMLElement): void {
+    const card = this.card;
+    if (!card || card.hidden) return;
     const rowBox = row.getBoundingClientRect();
+    // Intersect scrollable ancestors so a row scrolled out of the controls
+    // does not leave its picture floating over the playfield.
+    let top = 0, bottom = window.innerHeight;
+    for (let parent = row.parentElement; parent; parent = parent.parentElement) {
+      if (!/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) continue;
+      const box = parent.getBoundingClientRect();
+      top = Math.max(top, box.top);
+      bottom = Math.min(bottom, box.bottom);
+    }
+    if (rowBox.bottom <= top || rowBox.top >= bottom) { this.hideCard(); return; }
     const hostBox = this.el.getBoundingClientRect();
-    const height = card.offsetHeight;
-    const wanted = rowBox.top - hostBox.top - height / 2 + rowBox.height / 2;
-    const min = 8 - hostBox.top;
-    const max = window.innerHeight - hostBox.top - height - 8;
-    card.style.top = `${Math.round(Math.max(min, Math.min(wanted, max)))}px`;
+    const width = card.offsetWidth, height = card.offsetHeight;
+    const right = hostBox.right + 8, left = hostBox.left - width - 8;
+    const beside = this.el.closest('.hud-right') || right + width > window.innerWidth - 8
+      ? left : right;
+    const center = (Math.max(top, rowBox.top) + Math.min(bottom, rowBox.bottom)) / 2;
+    card.style.left = `${Math.round(Math.max(8, Math.min(beside, window.innerWidth - width - 8)))}px`;
+    card.style.top = `${Math.round(Math.max(8, Math.min(center - height / 2, window.innerHeight - height - 8)))}px`;
   }
 
   private hideCard(): void {
+    this.previewRow = null;
     if (this.card) this.card.hidden = true;
   }
 }
