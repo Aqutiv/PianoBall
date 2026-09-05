@@ -24,7 +24,7 @@ export function readProvenance(root: string, env: NodeJS.ProcessEnv = process.en
 }
 
 /** Refuse tracked/unignored outputs in the source tree instead of changing its dirty state. */
-export function checkOutputDirectory(root: string, output: string): void {
+export function checkOutputDirectory(root: string, output: string, catalogFilename: string): void {
   let top: string;
   try {
     top = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], {
@@ -34,11 +34,16 @@ export function checkOutputDirectory(root: string, output: string): void {
   const relative = path.relative(top, output);
   if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) return;
   try {
-    execFileSync('git', ['-C', top, 'check-ignore', '-q', '--', path.join(output, 'manifest.json')], {
-      stdio: 'ignore', windowsHide: true,
-    });
+    // Check both actual filenames: a manifest-only rule or catalogue negation is unsafe.
+    // Run separately: check-ignore -q with multiple paths succeeds if ANY is ignored.
+    for (const filename of ['manifest.json', catalogFilename]) {
+      const target = path.join(output, filename);
+      execFileSync('git', ['-C', top, 'check-ignore', '-q', '--', target], {
+        stdio: 'ignore', windowsHide: true,
+      });
+    }
   } catch {
-    throw new Error('Output inside the repository must be Git-ignored; use dist/content/v1 or an external temporary directory.');
+    throw new Error('All output files inside the repository must be Git-ignored; use dist/content/v1 or an external temporary directory.');
   }
 }
 
@@ -56,7 +61,7 @@ async function atomicWrite(file: string, bytes: Buffer): Promise<void> {
 }
 
 /** Validate everything before any write; publish the verified catalogue before the manifest. */
-export async function writeCatalog(output: string, catalog: unknown): Promise<{
+export async function writeCatalog(output: string, catalog: unknown, sourceRoot?: string): Promise<{
   manifest: ManifestV1; catalogBytes: number; manifestBytes: number;
 }> {
   validateCatalog(catalog);
@@ -67,6 +72,7 @@ export async function writeCatalog(output: string, catalog: unknown): Promise<{
   validateManifest(manifest);
   const manifestBytes = jsonBytes(manifest);
   requireValue(manifestBytes.length <= MAX_MANIFEST_BYTES, 'manifest bytes', `exceeds ${MAX_MANIFEST_BYTES}`);
+  if (sourceRoot !== undefined) checkOutputDirectory(sourceRoot, output, manifest.url);
   await mkdir(output, { recursive: true });
   const file = path.join(output, manifest.url);
   let existing: Buffer | undefined;

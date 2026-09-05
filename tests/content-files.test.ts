@@ -109,14 +109,49 @@ describe('published content files', () => {
     expect(readProvenance(checkout, env)).toEqual(before);
     await writeFile(path.join(checkout, 'new-source.ts'), '// new track\n');
     expect(readProvenance(checkout, env).sourceDirty).toBe(true);
-    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'unignored-output'))).toThrow(/Git-ignored/);
-    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'dist/content/v1'))).not.toThrow();
+    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'unignored-output'), 'catalog.fixture.json')).toThrow(/Git-ignored/);
+    expect(() => checkOutputDirectory(checkout, path.join(checkout, 'dist/content/v1'), 'catalog.fixture.json')).not.toThrow();
     expect(readProvenance(checkout, { GITHUB_SHA: 'b'.repeat(40) }).sourceCommit).toBe('b'.repeat(40));
   }, 20_000);
+
+  it.each([
+    ['only the manifest is ignored', 'output/manifest.json\n'],
+    ['catalogues are re-included', 'output/*\n!output/catalog.*.json\n'],
+  ])('rejects custom output when %s without writing or dirtying the checkout', async (_name, rules) => {
+    const checkout = await temp();
+    await writeFile(path.join(checkout, '.gitignore'), rules);
+    await initGit(checkout);
+    const output = path.join(checkout, 'output');
+    const before = readProvenance(checkout, {});
+    expect(before.sourceDirty).toBe(false);
+    const exportContent = async () => {
+      return writeCatalog(output, compilePublishedCatalog(before), checkout);
+    };
+    await expect(exportContent()).rejects.toThrow(/Git-ignored/);
+    await expect(readdir(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(readProvenance(checkout, {})).toEqual(before);
+  });
+
+  it.each(['output/\n', 'output/*.json\n'])('keeps repeated custom exports clean with ignore rule %j', async (rules) => {
+    const checkout = await temp();
+    await writeFile(path.join(checkout, '.gitignore'), rules);
+    await initGit(checkout);
+    const output = path.join(checkout, 'output');
+    const before = readProvenance(checkout, {});
+    const exportContent = async () => {
+      return writeCatalog(output, compilePublishedCatalog(readProvenance(checkout, {})), checkout);
+    };
+    const first = await exportContent();
+    expect(first).toEqual(await exportContent());
+    expect(readProvenance(checkout, {})).toEqual(before);
+    // Force-tracked manifests must still be rejected even under an ignored directory.
+    git(checkout, ['add', '-f', 'output/manifest.json']);
+    expect(() => checkOutputDirectory(checkout, output, first.manifest.url)).toThrow(/Git-ignored/);
+  });
 
   it('uses explicit null provenance without Git and accepts an external output path', async () => {
     const directory = await temp();
     expect(readProvenance(directory, {})).toEqual({ sourceCommit: null, sourceDirty: null });
-    expect(() => checkOutputDirectory(root, directory)).not.toThrow();
+    expect(() => checkOutputDirectory(root, directory, 'catalog.fixture.json')).not.toThrow();
   });
 });

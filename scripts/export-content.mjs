@@ -26,12 +26,11 @@ registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { readProvenance, checkOutputDirectory, writeCatalog } = await import('./content-files.ts');
+const { readProvenance, writeCatalog } = await import('./content-files.ts');
 const { compilePublishedCatalog } = await import('../src/content/export.ts');
-checkOutputDirectory(root, output);
 const provenance = readProvenance(root);
 const catalog = compilePublishedCatalog(provenance);
-const result = await writeCatalog(output, catalog);
+const result = await writeCatalog(output, catalog, root);
 console.log(JSON.stringify({
   ...provenance, output,
   melody: catalog.entries.filter((entry) => entry.role === 'melody').length,
