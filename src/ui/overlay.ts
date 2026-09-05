@@ -1,24 +1,15 @@
-import { noteLabel, noteName, NOTE_NAMES } from '../midi/notes';
-import { MODES } from '../audio/music';
-import { RANDOM, toKeyChoice } from '../audio/musicState';
-import type { CurveName } from '../midi/velocityCurve';
+import { noteLabel } from '../midi/notes';
 import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
-import { pinballSettings, setPinballSettings } from '../modes/pinball/settings';
 import { scoreboard, type Frames } from './board';
 import { REVEAL_SECONDS, type ModeResult } from './scoreboard';
-import type { ModTarget } from '../audio/engine';
-import { LEAD_BEAT_CHOICES, playTuneSettings, setPlayTuneSettings } from '../modes/playtune/settings';
-import { APPROACH_BPM_CAP } from '../modes/playtune/transport';
-import { loadProgress, passesNeeded, resetProgress } from '../modes/playtune/progress';
-import { CHORDS_ROLE, MELODY_ROLE, type RoleId, type TuneRole } from '../modes/playtune/role';
+import { passesNeeded } from '../modes/playtune/progress';
+import type { RoleId } from '../modes/playtune/role';
+import { SettingsNavigation } from './settingsNavigation';
+import { SettingsPanel } from './settingsPanel';
 import type { PlayTuneMode } from '../modes/playtune/playtune';
 import type { Tune } from '../modes/playtune/chart';
 import { findBedVoice, findLeadVoice } from '../audio/voices';
-import { THEMES } from '../render/theme';
-import { TABLE_SIZE } from '../render/stage';
-import { themeSettings } from '../render/themeSettings';
-import type { GraphicsPreset, SoundPreset } from '../render/perfSettings';
 import { buildLine } from '../app/build';
 import { updates } from '../app/updates';
 
@@ -33,33 +24,15 @@ export type Screen =
   | 'result'
   | null;
 
-/**
- * Menus, settings and the MIDI monitor.
- *
- * The monitor matters more than it looks: controllers differ in what their
- * octave, bend and sustain controls actually transmit, and this is where that
- * gets discovered rather than assumed.
- */
-/** The graphics presets, in the order they are offered. */
-const GRAPHICS_PRESETS: readonly (readonly [string, string])[] = [
-  ['auto', 'Auto'],
-  ['high', 'High'],
-  ['balanced', 'Balanced'],
-  ['low', 'Low'],
-];
-
-const SOUND_PRESETS: readonly (readonly [string, string])[] = [
-  ['auto', 'Auto'],
-  ['full', 'Full'],
-  ['lite', 'Lite'],
-];
-
+/** Menus and screen navigation. Settings owns its own category hierarchy. */
 export class Overlay {
   screen: Screen = 'home';
   private body!: HTMLElement;
   private live: ((dt: number) => void) | null = null;
   /** Drops whatever input subscription the current screen took out. */
   private offInput: (() => void) | null = null;
+  private readonly settingsNavigation = new SettingsNavigation();
+  private settingsPanel: SettingsPanel | null = null;
   /** Index of the highlighted mode card on the home screen. */
   private cursor = 0;
   /**
@@ -99,12 +72,12 @@ export class Overlay {
   get visible(): boolean { return this.screen !== null; }
 
   show(screen: Screen): void {
-    // The sub screens are the ones that came from somewhere and owe it a way
-    // back. Note what that rules out: a sub screen may not offer a button to
-    // another sub screen, because `wasSub` would then keep the older return
-    // address and Back would skip a step. Settings and Calibrate already work
-    // around it by hardcoding where Cancel goes; About sidesteps it by being
-    // reachable only from home, and offering only Back.
+    const previous = this.screen;
+    this.settingsPanel?.dispose();
+    this.settingsPanel = null;
+    if (previous === 'calibrate') this.shell.input.mapping.cancelCalibration();
+    // Keep the outer return address while Settings visits calibration or
+    // redraws after a controller connection. Its inner navigation is separate.
     const sub = screen === 'settings' || screen === 'calibrate' || screen === 'about';
     const wasSub = this.screen === 'settings' || this.screen === 'calibrate'
       || this.screen === 'about';
@@ -127,8 +100,12 @@ export class Overlay {
     this.root.classList.add('show');
     this.body.scrollTop = 0;
     if (screen === 'home') this.renderHome();
-    else if (screen === 'settings') this.renderSettings();
-    else if (screen === 'calibrate') this.renderCalibrate();
+    else if (screen === 'settings') {
+      this.settingsPanel = new SettingsPanel(this.body, this.shell, this.settingsNavigation,
+        () => this.back(), () => this.show('calibrate'));
+      this.settingsPanel.mount(previous !== 'settings' && previous !== 'calibrate', previous === 'calibrate');
+      this.live = (dt) => this.settingsPanel?.update(dt);
+    } else if (screen === 'calibrate') this.renderCalibrate();
     else if (screen === 'about') this.renderAbout();
     else if (screen === 'paused') this.renderPaused();
     else if (screen === 'gameover') this.renderGameOver();
@@ -140,6 +117,8 @@ export class Overlay {
 
   /** Leave a sub-screen for whatever opened it. */
   back(): void {
+    if (this.screen === 'calibrate') { this.show('settings'); return; }
+    if (this.screen === 'settings' && this.settingsPanel?.back()) return;
     if (this.returnTo === null) this.shell.resumeMode();
     else this.show(this.returnTo);
   }
@@ -543,10 +522,8 @@ export class Overlay {
     `;
     const step = this.body.querySelector('#cal-step') as HTMLElement;
     const done = this.body.querySelector('#btn-done') as HTMLElement;
-    done.addEventListener('click', () => {
-      m.cancelCalibration();
-      this.show('settings');
-    });
+    done.addEventListener('click', () => this.back());
+    done.focus();
 
     // Nothing else feeds the calibration: without this the panel asks for a key
     // and then ignores every one it is given. The subscription lives exactly as
@@ -567,384 +544,6 @@ export class Overlay {
           ? 'Now press the <strong>highest</strong> key.'
           : `Mapped ${noteLabel(m.low)}&ndash;${noteLabel(m.high)} &middot; ${m.settings.count} keys.`;
       done.textContent = m.phase === 'done' ? 'Done' : 'Cancel';
-    };
-    this.live(0);
-  }
-
-  // ------------------------------------------------------------ settings ---
-
-  private renderSettings(): void {
-    const { input, audio, stage, music } = this.shell;
-    const tune = playTuneSettings();
-    const midi = input.midi;
-    // Everything in Display shows what was *asked for*. What is actually on
-    // screen is that minus whatever the ladder has shed, and the panel is not
-    // the place to conflate the two.
-    const want = stage.preferredQuality;
-    const opts = midi.devices.map((dv) =>
-      `<option value="${dv.id}" ${dv.id === midi.selectedId ? 'selected' : ''}>${dv.name}</option>`).join('');
-    const curves: CurveName[] = ['soft', 'linear', 'hard', 'gamma', 'fixed'];
-    // The preference, not what it resolved to — a player on random who saw a
-    // named key here would have no way to tell, or to get back.
-    const nowKey = music.keyChoice;
-    const keys = [`<option value="${RANDOM}" ${nowKey === RANDOM ? 'selected' : ''}>? &mdash; random each game</option>`]
-      .concat(NOTE_NAMES.map((n, i) =>
-        `<option value="${i}" ${i === nowKey ? 'selected' : ''}>${n}</option>`))
-      .join('');
-    const scales = [`<option value="${RANDOM}" ${music.choice === RANDOM ? 'selected' : ''}>Random each game</option>`]
-      .concat(MODES.map((mode) =>
-        `<option value="${mode.id}" ${music.choice === mode.id ? 'selected' : ''}>${mode.label}</option>`))
-      .join('');
-
-    // Swatches rather than a dropdown: a theme is a thing you look at, and a
-    // list of names tells you nothing about what you are choosing between.
-    const nowTheme = themeSettings().id;
-    const themeCards = THEMES.map((t) => `
-      <button class="theme-card${t.id === nowTheme ? ' on' : ''}" data-theme-id="${t.id}"
-              aria-pressed="${t.id === nowTheme}">
-        <span class="theme-swatch" aria-hidden="true">
-          <i style="background:${t.palette.void}"></i><i style="background:${t.palette.neon}"></i>
-          <i style="background:${t.palette.neon2}"></i><i style="background:${t.palette.accent}"></i>
-          <i style="background:${t.palette.ink}"></i>
-        </span>
-        <span class="theme-name">${t.name}</span>
-        <span class="theme-blurb">${t.blurb}</span>
-      </button>`).join('');
-
-    this.body.innerHTML = `
-      <h1>Settings</h1>
-
-      <h2>Theme</h2>
-      <div class="theme-grid" id="themes">${themeCards}</div>
-
-      <h2>Controller</h2>
-      <div class="row"><label>MIDI device</label>
-        <select id="dev">${opts || '<option>None found</option>'}</select></div>
-      <div class="row"><label>Mapped range</label>
-        <span class="diag" id="range"></span></div>
-      <div class="row"><label>Octave</label>
-        <span><button id="oct-down">&minus;12</button> <button id="oct-up">+12</button>
-        <button id="cal">Calibrate&hellip;</button></span></div>
-      <div class="row"><label>Velocity curve</label>
-        <select id="curve">${curves.map((c) => `<option value="${c}" ${input.velocity.curve === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-      <p class="diag">How hard you actually play, over the last few hundred notes:</p>
-      <div class="hist" id="hist"></div>
-
-      <h2>Audio</h2>
-      <div class="row"><label>Master</label><input type="range" id="vol-master" min="0" max="1" step="0.01" value="${audio.settings.master}"></div>
-      <div class="row"><label>Music</label><input type="range" id="vol-music" min="0" max="1" step="0.01" value="${audio.settings.music}"></div>
-      <div class="row"><label>Instrument</label><input type="range" id="vol-lead" min="0" max="1" step="0.01" value="${audio.settings.leadLevel}"></div>
-      <div class="row"><label>Backing bed</label>
-        <span class="pair"><button id="bed">${audio.settings.bed ? 'On' : 'Off'}</button>
-        <input type="range" id="vol-bed" min="0" max="1" step="0.01" value="${audio.settings.bedLevel}"></span></div>
-      <div class="row"><label>Impacts</label><input type="range" id="vol-fx" min="0" max="1" step="0.01" value="${audio.settings.effects}"></div>
-      <div class="row"><label>Room</label><input type="range" id="vol-reverb" min="0" max="1" step="0.01" value="${audio.settings.reverb}"></div>
-      <div class="row"><label>Key</label>
-        <select id="key">${keys}</select></div>
-      <div class="row"><label>Scale</label>
-        <select id="scale">${scales}</select></div>
-      <p class="diag" id="scale-now"></p>
-
-      <h2>Pinball</h2>
-      <div class="row"><label>Snap off-scale notes into the key</label>
-        <button id="assist">${audio.settings.assist ? 'On' : 'Off'}</button></div>
-      <p class="diag">Pinball only. Freestyle plays exactly what you press, and
-        PlayTune takes the chart as the authority on what the note should be.</p>
-      <div class="row"><label>Drums under a rally</label>
-        <button id="pb-drums">${pinballSettings().drums ? 'On' : 'Off'}</button></div>
-      <p class="diag">The bed builds with a rally either way; this is whether the
-        rhythm box joins it.</p>
-
-      <h2>Freestyle</h2>
-      <div class="row"><label>Pitch bend range</label>
-        <select id="bend-range">
-          <option value="2" ${audio.settings.bendRange === 2 ? 'selected' : ''}>&plusmn;2 semitones</option>
-          <option value="7" ${audio.settings.bendRange === 7 ? 'selected' : ''}>&plusmn;5th</option>
-          <option value="12" ${audio.settings.bendRange === 12 ? 'selected' : ''}>&plusmn;octave</option>
-        </select></div>
-      <div class="row"><label>Mod wheel moves</label>
-        <select id="mod-target">
-          <option value="vibrato" ${audio.settings.modTarget === 'vibrato' ? 'selected' : ''}>Vibrato</option>
-          <option value="colour" ${audio.settings.modTarget === 'colour' ? 'selected' : ''}>Colour</option>
-          <option value="both" ${audio.settings.modTarget === 'both' ? 'selected' : ''}>Both</option>
-        </select></div>
-      <p class="diag">Without a controller, <kbd>&larr;</kbd> <kbd>&rarr;</kbd> bend and
-        <kbd>&uarr;</kbd> <kbd>&darr;</kbd> step the mod wheel.</p>
-
-      <h2>PlayTune</h2>
-      <div class="row"><label>Audio offset</label>
-        <span><input type="range" id="pt-offset" min="-120" max="120" step="5" value="${tune.offsetMs}">
-        <span class="diag" id="pt-offset-now"></span></span></div>
-      <p class="diag">Raise this if your hits are judged early &mdash; that is, if you
-        are landing late. Lower it if you are landing early. Your device already
-        reports ${audio.latencyMs.toFixed(0)} ms of its own.</p>
-      <div class="row"><label>Note approach</label>
-        <select id="pt-lead">
-          ${LEAD_BEAT_CHOICES.map((b) => `<option value="${b}" ${tune.leadBeats === b ? 'selected' : ''}>${b} beats</option>`).join('')}
-        </select></div>
-      <p class="diag">Beats of lane, so a longer note still shows a longer tail.
-        Past ${APPROACH_BPM_CAP} bpm the approach stops shrinking &mdash; a quick tune
-        gives you the same seconds of warning as a slower one rather than the same
-        count of beats.</p>
-      <div class="row"><label>Light the key a note is heading for</label>
-        <button id="pt-assist">${tune.assist ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Note names on the auras</label>
-        <button id="pt-names">${tune.noteNames ? 'On' : 'Off'}</button></div>
-      <p class="diag">Spelled the way the tune's key writes them, so an aura and the
-        chord readout above it agree. Off leaves the board to hue and shape alone.</p>
-      <div class="row"><label>Unlocked tunes</label>
-        <span><span class="diag" id="pt-unlocked"></span> <button id="pt-reset">Reset&hellip;</button></span></div>
-      <div class="row"><label>Unlocked chord parts</label>
-        <span><span class="diag" id="pc-unlocked"></span> <button id="pc-reset">Reset&hellip;</button></span></div>
-      <p class="diag">Two chains, because they are two different things to learn.
-        Resetting one leaves the other where it is.</p>
-
-      <h2>Display</h2>
-      <div class="row"><label>Graphics</label>
-        <select id="q-preset">
-          ${GRAPHICS_PRESETS.map(([id, label]) =>
-            `<option value="${id}" ${this.shell.graphicsPreset === id ? 'selected' : ''}>${label}</option>`).join('')}
-        </select></div>
-      <p class="diag">Auto watches how long each frame actually takes and gives up
-        the most expensive effects, one at a time, only on a machine that cannot
-        keep up &mdash; then takes them back when it can. The others hold a fixed
-        level whatever the frame is doing. Right now: <span id="q-now"></span>.</p>
-      <div class="row"><label>Sound quality</label>
-        <select id="q-sound">
-          ${SOUND_PRESETS.map(([id, label]) =>
-            `<option value="${id}" ${this.shell.soundPreset === id ? 'selected' : ''}>${label}</option>`).join('')}
-        </select></div>
-      <p class="diag">Lite shortens the hall, drops the unison voices and allows
-        fewer sounds at once. Auto follows the graphics: the sound only gives
-        anything up once the picture already has.</p>
-      <div class="row"><label>Bloom</label><button id="q-bloom">${want.bloom ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Playfield light</label><button id="q-pools">${want.pools ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Note labels</label><button id="q-labels">${want.labels ? 'On' : 'Off'}</button></div>
-      <p class="diag">The C marked on each octave of the keys, the note names on a
-        table's bumpers and targets, and the key a falling ball is named for.
-        PlayTune's falling auras carry their own names, switched separately
-        under PlayTune.</p>
-      <div class="row"><label>Reduced motion</label><button id="q-motion">${want.reducedMotion ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Colour-blind palette</label><button id="q-cb">${want.colorBlind ? 'On' : 'Off'}</button></div>
-      <div class="row"><label>Table size</label>
-        <span><input type="range" id="q-size" min="${TABLE_SIZE.min}" max="${TABLE_SIZE.max}" step="${TABLE_SIZE.step}" value="${want.tableSize}">
-        <span class="diag" id="q-size-now"></span></span></div>
-      <p class="diag">How much of the screen the playfield takes. A landscape display
-        leaves the table plenty of room sideways and none at all lengthways, so a
-        larger setting buys the size by raking the table a little further towards you
-        rather than by cropping the keyboard off the bottom.</p>
-
-      <h2>MIDI monitor</h2>
-      <p class="diag">Raw messages from your controller. Use this to see what the octave,
-      pitch bend and sustain controls actually send.</p>
-      <div class="monitor" id="mon">waiting&hellip;</div>
-      <div class="actions">
-        <button id="clear-mon">Clear</button>
-        <span class="diag" id="diag"></span>
-      </div>
-
-      <div class="actions settings-actions">
-        <button class="primary" id="close">Back</button>
-        <button id="reset-settings">Reset settings</button>
-      </div>
-    `;
-
-    const $ = <T extends HTMLElement>(sel: string) => this.body.querySelector(sel) as T;
-
-    // Switching redraws this very panel, so the handler is attached to the
-    // container rather than to cards that are about to be replaced.
-    $('#themes').addEventListener('click', (e) => {
-      const card = (e.target as HTMLElement).closest<HTMLElement>('[data-theme-id]');
-      if (!card) return;
-      const picked = THEMES.find((t) => t.id === card.dataset.themeId);
-      if (!picked || picked.id === themeSettings().id) return;
-      this.shell.setTheme(picked);
-      this.show('settings');
-    });
-
-    $('#close').addEventListener('click', () => this.back());
-    $('#cal').addEventListener('click', () => this.show('calibrate'));
-    $('#oct-down').addEventListener('click', () => { input.mapping.shiftOctave(-1); this.shell.remapKeys(); });
-    $('#oct-up').addEventListener('click', () => { input.mapping.shiftOctave(1); this.shell.remapKeys(); });
-    $<HTMLSelectElement>('#dev').addEventListener('change', (e) => midi.select((e.target as HTMLSelectElement).value));
-    $<HTMLSelectElement>('#curve').addEventListener('change', (e) =>
-      input.setVelocitySettings({ curve: (e.target as HTMLSelectElement).value as CurveName }));
-    $<HTMLSelectElement>('#scale').addEventListener('change', (e) =>
-      music.setChoice((e.target as HTMLSelectElement).value));
-    $<HTMLSelectElement>('#key').addEventListener('change', (e) =>
-      music.setKey(toKeyChoice((e.target as HTMLSelectElement).value)));
-
-    type Level = 'master' | 'music' | 'leadLevel' | 'bedLevel' | 'effects' | 'reverb';
-    const bindSlider = (sel: string, key: Level) => {
-      const el = $<HTMLInputElement>(sel);
-      // The track's fill is painted from this, so it needs setting on the way in
-      // as well as on every move.
-      const paint = () => el.style.setProperty('--fill', `${Number(el.value) * 100}%`);
-      el.addEventListener('input', () => {
-        audio.setSettings({ [key]: Number(el.value) });
-        paint();
-      });
-      paint();
-      // Something else can move this while the panel is open — a controller's
-      // volume knob on master, most of all. Pushing the value in without
-      // repainting was exactly that bug: the thumb moved and the fill stayed
-      // where it was. Compared against the *stepped* value, because that is
-      // what the input snaps whatever it is handed to.
-      return () => {
-        const stepped = Math.round(audio.settings[key] * 100) / 100;
-        if (Number(el.value) === stepped) return;
-        el.value = String(stepped);
-        paint();
-      };
-    };
-    const levels = [
-      bindSlider('#vol-master', 'master'),
-      bindSlider('#vol-music', 'music'),
-      bindSlider('#vol-lead', 'leadLevel'),
-      bindSlider('#vol-bed', 'bedLevel'),
-      bindSlider('#vol-fx', 'effects'),
-      bindSlider('#vol-reverb', 'reverb'),
-    ];
-
-    const toggle = (sel: string, get: () => boolean, set: (v: boolean) => void) => {
-      const btn = $(sel);
-      btn.addEventListener('click', () => { set(!get()); btn.textContent = get() ? 'On' : 'Off'; });
-    };
-    toggle('#assist', () => audio.settings.assist, (v) => audio.setSettings({ assist: v }));
-    toggle('#bed', () => audio.settings.bed, (v) => audio.setSettings({ bed: v }));
-    toggle('#pb-drums', () => pinballSettings().drums, (v) => {
-      setPinballSettings({ drums: v });
-      this.shell.applyModeSettings();
-    });
-    const quality = (sel: string, key: 'bloom' | 'pools' | 'labels' | 'reducedMotion' | 'colorBlind') => {
-      // Read and written against the *preference*, never against what is on
-      // screen this second. The ladder derives the running quality from the
-      // preference and a rung, so an effect the machine has shed would
-      // otherwise show here as one the player had switched off -- and the next
-      // click would then "turn on" something that was already on.
-      toggle(sel, () => stage.preferredQuality[key], (v) => stage.setQuality({ [key]: v }));
-    };
-    const presetEl = $<HTMLSelectElement>('#q-preset');
-    const nowEl = $('#q-now');
-    const showNow = () => {
-      const auto = this.shell.graphicsPreset === 'auto';
-      const giving = this.shell.qualitySummary;
-      nowEl.textContent = giving === 'full'
-        ? (auto ? 'everything on' : 'everything on, held there')
-        : `${auto ? 'shedding' : 'holding'} ${giving}`;
-    };
-    showNow();
-    presetEl.addEventListener('change', () => {
-      this.shell.setGraphicsPreset(presetEl.value as GraphicsPreset);
-      showNow();
-    });
-    const soundEl = $<HTMLSelectElement>('#q-sound');
-    soundEl.addEventListener('change', () => {
-      this.shell.setSoundPreset(soundEl.value as SoundPreset);
-    });
-
-    quality('#q-bloom', 'bloom');
-    quality('#q-pools', 'pools');
-    quality('#q-labels', 'labels');
-    quality('#q-motion', 'reducedMotion');
-    quality('#q-cb', 'colorBlind');
-
-    const sizeEl = $<HTMLInputElement>('#q-size');
-    const sizeNow = $('#q-size-now');
-    const paintSize = () => {
-      const v = Number(sizeEl.value);
-      const t = (v - TABLE_SIZE.min) / (TABLE_SIZE.max - TABLE_SIZE.min);
-      sizeEl.style.setProperty('--fill', `${t * 100}%`);
-      sizeNow.textContent = `${Math.round(v * 100)}%`;
-    };
-    sizeEl.addEventListener('input', () => {
-      stage.setQuality({ tableSize: Number(sizeEl.value) });
-      paintSize();
-    });
-    paintSize();
-    $<HTMLSelectElement>('#bend-range').addEventListener('change', (e) =>
-      audio.setSettings({ bendRange: Number((e.target as HTMLSelectElement).value) }));
-    $<HTMLSelectElement>('#mod-target').addEventListener('change', (e) =>
-      audio.setSettings({ modTarget: (e.target as HTMLSelectElement).value as ModTarget }));
-
-    const offsetEl = $<HTMLInputElement>('#pt-offset');
-    const offsetNow = $('#pt-offset-now');
-    const paintOffset = () => {
-      const v = Number(offsetEl.value);
-      offsetEl.style.setProperty('--fill', `${((v + 120) / 240) * 100}%`);
-      offsetNow.textContent = `${v > 0 ? '+' : ''}${v} ms`;
-    };
-    offsetEl.addEventListener('input', () => {
-      setPlayTuneSettings({ offsetMs: Number(offsetEl.value) });
-      paintOffset();
-    });
-    paintOffset();
-    $<HTMLSelectElement>('#pt-lead').addEventListener('change', (e) =>
-      setPlayTuneSettings({ leadBeats: Number((e.target as HTMLSelectElement).value) }));
-    toggle('#pt-assist', () => playTuneSettings().assist, (v) => setPlayTuneSettings({ assist: v }));
-    toggle('#pt-names', () => playTuneSettings().noteNames, (v) => setPlayTuneSettings({ noteNames: v }));
-
-    // One chain per role, wired the same way. The live mode only takes the
-    // fresh progress if it is the role that was just wiped — the other one is
-    // still holding its own, and handing it this would blank it on screen.
-    const bindReset = (countSel: string, btnSel: string, role: TuneRole) => {
-      const countEl = $(countSel);
-      const paint = () => {
-        const mode = this.shell.playtune;
-        const live = mode && mode.role.id === role.id ? mode.progress : null;
-        const n = (live ?? loadProgress(role.storageKey, role.order)).unlocked.length;
-        countEl.textContent = `${n} of ${role.order.length}`;
-      };
-      paint();
-      const btn = $(btnSel);
-      btn.addEventListener('click', () => {
-        // Two presses, because this is the one setting that destroys something.
-        if (btn.dataset.armed !== 'yes') {
-          btn.dataset.armed = 'yes';
-          btn.textContent = 'Really reset?';
-          return;
-        }
-        const fresh = resetProgress(role.storageKey, role.order);
-        const mode = this.shell.playtune;
-        if (mode && mode.role.id === role.id) mode.progress = fresh;
-        btn.dataset.armed = '';
-        btn.textContent = 'Reset…';
-        paint();
-      });
-    };
-    bindReset('#pt-unlocked', '#pt-reset', MELODY_ROLE);
-    bindReset('#pc-unlocked', '#pc-reset', CHORDS_ROLE);
-
-    $('#clear-mon').addEventListener('click', () => input.clearMonitor());
-    $('#reset-settings').addEventListener('click', () => {
-      if (!window.confirm('Reset all settings to their defaults? Your scores and unlocked tunes will be kept.')) return;
-      this.shell.resetSettings();
-      this.show('settings');
-    });
-
-    const mon = $('#mon');
-    const hist = $('#hist');
-    const diag = $('#diag');
-    const rangeEl = $('#range');
-    const scaleNow = $('#scale-now');
-    this.live = () => {
-      for (const follow of levels) follow();
-      // Under Random the key and scale are only knowable at run time, so say
-      // them. This line is the only place a `?` player learns what they landed
-      // in, so either preference being random has to reach it.
-      const drawn = music.choice === RANDOM || music.keyChoice === RANDOM;
-      scaleNow.textContent = `Playing ${noteName(music.root)} ${music.label}`
-        + (drawn ? ' — a new one is drawn each game' : '');
-      const lines = input.monitor.slice(-14).map((x) => `${x.label}`);
-      mon.textContent = lines.length ? lines.join('\n') : 'waiting for messages…';
-      const peak = input.histogram.peak;
-      hist.innerHTML = input.histogram.bins
-        .map((v) => `<span style="height:${Math.round((v / peak) * 100)}%"></span>`).join('');
-      diag.textContent = audio.running
-        ? `audio ${audio.latencyMs.toFixed(1)} ms · ${input.histogram.count} notes played`
-        : 'sound is off — click anywhere to enable it';
-      const map = input.mapping;
-      rangeEl.textContent = `${noteLabel(map.low)}–${noteLabel(map.high)} · ${map.settings.count} keys`;
     };
     this.live(0);
   }
