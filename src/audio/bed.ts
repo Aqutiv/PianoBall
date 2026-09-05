@@ -14,6 +14,7 @@ import {
   compEvents, ALL_PARTS, type CompEvent, type CompPart, type CompPattern, type Humanize,
 } from './comp';
 import { findBedVoice } from './voices';
+import { soundsWithVoice, writtenNoteEvent } from './written';
 
 /**
  * The hand on the bed, in the units a hand moves by: seconds and fractions.
@@ -47,11 +48,6 @@ export interface TrackNote {
   len: number;
   note: number;
 }
-
-/** Peak gain of a note the game plays. A chord stab is 0.055 across three tones. */
-const NOTE_GAIN = 0.05;
-/** Struck rather than swelled, in beats. The same figure `comp.ts` uses. */
-const NOTE_ATTACK = 0.02;
 
 /** What a track needs from a clock: where a beat falls, on the audio clock. */
 export interface BeatClock {
@@ -503,27 +499,21 @@ export class ChordBed {
       this.noteCursor++;
       // A note whose moment has passed is dropped, not piled onto the present.
       if (at < now - LATE) continue;
-      this.pending.push({
-        at,
-        ev: {
-          offset: 0, len: n.len, notes: [n.note],
-          gain: NOTE_GAIN, attack: NOTE_ATTACK, part: 'chord',
-        },
-      });
+      this.pending.push({ at, ev: writtenNoteEvent(n) });
     }
   }
 
   /** Hand the engine everything now due, and drop whatever the tab slept past. */
   private flush(now: number, beat: number): void {
     let keep = 0;
-    const plucked = findBedVoice(this.engine.bedVoice).spec.pluck !== undefined;
+    const spec = findBedVoice(this.engine.bedVoice).spec;
     for (const p of this.pending) {
       if (p.at > now + LOOKAHEAD) { this.pending[keep++] = p; continue; }
       if (p.at < now - LATE) continue;
       // A plucked stab already rings across the following beats. Starting the
       // generic wash beside it would launch the same rendered string again at
       // the same pitch and moment, producing a loud, phase-locked transient.
-      if (plucked && p.ev.part === 'wash') continue;
+      if (!soundsWithVoice(p.ev, spec)) continue;
       this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
     }
     this.pending.length = keep;
