@@ -1,3 +1,4 @@
+import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
 import { line, progression, merge, harmonise, shift } from './notation';
 
@@ -614,8 +615,11 @@ export const JESU_JOY: Tune = {
   ],
 };
 
-/** Ordered by difficulty: this is also the unlock chain. */
+/** Classics ordered by melody difficulty; the library interleaves originals. */
 export const CLASSICS: Tune[] = [
-  ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
-  FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY,
+  ODE_TO_JOY, TWINKLE, FRERE_JACQUES,
+  AMAZING_GRACE, SCARBOROUGH_FAIR, DRUNKEN_SAILOR,
+  GREENSLEEVES, FUR_ELISE, LONDONDERRY_AIR, CAN_CAN,
+  MINUET_IN_G, GYMNOPEDIE, BLUE_DANUBE,
+  CANON_IN_D, JESU_JOY, THE_ENTERTAINER,
 ];

@@ -1,3 +1,4 @@
+import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
 import type { ChordRole } from '../chords';
 import {
@@ -18,14 +19,14 @@ export interface ChordEntry {
  * Its own order, because chord difficulty and melody difficulty come apart
  * badly. Canon in D is the hardest melody in the game and one of the easiest
  * progressions there is to play — an eight-bar ground, one triad to a bar — so
- * it sits seventh here and last in the melody chain. Gymnopédie goes the other
- * way: its melody is nearly nothing and its harmony is the only four-note
- * chords in the library.
+ * it sits near the middle here and near the end in the melody chain.
+ * Gymnopédie goes the other way: its spacious melody accompanies the
+ * four-note shapes introduced by its chord track.
  *
  * The curve climbs two ladders and they cross, which is deliberate and should
- * survive editing. Positions 4 to 14 climb the *strike rhythm* — block chord,
+ * survive editing. The middle levels climb the *strike rhythm* — block chord,
  * march, pulse, waltz, compound — on tunes whose harmony moves slowly enough to
- * afford it. Positions 15 to 17 drop back to block chords and climb the *rate
+ * afford it. The final level drops back to block chords and climbs the *rate
  * of change* instead, down to Jesu, Joy's third of a second. Asking for a comp
  * pattern on top of a harmony moving that fast would not be harder, it would be
  * unplayable.
@@ -47,6 +48,14 @@ export const CHORD_CURVE: ChordEntry[] = [
     role: {
       difficulty: 1, pass: 0.57, pattern: 'sustain',
       teaches: 'A third shape, and two chords to a bar.',
+    },
+  },
+  {
+    tune: FRERE_JACQUES,
+    role: {
+      difficulty: 1, pass: 0.57, pattern: 'sustain',
+      teaches: 'Two familiar major shapes, with time to find and hold each one.',
+      keysVoiceId: 'warm', melodyVoiceId: 'bed-music-box',
     },
   },
   {
@@ -84,7 +93,15 @@ export const CHORD_CURVE: ChordEntry[] = [
     },
   },
   {
-    // Melody difficulty 5, chord position 7: the biggest inversion there is.
+    tune: DRUNKEN_SAILOR,
+    role: {
+      difficulty: 2, pass: 0.6, pattern: 'march',
+      teaches: 'D minor and C major, keeping the march through verse and chorus.',
+      keysVoiceId: 'bed-choir', melodyVoiceId: 'nylon-guitar',
+    },
+  },
+  {
+    // Melody difficulty 5, chord difficulty 3: the biggest inversion there is.
     tune: CANON_IN_D,
     role: {
       difficulty: 3, pass: 0.63, pattern: 'march',
@@ -112,6 +129,14 @@ export const CHORD_CURVE: ChordEntry[] = [
     role: {
       difficulty: 3, pass: 0.65, pattern: 'pulse',
       teaches: 'The same pulse on six shapes — the widest vocabulary here.',
+    },
+  },
+  {
+    tune: CAN_CAN,
+    role: {
+      difficulty: 3, pass: 0.65, pattern: 'pulse',
+      teaches: 'Three major shapes with a chord on every beat of the dance.',
+      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
     },
   },
   {
@@ -149,7 +174,15 @@ export const CHORD_CURVE: ChordEntry[] = [
     },
   },
   {
-    // Back to block chords from here: these three climb the rate of change.
+    tune: BLUE_DANUBE,
+    role: {
+      difficulty: 4, pass: 0.67, pattern: 'waltz',
+      teaches: 'Waltz chords on two and three, with a four-note dominant seventh.',
+      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
+    },
+  },
+  {
+    // Back to block chords from here: these tunes climb the rate of change.
     tune: FUR_ELISE,
     role: {
       difficulty: 5, pass: 0.67, pattern: 'sustain',
@@ -171,6 +204,14 @@ export const CHORD_CURVE: ChordEntry[] = [
       difficulty: 5, pass: 0.7, pattern: 'sustain',
       teaches: 'Twenty-odd changes at a hundred and seventy-six, and then again.',
       keysVoiceId: 'bed-organ', melodyVoiceId: 'bed-choir',
+    },
+  },
+  {
+    tune: THE_ENTERTAINER,
+    role: {
+      difficulty: 5, pass: 0.7, pattern: 'sustain',
+      teaches: 'Quick blocks, dominant sevenths, and F major turning minor.',
+      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
     },
   },
 ];

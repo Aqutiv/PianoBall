@@ -1,3 +1,4 @@
+import { LEGACY_ORDERS } from './legacyOrder';
 import { load, save } from '../../core/storage';
 import type { Grade } from './judge';
 
@@ -133,7 +134,10 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
     // this one being open is the strong evidence, because passing was the only
     // thing that ever opened it. A letter is the fallback for the last tune in
     // the chain, which has no next to have opened.
-    const next = order[order.indexOf(id) + 1];
+    // Infer old records using the order that produced them, before insertions.
+    const legacy = LEGACY_ORDERS[key];
+    const evidenceOrder = legacy?.includes(id) ? legacy : order;
+    const next = evidenceOrder[evidenceOrder.indexOf(id) + 1];
     best[id] = {
       accuracy: Number(rec.accuracy) || 0,
       score: Number(rec.score) || 0,
