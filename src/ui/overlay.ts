@@ -16,6 +16,7 @@ import { updates } from '../app/updates';
 export type Screen =
   | 'home'
   | 'settings'
+  | 'sound-settings'
   | 'calibrate'
   | 'about'
   | 'paused'
@@ -72,6 +73,8 @@ export class Overlay {
   get visible(): boolean { return this.screen !== null; }
 
   show(screen: Screen): void {
+    const sound = screen === 'sound-settings';
+    if (sound) screen = 'settings';
     const previous = this.screen;
     this.settingsPanel?.dispose();
     this.settingsPanel = null;
@@ -104,6 +107,7 @@ export class Overlay {
       this.settingsPanel = new SettingsPanel(this.body, this.shell, this.settingsNavigation,
         () => this.back(), () => this.show('calibrate'));
       this.settingsPanel.mount(previous !== 'settings' && previous !== 'calibrate', previous === 'calibrate');
+      if (sound) this.settingsPanel.openSound();
       this.live = (dt) => this.settingsPanel?.update(dt);
     } else if (screen === 'calibrate') this.renderCalibrate();
     else if (screen === 'about') this.renderAbout();

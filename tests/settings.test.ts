@@ -68,6 +68,24 @@ describe('settings persistence', () => {
     });
   });
 
+  it('keeps Freestyle key and scale separate from existing Pinball preferences', () => {
+    const pinball = new MusicState({ ...AURORA.music });
+    pinball.setKey(9);
+    pinball.setChoice('dorian');
+    const freestyle = new MusicState({ ...AURORA.music }, 'freestyleMusic');
+    expect(freestyle.keyChoice).toBe(RANDOM);
+    expect(freestyle.choice).toBe(RANDOM);
+    freestyle.setKey(0);
+    freestyle.setChoice('ionian');
+    expect(new MusicState({ ...AURORA.music })).toMatchObject({ keyChoice: 9, choice: 'dorian' });
+    expect(new MusicState({ ...AURORA.music }, 'freestyleMusic')).toMatchObject({ keyChoice: 0, choice: 'ionian' });
+    pinball.setKey(5);
+    expect(freestyle.keyChoice).toBe(0);
+    freestyle.resetSettings();
+    expect(new MusicState({ ...AURORA.music }, 'freestyleMusic')).toMatchObject({ keyChoice: RANDOM, choice: RANDOM });
+    expect(new MusicState({ ...AURORA.music })).toMatchObject({ keyChoice: 5, choice: 'dorian' });
+  });
+
   it('remembers how the wheels were set up', () => {
     new AudioEngine().setSettings({ bendRange: 12, modTarget: 'vibrato' });
 

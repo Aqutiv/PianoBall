@@ -54,6 +54,13 @@ export class SettingsPanel {
     this.render();
   }
 
+  openSound(): void {
+    this.navigation.select('sound');
+    this.navigation.expanded.add('sound-mix');
+    this.navigation.focusId = 'bed';
+    this.render();
+  }
+
   dispose(): void {
     this.remember();
     this.narrow.removeEventListener('change', this.resize);
@@ -260,10 +267,10 @@ export class SettingsPanel {
         volume('vol-lead', 'Instrument volume', 'leadLevel')
         + volume('vol-bed', 'Backing volume', 'bedLevel')
         + this.toggle('bed', 'Allow backing chords', () => audio.settings.bed, (v) => audio.setSettings({ bed: v }),
-          'Allow backing chords across modes. In Freestyle, also turn on Backing bed during play.'),
+          'Allow backing chords across modes. In Freestyle, also turn on Backing during play.'),
         'Balance what you play with what plays along')
-      + this.details('sound-key', 'Key & scale',
-        '<p class="settings-note">Shared by Pinball and Freestyle. PlayTune follows the song’s key.</p>'
+      + this.details('sound-key', 'Pinball key & scale',
+        '<p class="settings-note">Applies to Pinball. Freestyle has its own key and scale under Auto Backing. PlayTune follows the song’s key.</p>'
         + this.select('key', 'Musical key', [[RANDOM, 'Random each game'], ...NOTE_NAMES.map((n, i): Choice => [i, n])],
           () => music.keyChoice, (v) => music.setKey(toKeyChoice(v)))
         + this.select('scale', 'Scale', [[RANDOM, 'Random each game'], ...MODES.map((m): Choice => [m.id, m.label])],
@@ -388,7 +395,7 @@ export class SettingsPanel {
         () => audio.settings.modTarget, (v) => audio.setSettings({ modTarget: v as ModTarget }),
         'Vibrato varies the pitch; tone colour changes the brightness.')
       + '<p class="settings-note">Without a controller, ← → bend the pitch and ↑ ↓ adjust modulation.</p>'
-      + '<p class="settings-note">Choose instruments, rhythm and Backing bed on the Freestyle screen during play.</p>';
+      + '<p class="settings-note">Choose instruments, rhythm and Backing (Auto or Manual chord keys) on the Freestyle screen during play.</p>';
     const tune = () => playTuneSettings();
     return selector
       + this.select('pt-lead', 'Note preview time', LEAD_BEAT_CHOICES.map((b): Choice => [b, `${b} beats`]),

@@ -157,6 +157,7 @@ describe('switching the bed on', () => {
       now: 0,
       settings: { bed: true },
       pad: (notes: number[]) => { pads.push(notes); },
+      stopPads: () => {},
       setBedAudible: (on: boolean) => { audible.push(on); },
     };
     const music = new MusicState({ ...AURORA.music });

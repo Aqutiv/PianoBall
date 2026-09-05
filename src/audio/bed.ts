@@ -1,10 +1,18 @@
-import type { AudioEngine } from './engine';
+import type { AudioEngine, HeldPadHandle } from './engine';
 import type { MusicState } from './musicState';
 import type { ChordQuality } from '../game/table/schema';
 import {
   Groove, approachNote, chordNotes, degreeToNote, voiceChord, voiceLead,
   type Step, type VoicingStyle,
 } from './music';
+
+export type BedControlMode = 'auto' | 'manual';
+export type ManualChordQuality = Extract<ChordQuality, 'maj' | 'min' | 'dom7' | 'min7'>;
+export interface ManualChord {
+  root: number;
+  quality: ManualChordQuality;
+  velocity: number;
+}
 
 /** How a loop comes home: through its dominant, or its subdominant. */
 export type CadenceKind = 'authentic' | 'plagal';
@@ -109,9 +117,18 @@ export class ChordBed {
    * while the table wants its harmony from the first ball.
    */
   private on = true;
+  private control: BedControlMode = 'auto';
+  private manual: ManualChord | null = null;
+  private manualPad: HeldPadHandle | null = null;
+  private manualStarted = false;
+  private manualVoice = '';
+  private manualBeats = 0;
+  private manualAt = 0;
+  private manualMeter = 4;
 
   private readonly engine: AudioEngine;
-  private readonly music: MusicState;
+  private music: MusicState;
+  private musicListeners: (() => void)[] = [];
   /** Bare rather than `window.`-qualified, so the bed runs where it is tested. */
   private timer: ReturnType<typeof setInterval> | null = null;
   private nextBar = 0;
@@ -177,18 +194,118 @@ export class ChordBed {
     this.music = music;
     this.groove = new Groove(music.bpm);
     this.barsLeft = this.barsPerChord;
-    // A new scale means a new progression: start it from the top.
-    music.bus.on('change', () => {
-      this.groove.bpm = music.bpm;
-      this.reset();
-    });
-    // A tempo move is not a new progression. Follow it and keep playing.
-    music.bus.on('tempo', () => { this.groove.bpm = music.bpm; });
+    this.listenToMusic();
+  }
+
+  /** Follow the entering mode's music without retaining the previous listeners. */
+  setMusic(music: MusicState): void {
+    if (music === this.music) return;
+    for (const off of this.musicListeners) off();
+    this.clearManualChord();
+    this.engine.stopPads();
+    this.music = music;
+    this.groove.bpm = music.bpm;
+    this.listenToMusic();
+    this.reset();
+  }
+
+  private listenToMusic(): void {
+    const music = this.music;
+    this.musicListeners = [
+      music.bus.on('change', () => {
+        this.groove.bpm = music.bpm;
+        this.reset();
+      }),
+      music.bus.on('tempo', () => {
+        this.advanceManualClock();
+        this.groove.bpm = music.bpm;
+      }),
+    ];
   }
 
   get running(): boolean { return this.timer !== null; }
 
   get enabled(): boolean { return this.on; }
+
+  get controlMode(): BedControlMode { return this.control; }
+  get manualChord(): Readonly<ManualChord> | null { return this.manual; }
+
+  setControlMode(mode: BedControlMode): void {
+    if (mode === this.control) return;
+    this.clearManualChord();
+    this.pending.length = 0;
+    this.engine.stopPads();
+    this.control = mode;
+    this.reset();
+  }
+
+  setManualChord(root: number, quality: ManualChordQuality, velocity = 0.7): void {
+    if (this.control !== 'manual' || !this.on) return;
+    this.manual = { root, quality, velocity };
+    this.refreshManualChord();
+  }
+
+  clearManualChord(): void {
+    this.manualPad?.release();
+    this.manualPad = null;
+    this.manual = null;
+    this.manualStarted = false;
+    this.manualBeats = 0;
+  }
+
+  transposeManualChord(semitones: number): void {
+    if (this.manual && semitones) {
+      this.setManualChord(this.manual.root + semitones, this.manual.quality, this.manual.velocity);
+    }
+  }
+
+  setManualMeter(beats: number): void {
+    this.manualMeter = Math.max(1, beats);
+  }
+
+  /** Also called when an instrument is picked while a chord is latched. */
+  refreshManualChord(): void {
+    this.manualPad?.release();
+    this.manualPad = null;
+    this.manualStarted = false;
+    this.manualAt = this.engine.now;
+    this.manualBeats = 0;
+    if (!this.manual) return;
+    // At the very top of MIDI, fold only overflowing upper tones down an
+    // octave. The actual root and chord quality remain intact.
+    const tones = chordNotes(this.manual.root, this.manual.quality).map((n) => {
+      while (n > 127) n -= 12;
+      while (n < 0) n += 12;
+      return n;
+    });
+    this.manualPad = this.engine.holdPad(tones, this.manual.velocity);
+    this.manualStarted = this.manualPad !== null;
+    this.manualVoice = this.engine.bedVoice;
+  }
+
+  private advanceManualClock(): void {
+    const now = this.engine.now;
+    this.manualBeats += Math.max(0, now - this.manualAt) / this.groove.beatSeconds;
+    this.manualAt = now;
+  }
+
+  private scheduleManual(): void {
+    if (!this.manual) return;
+    this.advanceManualClock();
+    if (!this.engine.settings.bed) {
+      this.manualPad?.release();
+      this.manualPad = null;
+      this.manualStarted = false;
+      return;
+    }
+    const spec = findBedVoice(this.engine.bedVoice).spec;
+    const repeats = spec.manualDecay ?? spec.pluck;
+    if (!this.manualStarted || this.manualVoice !== this.engine.bedVoice
+      || (repeats && this.manualBeats >= this.manualMeter * 2)) {
+      // One strike after a stall, never a burst of missed repeats.
+      this.refreshManualChord();
+    }
+  }
 
   /**
    * Turn the bed on or off.
@@ -201,6 +318,11 @@ export class ChordBed {
   setEnabled(value: boolean): void {
     if (value === this.on) return;
     this.on = value;
+    if (!value) {
+      this.clearManualChord();
+      this.pending.length = 0;
+      this.engine.stopPads();
+    }
     // Switching off silences what is already ringing; switching on lets it
     // through again and puts the next bar at the front of the queue.
     this.engine.setBedAudible(value);
@@ -224,6 +346,7 @@ export class ChordBed {
   }
 
   stop(): void {
+    this.clearManualChord();
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     this.pending.length = 0;
@@ -404,6 +527,7 @@ export class ChordBed {
   /** Bar-level lookahead. The only place in the app that schedules ahead. */
   private schedule(): void {
     if (!this.engine.running || !this.on) return;
+    if (this.control === 'manual') { this.scheduleManual(); return; }
     if (this.clock && (this.track || this.notes)) {
       if (this.notes) this.scheduleNotes(this.notes, this.clock);
       if (this.track) this.scheduleTrack(this.track, this.clock);
