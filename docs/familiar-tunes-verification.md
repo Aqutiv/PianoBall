@@ -4,7 +4,7 @@
 
 ## Automated checks
 
-- `npm test`: 43 files, 848 tests passed.
+- `npm test`: 43 files, 844 tests passed.
 - `npm run build`: TypeScript, Vite and PWA build passed.
 - `npm run export:content`: schema v1, 19 Melody + 22 Chords = 41 entries.
 - Independent SHA256 check matched the manifest. Local catalogue approximately
@@ -17,12 +17,14 @@
   historical successor boundary, the last legacy grade, explicit false flags,
   failed replays, round trips and independent role stores. Old scores, plays,
   earned passes, unlocks and reset epochs are retained.
-- Stale-writer tests reproduce an old bundle filtering new IDs out of the
-  original store. A protected copy restores their results and imports later
-  old-tab achievements; reset epochs prevent resurrection after deliberate
-  resets from either version. Both roles are covered. The exact one-track,
-  empty, epoch-less reset payload from historical commit 64bd3dd is acknowledged
-  once in both copies; absent or corrupt stores do not masquerade as resets.
+- Stale-writer tests verify one-time copying into `playtune.v2` and
+  `playchords.v2` using the unchanged Progress JSON format. Original stores
+  remain untouched. Old-version writes, resets (with or without epochs), and
+  post-reset runs remain in their own course generation, while new-course
+  scores and resets remain independent. Current-version tabs still share
+  scores and resets through the existing merge rules.
+- Even an empty first migration is persisted, and an existing corrupt v2
+  store never causes old scores to be re-imported after a reset.
 
 ## Chart measurements
 

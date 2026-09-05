@@ -16,7 +16,8 @@ const record = { accuracy: 0.73, score: 12345, grade: null, plays: 4, passed: tr
 const pass = { accuracy: 0.9, score: 15000, grade: 'A', passed: true } as const;
 
 for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`, () => {
-  const old = LEGACY_ORDERS[role.storageKey];
+  const legacyKey = role.id === 'melody' ? 'playtune' : 'playchords';
+  const old = LEGACY_ORDERS[legacyKey];
   it('starts with three open tracks and can complete the whole expanded course', () => {
     const p = loadProgress(role.storageKey, role.order);
     expect(p.unlocked).toEqual(role.order.slice(0, 3));
@@ -32,7 +33,7 @@ for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`,
   it.each([1, 5, old.length])('preserves a save with %i previously passed tracks', count => {
     const best = Object.fromEntries(old.slice(0, count).map(id => [id, { ...record }]));
     const unlocked = old.slice(0, Math.min(old.length, count + 3));
-    saveProgress(role.storageKey, { unlocked, best, epoch: 7 });
+    localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked, best, epoch: 7 }));
     const p = loadProgress(role.storageKey, role.order);
     expect(p.epoch).toBe(7);
     expect(p.best).toEqual(best);
@@ -48,7 +49,8 @@ for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`,
     for (let i = 0; i < old.length - 1; i++) {
       const id = old[i], next = old[i + 1];
       const { passed: _passed, ...legacy } = record;
-      localStorage.setItem(`pianoball.${role.storageKey}`, JSON.stringify({ unlocked: [id, next], best: { [id]: legacy } }));
+      localStorage.removeItem(`pianoball.${role.storageKey}`);
+      localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: [id, next], best: { [id]: legacy } }));
       const p = loadProgress(role.storageKey, role.order);
       expect(p.best[id], id).toEqual(record);
       expect(p.unlocked).toContain(next);
@@ -59,7 +61,7 @@ for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`,
     const best = Object.fromEntries(old.map((id, i) => [id, {
       accuracy: 0.73, score: 12345, plays: 4, grade: i === old.length - 1 ? 'B' : null,
     }]));
-    localStorage.setItem(`pianoball.${role.storageKey}`, JSON.stringify({ unlocked: old, best }));
+    localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: old, best }));
     const p = loadProgress(role.storageKey, role.order);
     for (const id of old) {
       expect(p.best[id].passed, id).toBe(true);

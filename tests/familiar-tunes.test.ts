@@ -22,7 +22,7 @@ describe('five familiar additions', () => {
     expect(CHORD_ORDER.slice(0, 3)).toEqual(['chord-ground', 'chord-three', 'frere-jacques']);
     for (const role of Object.values(ROLES)) {
       expect(new Set(role.order).size).toBe(role.order.length);
-      expect(role.order.filter(id => !ids.includes(id))).toEqual(LEGACY_ORDERS[role.storageKey]);
+      expect(role.order.filter(id => !ids.includes(id))).toEqual(LEGACY_ORDERS[role.id === 'melody' ? 'playtune' : 'playchords']);
       for (const [i, id] of ids.entries()) {
         const tune = findTune(id)!;
         expect(tune.origin).toBe('classic');

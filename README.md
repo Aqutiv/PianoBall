@@ -238,9 +238,10 @@ public-domain basis for the US, UK, EU and Israel are in the
 [source ledger](docs/tune-sources.md). Playback is synthesized from our own
 reductions; no recordings, downloaded MIDI, modern arrangements or lyrics ship.
 Existing scores, earned passes and unlocks survive the expansion, including
-older saves without explicit pass flags. A protected copy in the same storage
-format prevents an older open app from erasing new-track results; reset epochs
-remain authoritative. The unchanged schema v1 exporter
+older saves without explicit pass flags. The expanded courses copy existing progress once into versioned stores using
+the same format. Older app versions then keep their own saves: their runs and
+resets do not change the expanded courses. Continue in the updated app after
+upgrading; current-version tabs still share progress and reset epochs. The unchanged schema v1 exporter
 supplies **41 course entries** (19 melody + 22 chords) to the Windows game.
 
 The classics are public-domain melodies; the three originals sit where a new
