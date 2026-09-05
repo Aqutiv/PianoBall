@@ -751,6 +751,8 @@ export interface BedLayer {
 }
 
 export interface BedSpec {
+  /** Decay for manual chord strikes only; automatic accompaniment keeps its envelope. */
+  manualDecay?: number;
   layers: readonly BedLayer[];
   /**
    * The lowpass, in absolute Hz. A chord that is struck rather than swelled
@@ -889,6 +891,7 @@ export const BED_VOICES: readonly BedDef[] = [
   {
     id: 'bed-felt-piano', name: 'Felt Piano', family: 'Keys',
     spec: bed({
+      manualDecay: 2.4,
       layers: [
         { type: 'triangle', ratio: 1, level: 1.2 },
         { type: 'sine', ratio: 2, level: 0.35 },

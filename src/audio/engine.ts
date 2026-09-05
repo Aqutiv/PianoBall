@@ -100,6 +100,11 @@ const NOISE_LOOKAHEAD_FRAMES = 256;
  */
 const MAX_ONSET_MARGIN = 0.012;
 
+/** A manually held backing chord, released independently of the lead keys. */
+export interface HeldPadHandle {
+  release(fade?: number): void;
+}
+
 /**
  * A one-shot placed on the audio clock, which can still be taken back.
  *
@@ -517,6 +522,10 @@ export class AudioEngine {
    * sounding, in one operation, without touching what comes next.
    */
   private padGen!: GainNode;
+  /** Manual chords own sources that cannot be left running on an old pad generation. */
+  private heldPads = new Set<HeldPadHandle>();
+
+  get heldPadCount(): number { return this.heldPads.size; }
   /**
    * Where a key voice reaches the rest of the graph, on the instrument's fader.
    *
@@ -1102,6 +1111,7 @@ export class AudioEngine {
    * the next mode has drawn a frame.
    */
   stopPads(fade = 0.12): void {
+    for (const pad of [...this.heldPads]) pad.release(fade);
     if (!this.ready || !this.ctx) return;
     const t = this.ctx.currentTime;
     const old = this.padGen;
@@ -2745,6 +2755,91 @@ export class AudioEngine {
     g.connect(box).connect(this.cabSend);
     src.start(t);
     src.stop(t + seconds + 0.05);
+  }
+
+  /**
+   * An immediately played backing chord with an explicit release, on the pad
+   * bus. It never enters the lead's note map or expression/pedal connections.
+   */
+  holdPad(notes: readonly number[], velocity = 0.7): HeldPadHandle | null {
+    if (!this.running || !this.ctx || !this.settings.bed || !notes.length) return null;
+    const ctx = this.ctx;
+    const spec = this.bedSpec;
+    const v = clamp01(velocity);
+    const decay = spec.manualDecay ?? spec.pluck;
+    const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+    const group = ctx.createGain();
+    group.gain.value = 1;
+    group.connect(this.padGen);
+    const sources: Pitched[] = [];
+    const nodes: AudioNode[] = [group];
+    const envelopes: { gain: GainNode; filter: BiquadFilterNode }[] = [];
+    const share = (0.1 * (0.35 + v * 0.65) / notes.length) * spec.gain;
+    const builtAt = ctx.currentTime;
+    for (let i = 0; i < notes.length; i++) {
+      const note = notes[i];
+      const freq = noteToFreq(note);
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = (i / Math.max(1, notes.length - 1) - 0.5) * 0.7;
+      filter.type = 'lowpass';
+      filter.Q.value = spec.filter.q;
+      filter.connect(gain).connect(pan).connect(group);
+      nodes.push(filter, gain, pan);
+      envelopes.push({ gain, filter });
+      const str = spec.string && { id: this.bedId, spec: spec.string, note, bucket: velocityBucket(v) };
+      const h = humanize(Math.random, HUMANIZE * BED_HUMANIZE);
+      for (const layer of spec.layers) {
+        sources.push(...this.addLayer(filter, layer, freq, v, builtAt, NO_TRACK, h, registerOf(note), detunes, 0, str));
+      }
+    }
+    // All notes share one onset, after the muted graph has been assembled.
+    const onset = ctx.currentTime + this.onsetMargin;
+    const attack = decay ? 0.006 : 0.07 * (1 - v * 0.45);
+    for (const { gain, filter } of envelopes) {
+      gain.gain.setValueAtTime(0.0001, onset);
+      gain.gain.linearRampToValueAtTime(share, onset + attack);
+      if (decay) gain.gain.exponentialRampToValueAtTime(0.0001, onset + decay);
+      filter.frequency.setValueAtTime(decay ? spec.filter.startStruck : spec.filter.start, onset);
+      filter.frequency.linearRampToValueAtTime(
+        (decay ? spec.filter.peakStruck : spec.filter.peak) * (0.65 + v * 0.5), onset + attack + 0.02);
+      filter.frequency.linearRampToValueAtTime(
+        decay ? spec.filter.end : spec.filter.end + (spec.filter.peak - spec.filter.end) * 0.35,
+        onset + (decay ?? 0.8));
+    }
+
+    let remaining = sources.length;
+    let retired = false;
+    let stopAt = decay ? onset + decay + 0.05 : Infinity;
+    const retire = () => {
+      if (retired) return;
+      retired = true;
+      this.heldPads.delete(handle);
+      for (const node of nodes) node.disconnect();
+      for (const source of sources) source.disconnect();
+    };
+    const handle: HeldPadHandle = {
+      release: (fade = 0.12) => {
+        if (retired) return;
+        const now = ctx.currentTime;
+        const end = now + Math.max(0.004, fade);
+        // Repeated stops may shorten a tail, but never extend its source life.
+        if (end + 0.02 >= stopAt) return;
+        holdAtTime(group.gain, now);
+        group.gain.linearRampToValueAtTime(0.0001, end);
+        stopAt = end + 0.02;
+        for (const source of sources) source.stop(stopAt);
+      },
+    };
+    this.heldPads.add(handle);
+    for (const source of sources) {
+      source.addEventListener('ended', () => { if (--remaining === 0) retire(); }, { once: true });
+      if (decay) source.stop(stopAt);
+    }
+    if (!remaining) retire();
+    return handle;
   }
 
   /**

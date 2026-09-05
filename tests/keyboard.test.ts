@@ -154,6 +154,18 @@ describe('losing the keyboard mid-note', () => {
     expect(bends[bends.length - 1]).toMatchObject({ value: 0 });
   });
 
+  it('gives focused controls their keys before the next frame disables piano input', () => {
+    const { kb, events } = harness();
+    let prevented = false;
+    kb['onDown']({
+      code: 'ArrowLeft', repeat: false, metaKey: false, ctrlKey: false,
+      target: { closest: () => ({}) },
+      preventDefault: () => { prevented = true; },
+    } as unknown as KeyboardEvent);
+    expect(events).toHaveLength(0);
+    expect(prevented).toBe(false);
+  });
+
   it('ignores a release for something it never had', () => {
     const { kb, events, up } = harness();
     kb.enabled = false;
