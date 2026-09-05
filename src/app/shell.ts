@@ -112,7 +112,7 @@ export class Shell {
     // drift, a tenth of a gain, chords rolled from the bottom and a lean on
     // the bar line. Seeded from the clock, so no two sessions comp alike.
     this.bed.feel = { rng: makeRng(Date.now() >>> 0), jitter: 0.01, gain: 0.1, roll: 0.018, accent: 1.08 };
-    this.hud = new Hud(hudRoot);
+    this.hud = new Hud(hudRoot, () => this.suspend());
 
     this.ctx = {
       stage: this.stage,
@@ -136,6 +136,9 @@ export class Shell {
     this.resize();
     this.seedRung();
     window.addEventListener('resize', () => this.queueResize());
+    // Safe-area and browser-bar changes can resize the app without resizing
+    // the layout viewport. Measure the container that the canvas actually fills.
+    new ResizeObserver(() => this.queueResize()).observe(canvas.parentElement!);
     this.wireAudioUnlock();
     this.wirePointer();
     this.wireKeys();
@@ -241,6 +244,7 @@ export class Shell {
     if (!mode) { mode = factory(this.ctx); this.built.set(id, mode); }
     this.active = mode;
     this.modeId = id;
+    this.hud.setFreestyle(id === 'freestyle');
     this.suspended = false;
     save('lastMode', { id });
     mode.enter();
@@ -670,7 +674,7 @@ ${this.active?.debugLines?.() ?? ''}`
   private forgetMeasurements(): void { this.adaptive.forget(); }
 
   private resize(): void {
-    const cssW = window.innerWidth, cssH = window.innerHeight;
+    const { width: cssW, height: cssH } = this.canvas.parentElement!.getBoundingClientRect();
     // A resize is the one event that can mean a different display, which is
     // the only thing the refresh estimate is trying to describe. It never
     // rises on its own, so this is where it gets to.

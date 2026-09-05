@@ -12,6 +12,8 @@ export class Hud {
   readonly left: HTMLElement;
   readonly right: HTMLElement;
 
+  private readonly controlsEl: HTMLButtonElement;
+
   private readonly statusEl: HTMLElement;
   private readonly dotEl: HTMLElement;
   private readonly soundEl: HTMLElement;
@@ -24,9 +26,13 @@ export class Hud {
   /** What `showFps` was when the readout's display was last written. */
   private fpsShown: boolean | null = null;
 
-  constructor(readonly root: HTMLElement) {
+  constructor(readonly root: HTMLElement, onMenu: () => void) {
     root.innerHTML = `
-      <div class="hud-top">
+      <nav class="hud-nav" aria-label="Game controls">
+        <button type="button" id="hud-menu" aria-label="Pause and open menu">Menu</button>
+        <button type="button" id="hud-controls" aria-controls="hud-panels" aria-expanded="false">Controls</button>
+      </nav>
+      <div class="hud-top" id="hud-panels">
         <div class="hud-left" id="hud-left"></div>
         <div class="hud-right" id="hud-right"></div>
       </div>
@@ -44,6 +50,16 @@ export class Hud {
     const q = (sel: string) => root.querySelector(sel) as HTMLElement;
     this.left = q('#hud-left');
     this.right = q('#hud-right');
+    this.controlsEl = q('#hud-controls') as HTMLButtonElement;
+    q('#hud-menu').addEventListener('click', () => {
+      this.setControlsOpen(false);
+      onMenu();
+    });
+    this.controlsEl.addEventListener('click', (event) => {
+      this.setControlsOpen(this.controlsEl.getAttribute('aria-expanded') !== 'true');
+      // Leave the computer keyboard available for playing after a click.
+      if (event.detail > 0) this.controlsEl.blur();
+    });
     this.statusEl = q('#hud-status');
     this.dotEl = q('#hud-dot');
     this.soundEl = q('#hud-sound');
@@ -54,8 +70,20 @@ export class Hud {
 
   /** Empty both panels. Called when a mode hands over. */
   clearPanels(): void {
+    this.setControlsOpen(false);
     this.left.innerHTML = '';
     this.right.innerHTML = '';
+  }
+
+  setFreestyle(on: boolean): void {
+    this.root.classList.toggle('hud-freestyle', on);
+    this.setControlsOpen(false);
+  }
+
+  private setControlsOpen(on: boolean): void {
+    this.root.classList.toggle('controls-open', on);
+    this.controlsEl.setAttribute('aria-expanded', String(on));
+    this.controlsEl.textContent = on ? 'Hide controls' : 'Controls';
   }
 
   /**
