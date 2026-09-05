@@ -46,7 +46,7 @@ it is just that the field can tell the difference.
 
 This is also the one mode where **pitch bend and the mod wheel do what their
 names say**. Bend shears the field sideways as it bends the sound; the mod wheel
-waves it as it opens the filter. Range and destination are in Settings.
+waves it as it opens the filter. Range and destination are in **Settings → Game modes → Freestyle**.
 
 **Nothing is corrected here.** The assist that snaps off-scale notes into the
 key belongs to the pinball table; Freestyle plays exactly what you press, so a
@@ -152,8 +152,7 @@ a good run is also a piece of music.
   changes only on a bar line, winds down rather than cutting out when a rally
   lapses, and stops with the ball. Losing the ball brings the harmony home
   through the dominant and starts the loop over; a ball save comes home
-  through the subdominant and carries on. *Settings → Pinball → Drums under a
-  rally* keeps the drums out for whoever wants the chords without a band.
+  through the subdominant and carries on. *Settings → Game modes → Pinball → Rally drums* keeps the drums out for whoever wants the chords without a band.
 - **The beat is on the table.** A ring around the bumpers and a strip along the
   keybed breathe with the bed's beat, harder on the downbeat, and a key played
   on the beat throws a ring off the key. Groove was always worth points; now
@@ -226,8 +225,8 @@ are no drums in PlayTune, because a kick under a Gymnopédie is a costume.
 
 Passing a tune (accuracy above its own mark) opens one more and records your
 best. Only the first pass of a tune pays — replaying one you have cleared is for
-the score. **Settings → PlayTune → Note names on the auras** restores the clean board
-when turned off. **Audio offset** exists because output latency is real. You play
+the score. **Settings → Game modes → PlayTune → Falling-note names** restores the clean
+board when turned off. **Timing adjustment → Audio offset** exists because output latency is real. You play
 in time with what you *hear*, and what you hear has already happened, so an
 honest player lands late — raise the offset to compensate for that, lower it if
 you are landing early.
@@ -236,8 +235,9 @@ you are landing early.
 
 ## The music
 
-**Key** and **Scale** are chosen in Settings → Audio, or on screen in Freestyle,
-and the choice follows you across all three modes. Nine scales: major, minor and
+**Musical key** and **Scale** are chosen in **Settings → Sound & music → Key & scale**,
+or on screen in Freestyle. Pinball and Freestyle share the choice; PlayTune follows
+the song’s key. Nine scales: major, minor and
 major pentatonic, dorian, natural minor, lydian, mixolydian, blues and kumoi —
 or **Random each game**, which draws a fresh one every time you start.
 
@@ -290,18 +290,43 @@ one. `Esc` steps back — out of a screen, out of play, out to the menu.
 `Backspace` starts again from the top — the tune you are on, from its count-in
 and without going back through the song list, or the pinball run, from ball one. `F3` shows the frame budget.
 
+## Settings
+
+Settings opens one category at a time. Desktop uses a sidebar; on a phone,
+choose a category from the list and use Back to return. Back stays visible
+while the controls scroll. Changes apply and save immediately.
+
+- **Sound & music:** volume and reverb, with expandable instrument/backing mix,
+  key/scale, and sound-quality options.
+- **Controls:** MIDI keyboard, mapped range, calibration and touch response.
+  **Test your keyboard** contains the live pressure histogram and MIDI monitor.
+- **Appearance:** theme, table size and graphics quality; individual visual
+  effects are expandable.
+- **Accessibility:** reduced motion, colour-blind palette and keyboard/table
+  note labels. PlayTune’s falling-note names are under Game modes.
+- **Game modes:** choose Pinball, Freestyle or PlayTune to adjust its settings
+  without starting or switching a game. PlayTune timing calibration is expandable.
+- **Data & reset:** restore settings while keeping scores and unlocks, or
+  separately reset melody or chord progress after confirmation.
+
+Your selected category, expanded sections and scroll positions are remembered
+until the app reloads. A fresh phone visit starts at the category list.
+Calibration returns to Controls; leaving Settings returns to the screen that
+opened it. Freestyle’s in-game instruments, rhythm and backing controls remain
+available during play and share the same volume settings.
+
 ## Your controller
 
 The app makes no assumptions about what your hardware sends. It enumerates Web
-MIDI devices, and **Settings → MIDI monitor** shows the raw message stream so you
+MIDI devices, and **Settings → Controls → Test your keyboard** shows the raw message stream so you
 can see exactly what your octave, bend and sustain controls transmit.
 
 - **Octave buttons transpose silently.** Most controllers just send different
   note numbers. A note arriving outside the mapped window re-latches it by whole
   octaves automatically; if the on-screen keybed ever looks out of step, play a
-  note at either end, use the ± buttons in settings, or run **Calibrate**.
+  note at either end, use **Octave down / Octave up** in Settings → Controls, or run **Calibrate keyboard**.
 - **Mini keys have a narrow velocity range.** The default curve leans soft with a
-  ceiling below 127. Settings shows a live histogram of how hard you actually
+  ceiling below 127. **Controls → Test your keyboard** shows a live histogram of how hard you actually
   play, so the curve can be matched to you rather than guessed.
 
 Calibration (press your lowest key, then your highest) supports anything from 25
