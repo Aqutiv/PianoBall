@@ -5,7 +5,7 @@ import type { ChartChord, ChartNote, Tune } from './chart';
 import { chordChart } from './chords';
 import { CHORD_CURVE, CHORD_ORDER, CHORD_TUNES, findChordEntry } from './library/chordcurve';
 import { LIBRARY, TUNE_ORDER } from './library';
-import { CHORD_STORE, MELODY_STORE } from './progress';
+import { BACKING_STORE, MELODY_STORE } from './progress';
 
 export type RoleId = 'melody' | 'chords';
 
@@ -50,16 +50,7 @@ export interface TuneRole {
   chart(tune: Tune): ChartNote[];
   backing(tune: Tune): Backing;
   card(tune: Tune): RoleCard;
-  /**
-   * What the player's keys sound like, and what the game's part sounds like.
-   *
-   * An explicit trio rather than a swap of the tune's own two, because
-   * `voiceId` and `bedVoiceId` index different banks — `bed-harp` is not a lead
-   * and `choir` is not a bed — and because the chord role does not merely
-   * exchange the two instruments. It changes what a key *is*: the player is
-   * holding the backing layer, so the keys are voiced from the bed bank and
-   * swell and sustain the way the bed does everywhere else in the app.
-   */
+  /** Player voice bank and instrument, plus the automatic part's bed voice. */
   voices(tune: Tune): { keyVoicing: KeyVoicing; keys: string; backing: string };
 }
 
@@ -87,53 +78,20 @@ export const MELODY_ROLE: TuneRole = {
   }),
 };
 
-/**
- * The voice the game plays a tune in when the player has the chords.
- *
- * A bed voice, because the scheduler goes through `AudioEngine.pad`, and the
- * default is not the tune's own `bedVoiceId`: those were chosen to sit *under*
- * a melody — strings, choir, warm — and have almost no attack, which makes a
- * poor tune. A felt piano has one.
- *
- * Both parts of this role are bed voices, so the pairing is what keeps them
- * apart: the player takes a pad and the game takes something plucked or
- * struck. Two pads would be one indistinguishable wash.
- */
-const DEFAULT_MELODY_VOICE = 'bed-felt-piano';
-
-/** What a player holding the chords sounds like: the bed the app already has. */
-const DEFAULT_KEYS_VOICE = DEFAULT_BED_VOICE;
-
-/**
- * Playing the chords. The game plays the tune over them.
- *
- * The bed keeps the bass and drops everything else. Keeping the wash would mean
- * the harmony still sounds right when the player has played nothing, which is
- * the one thing this role cannot afford; dropping the bass would push a chart
- * like Canon in D past thirty semitones and put every small controller out of
- * the mode. What is left is the honest division of the two hands.
- */
+/** Play the authored accompaniment while the game supplies only the melody. */
 export const CHORDS_ROLE: TuneRole = {
   id: 'chords',
-  storageKey: CHORD_STORE,
-  label: 'Chords',
-  title: 'PlayChords',
-  lede: 'The game plays the tune. You play the chords under it — press the whole chord as its auras land.',
+  storageKey: BACKING_STORE,
+  label: 'Backing',
+  title: 'Play Backing',
+  lede: 'The game plays the melody. You play the backing—follow the bass notes, chords, and patterns underneath.',
   tunes: CHORD_TUNES,
   order: CHORD_ORDER,
   chart: (tune) => {
     const entry = findChordEntry(tune.id);
     return entry ? chordChart(tune, entry.role) : [];
   },
-  backing: (tune) => {
-    const entry = findChordEntry(tune.id);
-    return {
-      chords: tune.chords,
-      pattern: entry?.role.pattern ?? tune.accompaniment,
-      parts: ['bass'],
-      notes: tune.melody,
-    };
-  },
+  backing: (tune) => ({ chords: [], pattern: 'sustain', parts: [], notes: tune.melody }),
   card: (tune) => {
     const role = findChordEntry(tune.id)?.role;
     return role
@@ -143,9 +101,9 @@ export const CHORDS_ROLE: TuneRole = {
   voices: (tune) => {
     const role = findChordEntry(tune.id)?.role;
     return {
-      keyVoicing: 'bed',
-      keys: role?.keysVoiceId ?? DEFAULT_KEYS_VOICE,
-      backing: role?.melodyVoiceId ?? DEFAULT_MELODY_VOICE,
+      keyVoicing: role?.keyVoicing ?? 'lead',
+      keys: role?.keysVoiceId ?? 'felt-piano',
+      backing: role?.melodyVoiceId ?? 'bed-felt-piano',
     };
   },
 };

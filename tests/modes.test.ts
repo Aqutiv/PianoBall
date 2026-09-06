@@ -124,7 +124,7 @@ describe('pinball drums', () => {
 /** Just enough panel for `TuneHud` to mount into; nothing here is asserted. */
 function fakeHud(): Hud {
   const node = { textContent: '', innerHTML: '', style: {} };
-  const panel = () => ({ innerHTML: '', querySelector: () => node });
+  const panel = () => ({ innerHTML: '', querySelector: () => node, classList: { toggle: vi.fn() } });
   return {
     left: panel(), right: panel(),
     banner: () => {}, clearPanels: () => {},
@@ -279,6 +279,26 @@ describe('ModeBase subscriptions', () => {
  * caches from settings has to be able to hear that the settings moved.
  */
 describe('playtune role', () => {
+  it('switches between held backing, articulated backing, and melody without leaking voices', () => {
+    const { mode, engine } = playtuneRig();
+    mode.enter();
+    mode.setRole('chords');
+    expect(mode.start('drift')).toBe(true);
+    expect(engine.keyVoicing).toBe('bed');
+    expect(engine.keyBedVoice).toBe('glass-pad');
+    expect(mode.start('twinkle')).toBe(true);
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe('felt-piano');
+    expect(engine.bedVoice).toBe('bed-music-box');
+    mode.setRole('melody');
+    expect(mode.start('twinkle')).toBe(true);
+    expect(engine.leadVoice).toBe('music-box');
+    expect(engine.bedVoice).toBe('bed-harp');
+    mode.exit();
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
+  });
   it('goes back to the melody when the settings are reset under it', () => {
     // "Reset settings" restores the saved role without going through
     // `setRole`, and it only reaches the mode that happens to be on screen.

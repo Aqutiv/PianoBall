@@ -1977,3 +1977,8 @@ kbd {
   .status .dot, .status .sep { flex-shrink: 0; }
   #hud-sound { flex-shrink: 0; max-width: 110px; }
 }
+
+/* In Backing, the pattern is the instruction; harmony is supporting context. */
+.playing-backing .tune-harmony { margin-top: 8px; opacity: 0.7; }
+.playing-backing .tune-harmony .chord { font-size: clamp(16px, 2.3vh, 24px); }
+.playing-backing #pt-sub { max-width: 32ch; white-space: normal; line-height: 1.4; text-transform: none; letter-spacing: 0.02em; font-size: 12px; }

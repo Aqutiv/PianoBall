@@ -62,10 +62,11 @@ export class TuneHud {
     this.mounted = true;
   }
 
-  setTune(tune: Tune | null): void {
+  setTune(tune: Tune | null, accompaniment?: string): void {
     if (!this.mounted) return;
     this.titleEl.textContent = tune?.title ?? ' ';
-    this.subEl.textContent = tune ? `${tune.composer} · ${tune.bpm} bpm` : 'Choose a tune';
+    this.hud.left.classList.toggle('playing-backing', Boolean(accompaniment));
+    this.subEl.textContent = accompaniment ?? (tune ? `${tune.composer} · ${tune.bpm} bpm` : 'Choose a tune');
   }
 
   update(judge: Judge | null, progress: number, harmony: Harmony = { now: null, next: null }): void {

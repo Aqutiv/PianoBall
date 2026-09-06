@@ -5,220 +5,64 @@ import {
   ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
   FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY,
 } from './classics';
-import { FIRST_LIGHT, DRIFT, TWO_HANDS } from './originals';
-import { CHORD_GROUND, CHORD_THREE, CHORD_MARCH } from './studies';
+import { DRIFT } from './originals';
+import { CHORD_GROUND, CHORD_MARCH } from './studies';
+import { figure, harmonicBass, heldHarmony } from './backingNotation';
 
-export interface ChordEntry {
-  tune: Tune;
-  role: ChordRole;
+export interface ChordEntry { tune: Tune; role: ChordRole }
+const pass = [0, 0.55, 0.60, 0.63, 0.67, 0.70];
+const close = (tune: Tune) => tune.chords.at(-1)!.beat;
+function entry(tune: Tune, difficulty: ChordRole['difficulty'], teaches: string,
+  notes: ChordRole['notes'], melodyVoiceId = 'bed-felt-piano', sustained = false): ChordEntry {
+  return { tune, role: { difficulty, teaches, pass: pass[difficulty], notes,
+    keyVoicing: sustained ? 'bed' : 'lead', keysVoiceId: sustained ? 'glass-pad' : 'felt-piano', melodyVoiceId } };
 }
 
-/**
- * The chord curve, in the order it is unlocked.
- *
- * Its own order, because chord difficulty and melody difficulty come apart
- * badly. Canon in D is the hardest melody in the game and one of the easiest
- * progressions there is to play — an eight-bar ground, one triad to a bar — so
- * it sits near the middle here and near the end in the melody chain.
- * Gymnopédie goes the other way: its spacious melody accompanies the
- * four-note shapes introduced by its chord track.
- *
- * The curve climbs two ladders and they cross, which is deliberate and should
- * survive editing. The middle levels climb the *strike rhythm* — block chord,
- * march, pulse, waltz, compound — on tunes whose harmony moves slowly enough to
- * afford it. The final level drops back to block chords and climbs the *rate
- * of change* instead, down to Jesu, Joy's third of a second. Asking for a comp
- * pattern on top of a harmony moving that fast would not be harder, it would be
- * unplayable.
- *
- * Nothing here uses `broken` or `arpeggio`: see `PLAYABLE_PATTERNS`. The five
- * tunes written with one, and Jesu, Joy's `compound` at 176 bpm, name something
- * else instead.
- */
+/** Authored accompaniment course. The wire role remains `chords` for native v1. */
 export const CHORD_CURVE: ChordEntry[] = [
-  {
-    tune: CHORD_GROUND,
-    role: {
-      difficulty: 1, pass: 0.55, pattern: 'sustain',
-      teaches: 'Two chords, one to a bar. Put it down and leave it there.',
-    },
-  },
-  {
-    tune: CHORD_THREE,
-    role: {
-      difficulty: 1, pass: 0.57, pattern: 'sustain',
-      teaches: 'A third shape, and two chords to a bar.',
-    },
-  },
-  {
-    tune: FRERE_JACQUES,
-    role: {
-      difficulty: 1, pass: 0.57, pattern: 'sustain',
-      teaches: 'Two familiar major shapes, with time to find and hold each one.',
-      keysVoiceId: 'warm', melodyVoiceId: 'bed-music-box',
-    },
-  },
-  {
-    // The slowest harmony in the library, and the tune that grades holding.
-    // Its two min7 bars are voiced as shells: three notes, so the first
-    // seventh anyone meets is still a shape the hand already knows.
-    tune: DRIFT,
-    role: {
-      difficulty: 2, pass: 0.57, pattern: 'sustain', voicing: 'shell',
-      teaches: 'Four beats a chord, and a seventh among them.',
-      keysVoiceId: 'glass-pad', melodyVoiceId: 'bed-music-box',
-    },
-  },
-  {
-    tune: CHORD_MARCH,
-    role: {
-      difficulty: 2, pass: 0.59, pattern: 'march',
-      teaches: 'The strike is not the chord change.',
-    },
-  },
-  {
-    tune: ODE_TO_JOY,
-    role: {
-      difficulty: 2, pass: 0.6, pattern: 'march',
-      teaches: 'The same march on two chords, with the cadences moving mid-bar.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
-  {
-    tune: TWINKLE,
-    role: {
-      difficulty: 2, pass: 0.6, pattern: 'march',
-      teaches: 'Three chords changing every half bar, and no rest in it.',
-      keysVoiceId: 'warm', melodyVoiceId: 'bed-music-box',
-    },
-  },
-  {
-    tune: DRUNKEN_SAILOR,
-    role: {
-      difficulty: 2, pass: 0.6, pattern: 'march',
-      teaches: 'D minor and C major, keeping the march through verse and chorus.',
-      keysVoiceId: 'bed-choir', melodyVoiceId: 'nylon-guitar',
-    },
-  },
-  {
-    // Melody difficulty 5, chord difficulty 3: the biggest inversion there is.
-    tune: CANON_IN_D,
-    role: {
-      difficulty: 3, pass: 0.63, pattern: 'march',
-      teaches: 'An eight-bar ground, learned once and played twice.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-harp',
-    },
-  },
-  {
-    tune: LONDONDERRY_AIR,
-    role: {
-      difficulty: 3, pass: 0.63, pattern: 'march',
-      teaches: 'A pickup chord that starts before the bar does.',
-      keysVoiceId: 'bed-choir', melodyVoiceId: 'bed-harp',
-    },
-  },
-  {
-    tune: FIRST_LIGHT,
-    role: {
-      difficulty: 3, pass: 0.63, pattern: 'pulse',
-      teaches: 'A chord on every beat, on only three shapes.',
-    },
-  },
-  {
-    tune: TWO_HANDS,
-    role: {
-      difficulty: 3, pass: 0.65, pattern: 'pulse',
-      teaches: 'The same pulse on six shapes — the widest vocabulary here.',
-    },
-  },
-  {
-    tune: CAN_CAN,
-    role: {
-      difficulty: 3, pass: 0.65, pattern: 'pulse',
-      teaches: 'Three major shapes with a chord on every beat of the dance.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
-  {
-    tune: AMAZING_GRACE,
-    role: {
-      difficulty: 4, pass: 0.65, pattern: 'waltz',
-      teaches: 'Three-four, a pickup, and cadence chords lasting one beat.',
-      keysVoiceId: 'bed-organ', melodyVoiceId: 'bed-choir',
-    },
-  },
-  {
-    // The four-note chords, and three whole seconds to find each one. Slow
-    // enough that the shape is the only new thing.
-    tune: GYMNOPEDIE,
-    role: {
-      difficulty: 4, pass: 0.65, pattern: 'waltz',
-      teaches: 'Sevenths: four notes at once, three seconds apart.',
-      keysVoiceId: 'warm', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
-  {
-    tune: SCARBOROUGH_FAIR,
-    role: {
-      difficulty: 4, pass: 0.67, pattern: 'waltz',
-      teaches: 'Five shapes moving on the half bar of a waltz.',
-      keysVoiceId: 'bed-choir', melodyVoiceId: 'nylon-guitar',
-    },
-  },
-  {
-    tune: GREENSLEEVES,
-    role: {
-      difficulty: 4, pass: 0.67, pattern: 'compound',
-      teaches: 'Six-eight, and one finger turning the same chord major.',
-      keysVoiceId: 'warm', melodyVoiceId: 'bed-harp',
-    },
-  },
-  {
-    tune: BLUE_DANUBE,
-    role: {
-      difficulty: 4, pass: 0.67, pattern: 'waltz',
-      teaches: 'Waltz chords on two and three, with a four-note dominant seventh.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
-  {
-    // Back to block chords from here: these tunes climb the rate of change.
-    tune: FUR_ELISE,
-    role: {
-      difficulty: 5, pass: 0.67, pattern: 'sustain',
-      teaches: 'Blocks at a hundred and sixty-eight.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
-  {
-    tune: MINUET_IN_G,
-    role: {
-      difficulty: 5, pass: 0.7, pattern: 'sustain',
-      teaches: 'The quickest harmony in the library: three chords, two thirds of a second apart.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-harp',
-    },
-  },
-  {
-    tune: JESU_JOY,
-    role: {
-      difficulty: 5, pass: 0.7, pattern: 'sustain',
-      teaches: 'Twenty-odd changes at a hundred and seventy-six, and then again.',
-      keysVoiceId: 'bed-organ', melodyVoiceId: 'bed-choir',
-    },
-  },
-  {
-    tune: THE_ENTERTAINER,
-    role: {
-      difficulty: 5, pass: 0.7, pattern: 'sustain',
-      teaches: 'Quick blocks, dominant sevenths, and F major turning minor.',
-      keysVoiceId: 'strings', melodyVoiceId: 'bed-felt-piano',
-    },
-  },
+  entry(FRERE_JACQUES, 1, 'Bass on the bar line: hear C and G support the melody.',
+    figure(FRERE_JACQUES, [[0, 'bass', 4]]), 'bed-music-box'),
+  entry(ODE_TO_JOY, 1, 'Follow the harmony in the bass, including changes inside the bar.',
+    harmonicBass(ODE_TO_JOY)),
+  entry(CHORD_GROUND, 1, 'Root and fifth: two bass notes to a bar.',
+    figure(CHORD_GROUND, [[0, 'bass', 2], [2, 'fifth', 2]])),
+  entry(TWINKLE, 2, 'A bass note, then a two-note chord answer.',
+    figure(TWINKLE, [[0, 'bass', 0.9], [1, 'dyad', 0.9], [2, 'bass', 0.9], [3, 'dyad', 0.9]], { cadence: close(TWINKLE) }), 'bed-music-box'),
+  entry(CHORD_MARCH, 2, 'Bass on one and three; chord answers on two and four.',
+    figure(CHORD_MARCH, [[0, 'bass', 0.8], [1, 'dyad', 0.8], [2, 'bass', 0.8], [3, 'dyad', 0.8]], { cadence: close(CHORD_MARCH) })),
+  entry(DRIFT, 2, 'Hold the harmony: triads and seventh shells with a bass foundation.',
+    heldHarmony(DRIFT), 'bed-music-box', true),
+  entry(DRUNKEN_SAILOR, 2, 'Keep the bass-and-chord march through D minor and C major.',
+    figure(DRUNKEN_SAILOR, [[0, 'bass', 0.85], [1, 'dyad', 0.8], [2, 'bass', 0.85], [3, 'dyad', 0.8]], { cadence: close(DRUNKEN_SAILOR) }), 'nylon-guitar'),
+  entry(CANON_IN_D, 3, 'Learn the repeating bass ground, with broken-chord answers.',
+    figure(CANON_IN_D, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9], [3, 'third', 0.9]], { cadence: close(CANON_IN_D) }), 'bed-harp'),
+  entry(AMAZING_GRACE, 3, 'Bass on one, gentle chord answers in three, and a pickup.',
+    figure(AMAZING_GRACE, [[0, 'bass', 0.9], [1, 'dyad', 0.9], [2, 'dyad', 0.9]], { cadence: close(AMAZING_GRACE) }), 'bed-choir'),
+  entry(SCARBOROUGH_FAIR, 3, 'A flowing three-note figure following the changing harmony.',
+    figure(SCARBOROUGH_FAIR, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9]], { cadence: close(SCARBOROUGH_FAIR) }), 'nylon-guitar'),
+  entry(GYMNOPEDIE, 3, 'Bass on one; a seventh shell on two, held through three.',
+    figure(GYMNOPEDIE, [[0, 'bass', 0.9], [1, 'shell', 2]])),
+  entry(LONDONDERRY_AIR, 4, 'Flowing broken chords with breathing space at the cadence.',
+    figure(LONDONDERRY_AIR, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9], [3, 'third', 0.75]],
+      { rests: [[close(LONDONDERRY_AIR) - 1, close(LONDONDERRY_AIR)]], cadence: close(LONDONDERRY_AIR) }), 'bed-harp'),
+  entry(GREENSLEEVES, 4, 'Two groups of three: let the bass anchor each lilting group.',
+    figure(GREENSLEEVES, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9], [3, 'bass', 0.9], [4, 'third', 0.9], [5, 'top', 0.9]], { cadence: close(GREENSLEEVES) }), 'bed-harp'),
+  entry(CAN_CAN, 4, 'Short bass-and-chord answers keep the dance moving.',
+    figure(CAN_CAN, [[0, 'bass', 0.65], [1, 'dyad', 0.55], [2, 'fifth', 0.65], [3, 'dyad', 0.55]], { cadence: close(CAN_CAN) })),
+  entry(BLUE_DANUBE, 4, 'Bass, chord, chord: a waltz with compact inversions and sevenths.',
+    figure(BLUE_DANUBE, [[0, 'bass', 0.8], [1, 'shell', 0.7], [2, 'shell', 0.7]], { cadence: close(BLUE_DANUBE) })),
+  entry(FUR_ELISE, 5, 'Broken-chord gestures: leave space for the melody to speak.',
+    figure(FUR_ELISE, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9]],
+      { rests: [[0, 8], [23, 32]], cadence: close(FUR_ELISE) })),
+  entry(MINUET_IN_G, 5, 'A moving bass line with occasional two-note support.',
+    figure(MINUET_IN_G, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'dyad', 0.8]], { cadence: close(MINUET_IN_G) }), 'bed-harp'),
+  entry(JESU_JOY, 5, 'Anchor three compound pulses with bass and economical chord answers.',
+    figure(JESU_JOY, [[0, 'bass', 1.8], [2, 'dyad', 0.8], [3, 'bass', 1.8], [5, 'dyad', 0.8], [6, 'bass', 1.8], [8, 'dyad', 0.8]], { cadence: close(JESU_JOY) }), 'bed-choir'),
+  entry(THE_ENTERTAINER, 5, 'Keep a steady ragtime bass and chord beneath the syncopated melody.',
+    figure(THE_ENTERTAINER, [[0, 'bass', 0.8], [1, 'shell', 0.65], [2, 'fifth', 0.8], [3, 'shell', 0.65]], { cadence: close(THE_ENTERTAINER) })),
 ];
 
-export const CHORD_TUNES: Tune[] = CHORD_CURVE.map((e) => e.tune);
-export const CHORD_ORDER: string[] = CHORD_CURVE.map((e) => e.tune.id);
-
-const BY_ID = new Map(CHORD_CURVE.map((e) => [e.tune.id, e]));
-
+export const CHORD_TUNES: Tune[] = CHORD_CURVE.map(e => e.tune);
+export const CHORD_ORDER: string[] = CHORD_CURVE.map(e => e.tune.id);
+const BY_ID = new Map(CHORD_CURVE.map(e => [e.tune.id, e]));
 export function findChordEntry(id: string): ChordEntry | undefined { return BY_ID.get(id); }

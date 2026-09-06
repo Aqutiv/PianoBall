@@ -2,19 +2,9 @@ import type { Tune } from '../chart';
 import { line, progression } from './notation';
 
 /**
- * The three tunes the chord curve opens on.
- *
- * They are here rather than in `originals.ts` because they are not the same
- * kind of thing. The originals are tunes with a mechanic to teach; these are
- * exercises with a tune attached — the melody exists so the game has something
- * to play back while the player takes the chords, and it is deliberately plain.
- * They never appear in the melody song list.
- *
- * Nothing already in the library could open the curve. Ode to Joy has the
- * simplest harmony there is and still changes chord twice a bar; Canon in D is
- * slower but has five shapes; Drift is slower still but opens with a sus4 and a
- * seventh. There was no tune anywhere that was two triads on whole bars, which
- * is where learning to play chords has to start.
+ * Ground and Off the Beat remain accompaniment studies. Their backing note
+ * charts live in chordcurve.ts; these definitions retain their melodies and
+ * harmony. Three Ways Home is archived below and is not an active course entry.
  */
 
 // Written in C so every shape is white keys. There is no plain major scale in
@@ -143,4 +133,4 @@ export const CHORD_MARCH: Tune = {
   ]),
 };
 
-export const STUDIES: Tune[] = [CHORD_GROUND, CHORD_THREE, CHORD_MARCH];
+export const STUDIES: Tune[] = [CHORD_GROUND, CHORD_MARCH];

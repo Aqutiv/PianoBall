@@ -54,8 +54,8 @@ worker. These post-build JSON files remain outside the PWA precache.
 
 1. Edit the existing tune definitions in `src/modes/playtune/library/`.
    For Melody membership/progression, use `LIBRARY` in `library/index.ts`.
-   For Chords, use `CHORD_CURVE` in `library/chordcurve.ts`, including its
-   role-specific card, playable pattern and voice choices. Chord-only studies
+   For Backing (wire role `chords`), use `CHORD_CURVE` in `library/chordcurve.ts`, including its
+   authored note chart, role-specific card and voice choices. Backing-only studies
    remain outside Melody.
 2. Keep published IDs stable when changing titles, composers or teaching copy.
    Identity is the pair `(role, id)`; the wire ID has no role prefix.
@@ -68,8 +68,8 @@ worker. These post-build JSON files remain outside the PWA precache.
    desktop release.
 
 The compiler reads each role's `order`, `tunes`, `chart`, `backing`, `card`
-and `voices`. Order and membership must agree. It emits Melody followed by
-Chords, retaining each authored progression; it never sorts titles or IDs.
+and `voices`. Order and membership must agree. It emits 19 Melody entries followed by
+19 Backing entries (wire role `chords`), retaining each authored progression; it never sorts titles or IDs.
 All `ALL_TUNES` entries run through `validate` and `harmonyProblems`;
 every `CHORD_CURVE` entry runs through `chordProblems` as well.
 
@@ -171,7 +171,9 @@ offset a second time**.
   retains its existing internal chord-pad event representation.
 - A bed voice with a defined `spec.pluck` suppresses wash events, preventing
   the same plucked attack from sounding twice.
-- The role's other parts and original gain values are preserved.
+- The role's other parts and original gain values are preserved. Backing now
+  supplies only melody events; its authored player notes include the bass and
+  harmony. No automatic bass, chord, or wash events are exported for that role.
 
 These correct two differences in the historical desktop export prototype,
 which used melody gain 0.075/attack 0.01 and omitted the wash exclusion.
@@ -241,3 +243,17 @@ unchanged startup/cache reuse and offline startup. `--catalog` and
 `--benchmark` bypass the online startup check. Do not edit the client's cache
 or digest to simulate a successful update. These cross-application startup
 checks remain pending until this feed is deployed.
+
+## Play Backing compatibility
+
+The browser labels the second role **Backing**. Its exported ID remains
+`chords`, the schema remains v1, and retained song IDs remain stable. The feed
+contains 38 entries. No Windows UI change or deployment is part of this revision;
+an older client may continue to label the role Chords and manage scores under
+its existing policy. Browser migration is separate from native save handling.
+
+Player charts are authored in `library/chordcurve.ts` with shared notation
+helpers. Validation checks finite timing, pitch, repeated-pitch overlap,
+three-note polyphony including holds, octave hand span, passage bounds and the
+standard 25-key fit. Keys use the lead bank's Felt Piano except for Drift's bed
+bank Glass Pad. Existing Melody entries retain their previous musical output.

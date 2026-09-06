@@ -15,22 +15,22 @@ const phrase = (notes: ChartNote[], start: number, len: number) => notes
   .filter(n => n.beat >= start && n.beat < start + len).map(n => ({ ...n, beat: n.beat - start }));
 
 describe('five familiar additions', () => {
-  it('adds one classic per difficulty in both courses, after existing peers', () => {
+  it('retains all familiar additions, with the backing course ordered independently', () => {
     expect(FAMILIAR_TUNES.map(t => t.id)).toEqual(ids);
     expect(LIBRARY).toHaveLength(19);
-    expect(CHORD_CURVE).toHaveLength(22);
-    expect(CHORD_ORDER.slice(0, 3)).toEqual(['chord-ground', 'chord-three', 'frere-jacques']);
+    expect(CHORD_CURVE).toHaveLength(19);
+    expect(CHORD_ORDER.slice(0, 3)).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground']);
     for (const role of Object.values(ROLES)) {
       expect(new Set(role.order).size).toBe(role.order.length);
-      expect(role.order.filter(id => !ids.includes(id))).toEqual(LEGACY_ORDERS[role.id === 'melody' ? 'playtune' : 'playchords']);
+      if (role.id === 'melody') expect(role.order.filter(id => !ids.includes(id))).toEqual(LEGACY_ORDERS.playtune);
       for (const [i, id] of ids.entries()) {
         const tune = findTune(id)!;
         expect(tune.origin).toBe('classic');
         expect(CLASSICS).toContain(tune);
         expect(role.order.filter(x => x === id)).toHaveLength(1);
-        expect(role.card(tune).difficulty).toBe(i + 1);
+        expect(role.card(tune).difficulty).toBe(role.id === 'melody' ? i + 1 : [1,2,4,4,5][i]);
         const peers = role.tunes.filter(t => !ids.includes(t.id) && role.card(t).difficulty === i + 1);
-        for (const peer of peers) expect(role.order.indexOf(peer.id)).toBeLessThan(role.order.indexOf(id));
+        for (const peer of role.id === 'melody' ? peers : []) expect(role.order.indexOf(peer.id)).toBeLessThan(role.order.indexOf(id));
         expect(findChordEntry(id)?.tune).toBe(tune);
       }
     }
@@ -40,13 +40,13 @@ describe('five familiar additions', () => {
   it('publishes all ten role entries in schema v1 with their own teaching and pass marks', () => {
     const catalog = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null });
     expect(catalog.schemaVersion).toBe(1);
-    expect(catalog.entries).toHaveLength(41);
+    expect(catalog.entries).toHaveLength(38);
     expect(catalog.entries.filter(e => ids.includes(e.id))).toHaveLength(10);
     for (const [i, id] of ids.entries()) {
       const melody = catalog.entries.find(e => e.id === id && e.role === 'melody')!;
       const chords = catalog.entries.find(e => e.id === id && e.role === 'chords')!;
       expect(melody.pass).toBe([0.6, 0.63, 0.65, 0.67, 0.7][i]);
-      expect(chords.pass).toBe([0.57, 0.6, 0.65, 0.67, 0.7][i]);
+      expect(chords.pass).toBe([0.55, 0.6, 0.67, 0.67, 0.7][i]);
       expect(melody.teaches).not.toBe(chords.teaches);
       expect(melody.playerNotes.length).toBeGreaterThan(0);
       expect(chords.playerNotes.length).toBeGreaterThan(0);
@@ -95,13 +95,6 @@ describe('five familiar additions', () => {
       for (const [low, count] of [[48, 25], [48, 32], [36, 49], [36, 61], [28, 76], [21, 88]]) {
         const high = low + count - 1;
         const shift = fitToRange(chart, low, high);
-        // This root-position waltz straddles C on a 25-key controller.
-        // A lower base or a 32-key map fits; the existing card must flag C25.
-        if (count === 25 && role.id === 'chords' && tune.id === 'blue-danube') {
-          expect(shift).toBeNull();
-          expect(fitToRange(chart, 45, 69)).not.toBeNull();
-          continue;
-        }
         expect(shift, `${role.id}:${tune.id}, ${count} keys`).not.toBeNull();
         expect(Math.abs(shift! % 12)).toBe(0);
         for (const n of fitted(chart, shift!)) {

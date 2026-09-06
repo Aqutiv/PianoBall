@@ -15,7 +15,7 @@ afterEach(() => vi.unstubAllGlobals());
 const record = { accuracy: 0.73, score: 12345, grade: null, plays: 4, passed: true } as const;
 const pass = { accuracy: 0.9, score: 15000, grade: 'A', passed: true } as const;
 
-for (const role of Object.values(ROLES)) describe(`${role.id} course expansion`, () => {
+for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () => {
   const legacyKey = role.id === 'melody' ? 'playtune' : 'playchords';
   const old = LEGACY_ORDERS[legacyKey];
   it('starts with three open tracks and can complete the whole expanded course', () => {

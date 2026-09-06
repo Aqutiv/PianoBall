@@ -198,7 +198,7 @@ bursts into light, late or early it still counts for less, and one you never
 reach **shatters**. There is no failing — a tune always plays to its last bar,
 because the point is to have played it.
 
-Nineteen melody tracks and twenty-two chord tracks, each in its own course.
+Nineteen melody tracks and nineteen backing tracks, each in its own course.
 The melody tracks arrive in order, from three notes on the beat to Bach in
 continuous quavers. **Three are open at the start** — pass any of them and the
 next one joins the list, so a step you cannot take yet is walked around rather
@@ -226,23 +226,34 @@ than stared at:
 | 18 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
 | 19 | The Entertainer | Chromatic pickups and tied syncopation |
 
-**PlayChords** uses a separate 22-track curve and progress store. Frère Jacques
-is the third opening chord track. The five new classics add one track at every
-difficulty (1–5) in each role: slow C/G blocks, a D-minor/C-major march, a C/F/G
-pulse, waltz triads and sevenths, and faster ragtime changes. They last 48–72
-seconds at practice tempos and finish at a cadence. Melody and Chords have
-their own teaching descriptions and pass marks.
+**Play Backing** puts you on the accompaniment while the game plays the melody.
+Bass notes, chord answers, broken chords and phrase rests follow a separate
+19-track course. Frère Jacques, Ode to Joy and Ground are open first; each first
+pass opens one more. Ground introduces root-and-fifth bass movement, Off the
+Beat teaches bass-and-chord alternation, and Drift keeps its sustained harmony.
+Three Ways Home is retired; First Light and Two Hands remain in Melody.
+
+All sixteen familiar pieces have compact accompaniment reductions: Gymnopédie
+puts a bass note on one and a seventh shell on two, Für Elise leaves room for
+the melody between broken-chord gestures, and The Entertainer keeps a ragtime
+bass and chord pattern under the syncopation. Every backing chart fits the
+standard 25-key C-to-C mapping, with at most three notes held together within
+an octave. Articulated parts use Felt Piano; Drift uses Glass Pad. The game
+plays only the melody, so your bass and harmony are audible contributions.
+Levels 1–5 require 55%, 60%, 63%, 67% and 70% accuracy respectively.
 
 Historical editions, selected passages, beat units, instrument choices and the
 public-domain basis for the US, UK, EU and Israel are in the
 [source ledger](docs/tune-sources.md). Playback is synthesized from our own
 reductions; no recordings, downloaded MIDI, modern arrangements or lyrics ship.
-Existing scores, earned passes and unlocks survive the expansion, including
-older saves without explicit pass flags. The expanded courses copy existing progress once into versioned stores using
-the same format. Older app versions then keep their own saves: their runs and
-resets do not change the expanded courses. Continue in the updated app after
-upgrading; current-version tabs still share progress and reset epochs. The unchanged schema v1 exporter
-supplies **41 course entries** (19 melody + 22 chords) to the Windows game.
+Melody progress is unchanged. Backing imports earned song access once from the
+previous chord course into its own store, while scores and passes start fresh
+for the revised arrangements. Retired tracks still count toward imported
+access. The first new pass opens the earliest locked song; repeats do not earn
+another unlock. Old chord saves remain separate and untouched. Resetting
+Backing returns to three open songs without importing the old save again.
+The schema v1 exporter supplies **38 course entries** (19 melody + 19 backing)
+to the Windows game, retaining the compatible internal role ID `chords`.
 
 The classics are public-domain melodies; the three originals sit where a new
 mechanic has to be introduced on something you have no expectations about.
@@ -523,6 +534,6 @@ npm run icons      # regenerate app icons
 ## Shared track export
 
 The Pages build also publishes a versioned JSON catalogue for the native Windows
-game, compiled from the existing Melody and Chords libraries. Run `npm run
+game, compiled from the Melody and Backing libraries. Run `npm run
 export:content` after `npm run build`. See [the content contract and publishing
 workflow](docs/content-export.md) for authoring, validation and consumer details.
