@@ -154,10 +154,6 @@ export function compilePublishedCatalog(provenance: Provenance): CatalogV1 {
     const path = `chords:${entry.tune.id}`;
     validateTune(entry.tune, path);
     number(entry.role.difficulty, `${path}.difficulty`, 1, 5, true);
-    if (entry.role.register !== undefined) number(entry.role.register, `${path}.register`, 0, 127, true);
-    if (entry.role.voicing !== undefined) {
-      requireValue(entry.role.voicing === 'full' || entry.role.voicing === 'shell', `${path}.voicing`, 'unknown voicing');
-    }
     const problems = chordProblems(entry.tune, entry.role);
     requireValue(problems.length === 0, path, problems.join('; '));
   }

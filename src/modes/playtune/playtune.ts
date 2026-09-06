@@ -209,7 +209,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // one direction that matters: `recordRun` only ever adds to what is stored,
     // so what comes back is never less than what this instance was holding.
     this.progress = loadProgress(this.role.storageKey, this.role.order);
-    this.panel.setTune(this.tune);
+    this.panel.setTune(this.tune, this.tune && this.roleId === 'chords' ? this.role.card(this.tune).teaches : undefined);
     this.track(input.on((e) => this.onInput(e)));
   }
 
@@ -218,6 +218,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.pending = null;
     this.stopRun();
     this.deck.allOff();
+    this.panel.setTune(null);
     this.ctx.hud.clearPanels();
   }
 
@@ -329,7 +330,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     );
     this.ctx.bed.start();
 
-    this.panel.setTune(tune);
+    this.panel.setTune(tune, this.roleId === 'chords' ? this.role.card(tune).teaches : undefined);
     this.ctx.hud.banner(tune.title, 1.6);
     return true;
   }

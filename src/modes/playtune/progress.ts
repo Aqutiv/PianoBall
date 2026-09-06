@@ -11,6 +11,7 @@ import type { Grade } from './judge';
  */
 export const MELODY_STORE = 'playtune.v2';
 export const CHORD_STORE = 'playchords.v2';
+export const BACKING_STORE = 'playbacking.v1';
 
 // Course generations have separate writers. Old bundles cannot safely merge
 // unfamiliar IDs or communicate reset lineage, so import each old store once.
@@ -40,6 +41,8 @@ export interface TuneRecord {
 }
 
 export interface Progress {
+  /** Imported access beyond the opening three; Backing only. */
+  unlockCredit?: number;
   unlocked: string[];
   best: Record<string, TuneRecord>;
   /**
@@ -90,7 +93,7 @@ export interface RunOutcome {
 function frontier(progress: Progress, order: readonly string[]): number {
   let passed = 0;
   for (const id of order) if (progress.best[id]?.passed) passed++;
-  return Math.min(order.length, OPENING_TUNES + passed);
+  return Math.min(order.length, OPENING_TUNES + (progress.unlockCredit ?? 0) + passed);
 }
 
 /**
@@ -107,6 +110,14 @@ function frontier(progress: Progress, order: readonly string[]): number {
  */
 function openEarned(progress: Progress, order: readonly string[]): void {
   const n = frontier(progress, order);
+  if (progress.unlockCredit !== undefined) {
+    for (const id of order.slice(0, OPENING_TUNES)) if (!progress.unlocked.includes(id)) progress.unlocked.push(id);
+    for (const id of order) {
+      if (progress.unlocked.length >= n) break;
+      if (!progress.unlocked.includes(id)) progress.unlocked.push(id);
+    }
+    return;
+  }
   for (let i = 0; i < n; i++) {
     if (!progress.unlocked.includes(order[i])) progress.unlocked.push(order[i]);
   }
@@ -121,6 +132,7 @@ function openEarned(progress: Progress, order: readonly string[]): void {
  * error — losing progress is bad, but refusing to launch is worse.
  */
 export function loadProgress(key: string, order: readonly string[]): Progress {
+  if (key === BACKING_STORE && !stored(key)) return importBacking(order);
   const legacyKey = Object.hasOwn(LEGACY_STORES, key) ? LEGACY_STORES[key] : undefined;
   const migrating = legacyKey !== undefined && !stored(key);
   const raw = load<Progress>(migrating ? legacyKey : key, { unlocked: [], best: {}, epoch: 0 });
@@ -158,6 +170,10 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
     };
   }
   const progress: Progress = { unlocked, best, epoch: Number(raw.epoch) || 0 };
+  if (key === BACKING_STORE) {
+    progress.unlockCredit = Math.max(0, Math.min(order.length - OPENING_TUNES,
+      Math.floor(Number(raw.unlockCredit) || 0)));
+  }
   openEarned(progress, order);
   // Even an empty upgrade is acknowledged; later old-tab writes belong only
   // to the old course, and cannot be mistaken for a new migration or reset.
@@ -230,6 +246,9 @@ function absorbProgress(progress: Progress, other: Progress): Progress {
     const merged = bestOf(progress.best[id], rec);
     if (merged) progress.best[id] = merged;
   }
+  if (other.unlockCredit !== undefined || progress.unlockCredit !== undefined) {
+    progress.unlockCredit = Math.max(progress.unlockCredit ?? 0, other.unlockCredit ?? 0);
+  }
   progress.epoch = Math.max(progress.epoch, other.epoch);
   return progress;
 }
@@ -239,6 +258,8 @@ function adoptProgress(progress: Progress, other: Progress): Progress {
   progress.unlocked.splice(0, progress.unlocked.length, ...other.unlocked);
   for (const id of Object.keys(progress.best)) delete progress.best[id];
   Object.assign(progress.best, other.best);
+  if (other.unlockCredit === undefined) delete progress.unlockCredit;
+  else progress.unlockCredit = other.unlockCredit;
   progress.epoch = other.epoch;
   return progress;
 }
@@ -311,6 +332,53 @@ export function resetProgress(key: string, order: readonly string[]): Progress {
     best: {},
     epoch: loadProgress(key, order).epoch + 1,
   };
+  if (key === BACKING_STORE) fresh.unlockCredit = 0;
   saveProgress(key, fresh);
   return fresh;
 }
+
+/** Import access once, without turning old chord performances into backing scores. */
+function importBacking(order: readonly string[]): Progress {
+  const source = stored(CHORD_STORE) ? CHORD_STORE : 'playchords';
+  if (!stored(source)) {
+    const fresh: Progress = { unlocked: order.slice(0, OPENING_TUNES), best: {}, epoch: 0, unlockCredit: 0 };
+    save(BACKING_STORE, fresh);
+    return fresh;
+  }
+  const oldOrder = source === CHORD_STORE ? CHORD_V2_ORDER : LEGACY_ORDERS.playchords;
+  // Normalize historical access from raw data; never invoke the old writer.
+  const raw = load<Progress>(source, { unlocked: [], best: {}, epoch: 0 });
+  const oldUnlocked = new Set(Array.isArray(raw.unlocked) ? raw.unlocked.filter(id => oldOrder.includes(id)) : []);
+  const originalOpen = new Set(oldUnlocked);
+  let passed = 0;
+  for (const [id, rec] of Object.entries(raw.best ?? {})) {
+    if (!oldOrder.includes(id) || !rec || typeof rec !== 'object') continue;
+    const next = oldOrder[oldOrder.indexOf(id) + 1];
+    if (rec.passed === true || (rec.passed === undefined && ((next && originalOpen.has(next)) || rec.grade))) passed++;
+  }
+  if (oldUnlocked.size || passed) {
+    const earned = Math.min(oldOrder.length, Math.max(oldUnlocked.size, OPENING_TUNES + passed));
+    for (const id of oldOrder) {
+      if (oldUnlocked.size >= earned) break;
+      oldUnlocked.add(id);
+    }
+  }
+  const unlocked = order.filter(id => oldUnlocked.has(id) || order.indexOf(id) < OPENING_TUNES);
+  const count = Math.min(order.length, Math.max(OPENING_TUNES, oldUnlocked.size, unlocked.length));
+  for (const id of order) {
+    if (unlocked.length >= count) break;
+    if (!unlocked.includes(id)) unlocked.push(id);
+  }
+  const progress: Progress = { unlocked, best: {}, epoch: 0, unlockCredit: unlocked.length - OPENING_TUNES };
+  save(BACKING_STORE, progress);
+  return progress;
+}
+
+/** Frozen order of the 22-track course; retired IDs still represent earned access. */
+const CHORD_V2_ORDER = [
+  'chord-ground', 'chord-three', 'frere-jacques', 'drift', 'chord-march',
+  'ode-to-joy', 'twinkle', 'drunken-sailor', 'canon-in-d', 'londonderry-air',
+  'first-light', 'two-hands', 'can-can', 'amazing-grace', 'gymnopedie',
+  'scarborough-fair', 'greensleeves', 'blue-danube', 'fur-elise', 'minuet-in-g',
+  'jesu-joy', 'the-entertainer',
+];

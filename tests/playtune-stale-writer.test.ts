@@ -38,9 +38,9 @@ for (const role of Object.values(ROLES)) describe(`${role.id}: independent cours
     const oldSave = seedLegacy();
     const p = loadProgress(role.storageKey, role.order);
     expect(role.storageKey).not.toBe(legacyKey);
-    expect(p.best).toEqual(oldSave.best);
-    expect(p.epoch).toBe(oldSave.epoch);
-    for (const id of oldSave.unlocked) expect(p.unlocked).toContain(id);
+    expect(p.best).toEqual(role.id === 'melody' ? oldSave.best : {});
+    expect(p.epoch).toBe(role.id === 'melody' ? oldSave.epoch : 0);
+    for (const id of oldSave.unlocked.filter(id => role.order.includes(id))) expect(p.unlocked).toContain(id);
     expect(raw(role.storageKey)).toEqual(p);
     expect(raw(legacyKey)).toEqual(oldSave);
     expect(loadProgress(role.storageKey, role.order)).toEqual(p);
@@ -90,7 +90,7 @@ for (const role of Object.values(ROLES)) describe(`${role.id}: independent cours
 
   it('acknowledges even an empty first migration', () => {
     const fresh = loadProgress(role.storageKey, role.order);
-    expect(fresh).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: 0 });
+    expect(fresh).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: 0, ...(role.id === 'chords' ? { unlockCredit: 0 } : {}) });
     expect(raw(role.storageKey)).toEqual(fresh);
     seedLegacy();
     expect(loadProgress(role.storageKey, role.order)).toEqual(fresh);

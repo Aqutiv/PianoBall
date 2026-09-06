@@ -410,6 +410,7 @@ export class Overlay {
     const v = mode.role.voices(tune);
     const keys = v.keyVoicing === 'bed' ? findBedVoice(v.keys).name : findLeadVoice(v.keys).name;
     const backing = findBedVoice(v.backing).name;
+    if (mode.role.id === 'chords') return keys === backing ? keys : `${keys} with ${backing} melody`;
     return keys === backing ? keys : `${keys} over ${backing}`;
   }
 
@@ -462,7 +463,7 @@ export class Overlay {
       `<button class="role${role.id === id ? ' on' : ''}" data-role="${id}">${label}</button>`;
     this.body.innerHTML = `
       <h1>${role.title}</h1>
-      <div class="role-switch">${tab('melody', 'Melody')}${tab('chords', 'Chords')}</div>
+      <div class="role-switch">${tab('melody', 'Melody')}${tab('chords', 'Backing')}</div>
       <p class="lede">${role.lede}</p>
       <p class="diag">${progress.unlocked.length} of ${mode.tunes.length} unlocked &middot; ${done} passed</p>
       <div class="song-list">${cards}</div>

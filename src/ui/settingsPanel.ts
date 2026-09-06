@@ -450,6 +450,6 @@ export class SettingsPanel {
     return `<div class="setting-section"><h3>Restore default settings</h3>
       <p class="settings-note">Restore sound, controls, appearance and every mode’s settings. Keep all scores and unlocked tunes.</p>
       <div class="settings-inline-actions"><button id="reset-settings">Restore settings…</button></div></div>`
-      + progress(MELODY_ROLE, 'pt-reset', 'Melody') + progress(CHORDS_ROLE, 'pc-reset', 'Chord');
+      + progress(MELODY_ROLE, 'pt-reset', 'Melody') + progress(CHORDS_ROLE, 'pc-reset', 'Backing');
   }
 }

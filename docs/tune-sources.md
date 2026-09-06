@@ -1,7 +1,7 @@
 # Familiar-tune source ledger
 
 Reviewed 6 September 2026. Applies to the five additions in
-`src/modes/playtune/library/familiar.ts`, in both Melody and Chords.
+`src/modes/playtune/library/familiar.ts`, in Melody and Backing (the compatible wire role is still `chords`).
 
 The shipped material consists of authored note arrays, reductions and harmony,
 rendered by PianoBall's existing synthesizer. No sound recording, downloaded
@@ -14,11 +14,11 @@ these short teaching charts do not claim to reproduce a complete original work.
 
 | ID | Historical evidence and contributors | Material selected and editorial treatment |
 |---|---|---|
-| `frere-jacques` | Traditional French round. Pierre-Adolphe Capelle (1772–1851), compiler, *La clé du caveau*, Paris, 1811: tune 726, p. 309. [Morgan catalogue and first-printing note](https://www.themorgan.org/music-manuscripts-and-printed-music/130800). The melody is treated as traditional; no contested composer attribution is needed. | Complete eight-bar melody in C, twice, including the low bell motif. A single line rather than a canon. Our C/G harmonization uses slow blocks for Chords and a light march under Melody. |
+| `frere-jacques` | Traditional French round. Pierre-Adolphe Capelle (1772–1851), compiler, *La clé du caveau*, Paris, 1811: tune 726, p. 309. [Morgan catalogue and first-printing note](https://www.themorgan.org/music-manuscripts-and-printed-music/130800). The melody is treated as traditional; no contested composer attribution is needed. | Complete eight-bar melody in C, twice, including the low bell motif. A single line rather than a canon. Our C/G harmonization uses bar-line bass notes for Backing and a light march under Melody. |
 | `drunken-sailor` | Traditional sea shanty, documented in Cecil Sharp (1859–1924), *English Folk-Chanteys*, 1914, no. VII, p. 8; [Morgan record](https://www.themorgan.org/music-manuscripts-and-printed-music/311676), [historical edition](https://imslp.org/wiki/English_Folk-Chanteys_(Sharp,_Cecil)). For the familiar melodic variant actually transcribed, Richard Runciman Terry (1865–1938), collector/editor, *The Shanty Book*, Part I, J. Curwen & Sons, 1921, no. 14, pp. 30–31: [edition and score](https://www.gutenberg.org/files/20774/20774-h/20774-h.htm), [score image with edition provenance](https://commons.wikimedia.org/wiki/File:Drunken_sailor_rrt.png). Sir Walter Runciman (1847–1937) wrote the foreword, which is not used. | Terry's vocal verse and chorus, each eight bars, repeated as a pair. Omit the piano introduction and all lyrics. Printed quavers become chart quarter beats at the practice tempo; this retains the short/long proportions, including the dotted chorus rhythm. Use D Dorian and our two-chord D-minor/C-major march, not either editor's piano accompaniment. Sharp's collected melody differs; it is historical corroboration, not a claim that the two vocal lines are identical. |
-| `can-can` | Jacques Offenbach (1819–1880), *Orphée aux enfers*, 1858. First vocal score, Paris: Heugel, plate H. 2372, familiar Galop on printed p. 133. [Edition index](https://imslp.org/wiki/Orph%C3%A9e_aux_enfers_(Offenbach,_Jacques)), [1858 Heugel scan](https://s9.imslp.org/files/imglnks/usimg/0/07/IMSLP818377-PMLP24816-Offenbach_-_Orph%C3%A9e_aux_enfers_-_vs-FE-BNF.pdf). Librettists Hector Crémieux (1828–1892) and Ludovic Halévy (1834–1908); their words are not used. | The eight-bar Galop refrain, transposed D to C, four times. Omit the lead-in and grace notes, retain the F–A–C arpeggio and repeated-note answers, use the closed second ending for each repeat. The final E belongs to the closing C-major chord. Our C/F/G harmony uses a pulse for Chords. No later ballet or concert arrangement is used. |
+| `can-can` | Jacques Offenbach (1819–1880), *Orphée aux enfers*, 1858. First vocal score, Paris: Heugel, plate H. 2372, familiar Galop on printed p. 133. [Edition index](https://imslp.org/wiki/Orph%C3%A9e_aux_enfers_(Offenbach,_Jacques)), [1858 Heugel scan](https://s9.imslp.org/files/imglnks/usimg/0/07/IMSLP818377-PMLP24816-Offenbach_-_Orph%C3%A9e_aux_enfers_-_vs-FE-BNF.pdf). Librettists Hector Crémieux (1828–1892) and Ludovic Halévy (1834–1908); their words are not used. | The eight-bar Galop refrain, transposed D to C, four times. Omit the lead-in and grace notes, retain the F–A–C arpeggio and repeated-note answers, use the closed second ending for each repeat. The final E belongs to the closing C-major chord. Our C/F/G harmony uses short bass-and-chord alternation for Backing. No later ballet or concert arrangement is used. |
 | `blue-danube` | Johann Strauss II (1825–1899), *An der schönen blauen Donau*, op. 314, 1867. Composer's piano arrangement, Vienna: C. A. Spina, plate C.S. 19216, first edition, first waltz on p. 4. [Edition index](https://imslp.org/wiki/The_Blue_Danube_(Strauss_Jr.,_Johann)), [Spina scan](https://s9.imslp.org/files/imglnks/usimg/0/09/IMSLP311227-PMLP06843-Strauss%2C_Johann_Sohn-Op_314_Spina_19216.pdf). Choral words associated with the work are not used. | Both phrases of Waltz 1, 32 bars in D. The three-note opening is a full bar, as printed, rather than an artificial pickup. Keep the characteristic rests, arpeggios and large leaps; omit grace notes and octave/chord doublings. Simplify the chromatic approach near the final cadence and close in D instead of continuing into Waltz 2. Our phrase harmony uses triads and A7 with a waltz pattern. |
-| `the-entertainer` | Scott Joplin (1868–1917), *The Entertainer*, John Stark & Son, St. Louis, 1902. [Library of Congress original-edition record](https://www.loc.gov/item/2023864238/), [University of South Florida 1902 edition record](https://digitalcommons.usf.edu/aa_sheet_music/384/). The note/tie reading was checked in [Mutopia's score](https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer-let.pdf) and [notation source](https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.ly), which explicitly identify a reproduction of the 1902 edition and a public-domain typesetting by Chris Sawer, subsequently revised by Simon Albrecht. This is a typesetting reference, not a borrowed modern arrangement or MIDI transcription. | First strain, original bars 5–20, twice. Retain the two sixteenths leading into it as a one-chart-beat D–D-sharp pickup. Keep chromatic notes and cross-bar ties as single held targets. Remove octave doublings and bring the line into D4–E5. The first ending carries the next pickup; the second finishes on a held C. Our reduced harmony includes C7, D7, G7 and F minor, with sustained blocks for Chords. |
+| `the-entertainer` | Scott Joplin (1868–1917), *The Entertainer*, John Stark & Son, St. Louis, 1902. [Library of Congress original-edition record](https://www.loc.gov/item/2023864238/), [University of South Florida 1902 edition record](https://digitalcommons.usf.edu/aa_sheet_music/384/). The note/tie reading was checked in [Mutopia's score](https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer-let.pdf) and [notation source](https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.ly), which explicitly identify a reproduction of the 1902 edition and a public-domain typesetting by Chris Sawer, subsequently revised by Simon Albrecht. This is a typesetting reference, not a borrowed modern arrangement or MIDI transcription. | First strain, original bars 5–20, twice. Retain the two sixteenths leading into it as a one-chart-beat D–D-sharp pickup. Keep chromatic notes and cross-bar ties as single held targets. Remove octave doublings and bring the line into D4–E5. The first ending carries the next pickup; the second finishes on a held C. Our reduced harmony includes C7, D7, G7 and F minor, with compact ragtime bass-and-chord alternation for Backing. |
 
 ## Territory basis
 
@@ -60,17 +60,48 @@ Can-Can and The Entertainer use eighth-note beats: four chart beats per printed
 short note values, also four chart beats per source bar. The waltz uses three
 quarter-note beats per bar.
 
-| Tune | Level, both roles | BPM | Chart beats / duration | Melody voices: player / backing | Chords: pattern; player / automatic melody |
+| Tune | Melody / Backing level | BPM | Chart beats / duration | Melody voices: player / backing | Backing: player / automatic melody |
 |---|---|---|---|---|---|
-| Frère Jacques | 1 | 80 | 64 / 48 s | Music Box / Harp | sustain; Warm Pad / Music Box |
-| Drunken Sailor | 2 | 108 | 128 / 71.11 s | Choir / Nylon Guitar | march; Choir / Nylon Guitar |
-| Can-Can | 3 | 112 | 128 / 68.57 s | Piano / Strings | pulse; Strings / Felt Piano |
-| The Blue Danube | 4 | 120 | 96 / 48 s | Solo String / Strings | waltz; Strings / Felt Piano |
-| The Entertainer | 5 | 120 | 129 / 64.5 s | Felt Piano / Felt Piano | sustain; Strings / Felt Piano |
+| Frère Jacques | 1 / 1 | 80 | 64 / 48 s | Music Box / Harp | Felt Piano / Music Box |
+| Drunken Sailor | 2 / 2 | 108 | 128 / 71.11 s | Choir / Nylon Guitar | Felt Piano / Nylon Guitar |
+| Can-Can | 3 / 4 | 112 | 128 / 68.57 s | Piano / Strings | Felt Piano / Felt Piano |
+| The Blue Danube | 4 / 4 | 120 | 96 / 48 s | Solo String / Strings | Felt Piano / Felt Piano |
+| The Entertainer | 5 / 5 | 120 | 129 / 64.5 s | Felt Piano / Felt Piano | Felt Piano / Felt Piano |
 
-Chord-role instrument selection accounts for existing runtime constraints:
-plucked voices cannot sound for the full length of a held player chord, and
-the player and automatic melody must use distinct voices. Thus Frère Jacques
-uses Warm Pad under Music Box, Drunken Sailor puts the player on Choir, and
-The Entertainer uses Strings under the Felt Piano melody. The existing chord
-audio validators remain unchanged.
+## Play Backing reductions
+
+All backing arrangements are PianoBall teaching reductions using the existing
+melodies and harmony, not transcriptions of complete original left-hand parts.
+Their explicit charts replace the old block-chord curve. The game supplies only
+the melody: the player supplies the bass and harmony. Parts use a fixed compact
+register before the existing whole-octave keyboard fitting. No melody, source
+passage, tempo, pickup or beat-unit change accompanies this revision.
+
+| Order | Piece | Backing arrangement |
+|---|---|---|
+| 1 | Frère Jacques | Bar-line C/G bass notes. |
+| 2 | Ode to Joy | Bass attacks at written harmonic changes. |
+| 3 | Ground | Root and fifth on one and three. |
+| 4 | Twinkle, Twinkle | Bass and two-note chord answers. |
+| 5 | Off the Beat | Bass on one/three, chord answers on two/four. |
+| 6 | Drift | Sustained triads and seventh shells, with their root in the bass. |
+| 7 | Drunken Sailor | D-minor/C-major bass-and-chord march. |
+| 8 | Canon in D | Repeating bass ground with broken-chord answers. |
+| 9 | Amazing Grace | Bass and gentle chord answers in three, with pickup. |
+| 10 | Scarborough Fair | Three-note flowing figures following the harmony. |
+| 11 | Gymnopédie No. 1 | Bass on one, seventh shell on two held through three. |
+| 12 | Londonderry Air | Broken chords and a breath before the closing cadence. |
+| 13 | Greensleeves | Bass anchors at each group of three in 6/8. |
+| 14 | Can-Can | Short bass/chord attacks supporting the galop. |
+| 15 | The Blue Danube | Bass–chord–chord waltz with compact inversions. |
+| 16 | Für Elise | Broken-chord gestures; opening and returning melody runs left unaccompanied. |
+| 17 | Minuet in G | Moving bass tones and occasional dyads. |
+| 18 | Jesu, Joy of Man’s Desiring | Three compound bass anchors with economical chord answers. |
+| 19 | The Entertainer | Root/fifth bass alternating with compact chord shells. |
+
+Felt Piano articulates the player's part in every track except Drift, whose
+Glass Pad makes sustained harmony audible. Automatic melody voice choices are
+retained from the previous chord course. Matching piano timbres are intentional;
+register and articulation distinguish the parts. Three Ways Home is retired;
+First Light and Two Hands remain in Melody only. Existing source evidence and
+territory assessments above concern the same underlying material.

@@ -1,345 +1,154 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_TUNES, TUNE_ORDER, findTune } from '../src/modes/playtune/library';
-import { CHORD_CURVE, CHORD_ORDER } from '../src/modes/playtune/library/chordcurve';
-import { STUDIES } from '../src/modes/playtune/library/studies';
-import type { Tune } from '../src/modes/playtune/chart';
-import { fitToRange, fitted, harmonyProblems, noteRange, validate } from '../src/modes/playtune/chart';
-import {
-  MAX_CHORD_VOICES, chordChart, chordProblems, mergedChords, voicingFor,
-  type ChordRole,
-} from '../src/modes/playtune/chords';
-import { CHORDS_ROLE, MELODY_ROLE, ROLES } from '../src/modes/playtune/role';
-import { Judge, WINDOWS, type TargetSpec } from '../src/modes/playtune/judge';
-import { Transport } from '../src/modes/playtune/transport';
-import { DEFAULT_PLAYTUNE } from '../src/modes/playtune/settings';
-import { CHORD_STORE, MELODY_STORE, loadProgress, recordRun, resetProgress } from '../src/modes/playtune/progress';
-import { compEvents } from '../src/audio/comp';
-import { COMP_PATTERNS } from '../src/audio/comp';
-import { SCALES, chordNotes, degreeToNote } from '../src/audio/music';
-import { BED_VOICES } from '../src/audio/voices';
+import { describe, expect, it } from 'vitest';
+import { chordChart, chordProblems, mergedChords } from '../src/modes/playtune/chords';
+import { CHORD_CURVE, CHORD_ORDER, findChordEntry } from '../src/modes/playtune/library/chordcurve';
+import { LIBRARY, ALL_TUNES, findTune } from '../src/modes/playtune/library';
+import { fitToRange, lastBeat, validate, harmonyProblems } from '../src/modes/playtune/chart';
+import { CHORDS_ROLE, MELODY_ROLE } from '../src/modes/playtune/role';
+import { Judge, WINDOWS } from '../src/modes/playtune/judge';
+import { compEvents, COMP_PATTERNS } from '../src/audio/comp';
+import { chordNotes } from '../src/audio/music';
 
-/** Distinct beats a chart strikes on, in seconds, in order. */
-function onsets(tune: Tune, role: ChordRole): number[] {
-  const beat = 60 / tune.bpm;
-  return [...new Set(chordChart(tune, role).map((n) => n.beat))]
-    .sort((a, b) => a - b)
-    .map((b) => b * beat);
-}
+const notes = (id: string) => CHORDS_ROLE.chart(findTune(id)!);
+const on = (id: string, beat: number) => notes(id).filter(n => n.beat === beat);
 
-/** A run that plays every note correctly at the worst timing still called good. */
-function playedWell(tune: Tune, role: ChordRole): Judge {
-  const t = new Transport();
-  t.bpm = tune.bpm;
-  t.beatsPerBar = tune.beatsPerBar;
-  t.start(0, 0);
-  const specs: TargetSpec[] = fitted(chordChart(tune, role), 0).map((n) => ({
-    note: n.note, beat: n.beat, len: n.len,
-    time: t.timeOf(n.beat), end: t.timeOf(n.beat + n.len),
-  }));
+/** Real key order, including releases before a repeated pitch is struck again. */
+function perform(id: string, options: { late?: number; release?: number; omit?: (note: number, beat: number) => boolean; wrong?: boolean } = {}) {
+  const tune = findTune(id)!;
+  const specs = notes(id).map(n => ({ ...n, time: n.beat * 60 / tune.bpm, end: (n.beat + n.len) * 60 / tune.bpm }));
   const judge = new Judge(specs);
-  const late = WINDOWS.good * 0.999;
-  // Pressed and never let go, exactly as the melody chain's own version does:
-  // `finish` settles a key still down at the end as having held its whole tail,
-  // and re-striking a pitch settles the one before it the same way. Releasing
-  // in a second pass would settle by pitch in the wrong order and understate
-  // every hold.
-  for (const target of judge.targets) judge.press(target.note, target.time + late);
+  const late = options.late ?? 0;
+  const events = specs.filter(n => !options.omit?.(n.note, n.beat)).flatMap(n => [
+    { at: n.time + late, press: true, note: n.note },
+    { at: Math.min(n.end, n.time + (n.end - n.time) * (options.release ?? 1)) + late, press: false, note: n.note },
+  ]).sort((a, b) => a.at - b.at || Number(a.press) - Number(b.press));
+  for (const e of events) {
+    if (e.press) judge.press(e.note, e.at);
+    else judge.release(e.note, e.at);
+  }
+  if (options.wrong) judge.press(127, specs[0].time + 0.01);
+  judge.finish();
   return judge;
 }
 
-/** Storage is a browser thing; the progress stores need somewhere to live. */
-class MemoryStorage implements Storage {
-  private values = new Map<string, string>();
-
-  get length(): number { return this.values.size; }
-  clear(): void { this.values.clear(); }
-  getItem(key: string): string | null { return this.values.get(key) ?? null; }
-  key(index: number): string | null { return [...this.values.keys()][index] ?? null; }
-  removeItem(key: string): void { this.values.delete(key); }
-  setItem(key: string, value: string): void { this.values.set(key, value); }
-}
-
-describe('the chord curve', () => {
-  it('has no chart problems', () => {
-    for (const { tune, role } of CHORD_CURVE) {
-      const problems = chordProblems(tune, role);
-      expect(problems, `${tune.id}: ${problems.join('; ')}`).toEqual([]);
-    }
+describe('Play Backing course', () => {
+  it('contains the planned 19 tracks and retains all classics', () => {
+    expect(CHORD_ORDER).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march', 'drift',
+      'drunken-sailor', 'canon-in-d', 'amazing-grace', 'scarborough-fair', 'gymnopedie', 'londonderry-air',
+      'greensleeves', 'can-can', 'blue-danube', 'fur-elise', 'minuet-in-g', 'jesu-joy', 'the-entertainer']);
+    expect(LIBRARY).toHaveLength(19);
+    for (const t of LIBRARY.filter(t => t.origin === 'classic')) expect(CHORD_ORDER).toContain(t.id);
+    expect(LIBRARY.map(t => t.id)).toEqual(expect.arrayContaining(['first-light', 'two-hands', 'drift']));
+    expect(ALL_TUNES.map(t => t.id)).not.toContain('chord-three');
   });
-
-  it('holds the chord studies to the same standard as the library', () => {
-    // They are not in `LIBRARY`, so the melody suite never sees them.
-    for (const tune of ALL_TUNES) {
-      expect(validate(tune), `${tune.id}: ${validate(tune).join('; ')}`).toEqual([]);
-      expect(harmonyProblems(tune), tune.id).toEqual([]);
-    }
+  it('uses five ascending levels and the agreed pass marks', () => {
+    const levels = CHORD_CURVE.map(e => e.role.difficulty);
+    expect(levels).toEqual([...levels].sort());
+    for (const { role } of CHORD_CURVE) expect(role.pass).toBe([0, .55, .60, .63, .67, .70][role.difficulty]);
   });
-
-  it('gives every entry a unique id that resolves', () => {
-    expect(new Set(CHORD_ORDER).size).toBe(CHORD_ORDER.length);
-    for (const id of CHORD_ORDER) expect(findTune(id), id).toBeDefined();
+  it.each(CHORD_CURVE)('$tune.id is a valid, playable authored reduction', ({ tune, role }) => {
+    expect(chordProblems(tune, role)).toEqual([]);
+    expect(validate(tune)).toEqual([]);
+    expect(harmonyProblems(tune)).toEqual([]);
+    const chart = chordChart(tune, role);
+    for (const [low, high] of [[48,72], [48,79], [36,84], [21,108]]) expect(fitToRange(chart, low, high)).not.toBeNull();
+    expect(Math.max(...chart.map(n => n.beat + n.len))).toBeGreaterThanOrEqual(lastBeat(tune) - tune.beatsPerBar);
+    const times = [...new Set(chart.map(n => n.beat * 60 / tune.bpm))];
+    for (let i = 1; i < times.length; i++) expect(times[i] - times[i-1]).toBeGreaterThanOrEqual(2 * WINDOWS.good - 1e-6);
+    chart[0].note = 0;
+    expect(chordChart(tune, role)[0].note).not.toBe(0);
   });
-
-  it('never gets easier as it goes on', () => {
-    for (let i = 1; i < CHORD_CURVE.length; i++) {
-      expect(CHORD_CURVE[i].role.difficulty, CHORD_CURVE[i].tune.id)
-        .toBeGreaterThanOrEqual(CHORD_CURVE[i - 1].role.difficulty);
-    }
-  });
-
-  it('keeps the studies out of the melody chain', () => {
-    for (const study of STUDIES) {
-      expect(TUNE_ORDER, study.id).not.toContain(study.id);
-      expect(CHORD_ORDER, study.id).toContain(study.id);
-    }
-  });
-
-  it('asks no human to arpeggiate', () => {
-    // `broken` and `arpeggio` roll a chord one tone at a time in a fixed order.
-    // That is a single-note line derived from a chord, which is the melody role
-    // wearing a hat — and `chordProblems` rejects it, so this is really a check
-    // that the five tunes written that way named something else.
-    for (const { tune, role } of CHORD_CURVE) {
-      expect(role.pattern, tune.id).not.toBe('broken');
-      expect(role.pattern, tune.id).not.toBe('arpeggio');
-    }
+  it('rejects unreachable small ranges', () => expect(fitToRange(notes('canon-in-d'), 60, 64)).toBeNull());
+  it('validates malformed charts instead of repairing or dropping notes', () => {
+    const e = CHORD_CURVE[0];
+    for (const bad of [
+      [{ beat: NaN, len: 1, note: 48 }], [{ beat: 0, len: Infinity, note: 48 }],
+      [{ beat: 0, len: 1, note: 48.5 }], [{ beat: 0, len: -1, note: 48 }],
+      [{ beat: lastBeat(e.tune), len: 1, note: 48 }],
+      [{ beat: 0, len: 2, note: 48 }, { beat: 1, len: 1, note: 48 }],
+      [{ beat: 0, len: 1, note: 48 }, { beat: 0, len: 1, note: 48 }],
+      [48, 52, 55, 59].map(note => ({ beat: 0, len: 1, note })),
+      [48, 61].map(note => ({ beat: 0, len: 1, note })),
+      [{ beat: 0, len: 1, note: 36 }, { beat: 1, len: 1, note: 73 }],
+    ]) expect(chordProblems(e.tune, { ...e.role, notes: bad }).length).toBeGreaterThan(0);
+    expect(chordProblems(e.tune, { ...e.role, keysVoiceId: 'missing' }).length).toBeGreaterThan(0);
+    expect(chordProblems(e.tune, { ...e.role, pass: NaN }).length).toBeGreaterThan(0);
   });
 });
 
-describe('turning a chord track into keys', () => {
-  it('never asks for more than four notes at once', () => {
-    for (const { tune, role } of CHORD_CURVE) {
-      const perBeat = new Map<number, number>();
-      for (const n of chordChart(tune, role)) perBeat.set(n.beat, (perBeat.get(n.beat) ?? 0) + 1);
-      for (const [beat, count] of perBeat) {
-        expect(count, `${tune.id} at beat ${beat}`).toBeLessThanOrEqual(MAX_CHORD_VOICES);
-      }
-    }
+describe('authored musical phrases', () => {
+  it('opens with bass notes rather than full chords', () => {
+    expect(notes('frere-jacques').slice(0, 2)).toEqual([{ beat: 0, len: 4, note: 48 }, { beat: 4, len: 4, note: 48 }]);
+    expect(notes('chord-ground').slice(0, 2)).toEqual([{ beat: 0, len: 2, note: 48 }, { beat: 2, len: 2, note: 55 }]);
+    expect(notes('ode-to-joy').map(n => n.beat)).toEqual(findTune('ode-to-joy')!.chords.map(c => c.beat));
   });
-
-  it('plays the chords that were authored', () => {
-    // The test that catches a voicing bug turning G maj7 into G6: the pitch
-    // classes under the hand must be the chord's own, no more and no fewer.
-    for (const { tune, role } of CHORD_CURVE) {
-      const scale = SCALES[tune.scaleId];
-      const chart = chordChart(tune, role);
-      for (const c of mergedChords(tune.chords)) {
-        const root = degreeToNote(c.degree, tune.root, scale);
-        const want = new Set(voicingFor(root, c.quality, role.voicing ?? 'full', 0)
-          .map((n) => ((n % 12) + 12) % 12));
-        const got = new Set(chart
-          .filter((n) => n.beat >= c.beat && n.beat < c.beat + c.len)
-          .map((n) => ((n.note % 12) + 12) % 12));
-        expect([...got].sort(), `${tune.id} at beat ${c.beat}`).toEqual([...want].sort());
-      }
-    }
+  it('alternates bass and chord answers in a march', () => {
+    expect([0,1,2,3].map(b => on('chord-march', b).length)).toEqual([1,2,1,2]);
+    expect(on('chord-march', 0)[0].note).toBe(48);
+    expect(on('chord-march', 1).map(n => n.note)).toEqual([64,67]);
   });
-
-  it('is the same chart every time it is asked for', () => {
-    // The invariant that says "root position, not `voiceLead`". A chart derived
-    // from the chord before it would depend on where the run started, and the
-    // octave fit would move with it.
-    for (const { tune, role } of CHORD_CURVE) {
-      expect(chordChart(tune, role), tune.id).toEqual(chordChart(tune, role));
-    }
+  it('holds Gymnopedie’s seventh shell through beat three', () => {
+    expect(on('gymnopedie', 0)).toEqual([{ beat: 0, len: .9, note: 55 }]);
+    expect(on('gymnopedie', 1).map(n => n.note)).toEqual([66,67,71]);
+    expect(on('gymnopedie', 1).every(n => n.len === 2)).toBe(true);
+    expect(on('gymnopedie', 2)).toEqual([]);
   });
-
-  it('runs a repeated chord together instead of asking for it twice', () => {
-    // Greensleeves writes its pickup and its bar as two entries, and Amazing
-    // Grace repeats a chord outright. Un-merged those read as a chord change
-    // where nothing has changed.
-    const merged = mergedChords([
-      { beat: 0, len: 1, degree: 0, quality: 'min' },
-      { beat: 1, len: 3, degree: 0, quality: 'min' },
-      { beat: 4, len: 3, degree: 2, quality: 'maj' },
-    ]);
-    expect(merged).toEqual([
-      { beat: 0, len: 4, degree: 0, quality: 'min' },
-      { beat: 4, len: 3, degree: 2, quality: 'maj' },
-    ]);
+  it('anchors both compound groups after the Greensleeves pickup', () => {
+    expect(on('greensleeves', 1)[0].note).toBe(57);
+    expect(on('greensleeves', 4)[0].note).toBe(48);
+    expect([1,2,3,4,5,6].map(b => on('greensleeves', b).length)).toEqual([1,1,1,1,1,1]);
   });
-
-  it('drops the fifth and nothing else from a shell seventh', () => {
-    const full = chordNotes(62, 'min7');
-    expect(voicingFor(62, 'min7', 'full', 62)).toEqual(full);
-    expect(voicingFor(62, 'min7', 'shell', 62)).toEqual([full[0], full[1], full[3]]);
-    // A triad has no fifth worth dropping: two notes is not a chord.
-    expect(voicingFor(62, 'min', 'shell', 62)).toEqual(chordNotes(62, 'min'));
+  it('leaves phrase rests in Fur Elise and breathing room in Londonderry Air', () => {
+    expect(notes('fur-elise').filter(n => n.beat < 8 || (n.beat >= 23 && n.beat < 32))).toEqual([]);
+    expect(on('fur-elise', 8).length).toBe(1);
+    const cadence = findTune('londonderry-air')!.chords.at(-1)!.beat;
+    expect(notes('londonderry-air').filter(n => n.beat >= cadence - 1 && n.beat < cadence)).toEqual([]);
   });
-
-  it('sits below the tune the game is playing', () => {
-    // Both parts are on the keyboard at once. If the chords reached up into the
-    // melody's octave the player could not tell which sound was theirs.
-    for (const { tune, role } of CHORD_CURVE) {
-      const chords = noteRange(chordChart(tune, role));
-      const melody = noteRange(tune.melody);
-      expect(chords.low, tune.id).toBeLessThan(melody.low);
-    }
+  it('keeps ragtime accompaniment steady beneath the melody pickup and ties', () => {
+    expect([1,2,3,4].map(b => on('the-entertainer', b).length)).toEqual([1,3,1,3]);
+    expect(on('the-entertainer', 1)[0].note).toBe(48);
+    expect(on('the-entertainer', 3)[0].note).toBe(55);
   });
-
-  it('stays inside two octaves', () => {
-    for (const { tune, role } of CHORD_CURVE) {
-      const r = noteRange(chordChart(tune, role));
-      expect(r.high - r.low, tune.id).toBeLessThanOrEqual(24);
-    }
-  });
-
-  it('fits a 49- and 61-key range', () => {
-    for (const [name, low, high] of [['49 keys', 36, 84], ['61 keys', 36, 96]] as const) {
-      for (const { tune, role } of CHORD_CURVE) {
-        const chart = chordChart(tune, role);
-        const shift = fitToRange(chart, low, high);
-        expect(shift, `${tune.id} on ${name}`).not.toBeNull();
-        for (const n of fitted(chart, shift!)) {
-          expect(n.note, `${tune.id} on ${name}`).toBeGreaterThanOrEqual(low);
-          expect(n.note, `${tune.id} on ${name}`).toBeLessThanOrEqual(high);
-        }
-      }
-    }
+  it('retains seventh color and the low foundation in Drift', () => {
+    const seventh = findTune('drift')!.chords.find(c => c.quality === 'min7')!;
+    expect(on('drift', seventh.beat).map(n => n.note)).toEqual([50,53,60]);
   });
 });
 
-describe('the chord curve as a curve', () => {
-  it('never strikes closer than the judge calls being in time', () => {
-    // The same floor the melody chain keeps: notes closer together than the
-    // good window ask for a press finer than the judge will ever reward.
-    const floor = 2 * WINDOWS.good;
-    for (const { tune, role } of CHORD_CURVE) {
-      const at = onsets(tune, role);
-      for (let i = 1; i < at.length; i++) {
-        expect(at[i] - at[i - 1], `${tune.id} at ${at[i].toFixed(2)}s`).toBeGreaterThanOrEqual(floor);
-      }
-    }
+describe('performance and ownership', () => {
+  it.each(CHORD_CURVE)('$tune.id passes with accurate chronological key presses and releases', ({ tune, role }) => {
+    const perfect = perform(tune.id);
+    expect(perfect.accuracy).toBeCloseTo(1);
+    const good = perform(tune.id, { late: WINDOWS.good * .99 });
+    expect(good.tally.miss + good.tally.wrong).toBe(0);
+    expect(good.accuracy).toBeGreaterThan(role.pass);
   });
-
-  it('opens slowly', () => {
-    // A floor on the first three rather than a monotone curve over all
-    // seventeen: the curve deliberately climbs two ladders that cross, and
-    // asserting one number always rises would forbid that.
-    for (const { tune, role } of CHORD_CURVE.slice(0, 3)) {
-      const at = onsets(tune, role);
-      let worst = Infinity;
-      for (let i = 1; i < at.length; i++) worst = Math.min(worst, at[i] - at[i - 1]);
-      expect(worst, tune.id).toBeGreaterThanOrEqual(1.4);
-    }
+  it('grades missing bass, incomplete chords, short holds, and wrong notes', () => {
+    expect(perform('chord-march', { omit: (_n, b) => b % 2 === 0 }).accuracy).toBeLessThan(1);
+    expect(perform('chord-march', { omit: n => n === 67 }).accuracy).toBeLessThan(1);
+    expect(perform('drift', { release: .1 }).accuracy).toBeLessThan(.8);
+    expect(perform('gymnopedie', { release: .1 }).accuracy).toBeLessThan(1);
+    expect(perform('frere-jacques', { wrong: true }).tally.wrong).toBe(1);
+    expect(perform('frere-jacques', { omit: () => true }).accuracy).toBe(0);
   });
-
-  it('never draws more than the eye can take', () => {
-    // A chord is several auras but one decision, so this counts both: the
-    // onsets are the reading load and the notes are the picture.
-    const t = new Transport();
-    for (const { tune, role } of CHORD_CURVE) {
-      t.bpm = tune.bpm;
-      const lead = t.approachSeconds(DEFAULT_PLAYTUNE.leadBeats);
-      const chart = chordChart(tune, role);
-      const at = onsets(tune, role);
-      const beat = 60 / tune.bpm;
-      for (const start of at) {
-        const shown = at.filter((o) => o >= start && o < start + lead);
-        expect(shown.length, `${tune.id} onsets from ${start.toFixed(2)}s`).toBeLessThanOrEqual(8);
-        const notes = chart.filter((n) => n.beat * beat >= start && n.beat * beat < start + lead);
-        expect(notes.length, `${tune.id} auras from ${start.toFixed(2)}s`).toBeLessThanOrEqual(16);
-      }
-    }
-  });
-
-  it('clears every pass mark for a run that is right but never perfect', () => {
-    // The pass marks cannot be copied from the melody chain: a chord is several
-    // targets on one beat, so the accuracy arithmetic is not the same one.
-    for (const { tune, role } of CHORD_CURVE) {
-      const judge = playedWell(tune, role);
-      judge.finish();
-      expect(judge.tally.good, tune.id).toBe(judge.total);
-      expect(judge.tally.miss + judge.tally.wrong, tune.id).toBe(0);
-      expect(judge.accuracy, `${tune.id} needs ${role.pass}`).toBeGreaterThan(role.pass);
-    }
-  });
-
-  it('keeps the game playing something under the whole part', () => {
-    for (const { tune, role } of CHORD_CURVE) {
-      const chart = chordChart(tune, role);
-      const chartEnd = chart.reduce((e, n) => Math.max(e, n.beat + n.len), 0);
-      const melodyEnd = tune.melody.reduce((e, n) => Math.max(e, n.beat + n.len), 0);
-      expect(chartEnd, tune.id).toBeGreaterThanOrEqual(melodyEnd - tune.beatsPerBar);
-      expect(chartEnd, tune.id).toBeLessThanOrEqual(melodyEnd + tune.beatsPerBar);
-    }
-  });
-});
-
-describe('the two roles', () => {
-  beforeEach(() => { vi.stubGlobal('localStorage', new MemoryStorage()); });
-
-  it('gives each role its own chart, backing and curve', () => {
-    const tune = findTune('twinkle')!;
+  it.each(CHORD_CURVE)('$tune.id leaves the entire accompaniment to the player', ({ tune }) => {
+    expect(CHORDS_ROLE.backing(tune)).toEqual({ chords: [], pattern: 'sustain', parts: [], notes: tune.melody });
+    expect(CHORDS_ROLE.voices(tune).keyVoicing).toBe(tune.id === 'drift' ? 'bed' : 'lead');
+    expect(CHORDS_ROLE.voices(tune).keys).toBe(tune.id === 'drift' ? 'glass-pad' : 'felt-piano');
+    expect(CHORDS_ROLE.voices(tune).backing).toBe(findChordEntry(tune.id)!.role.melodyVoiceId);
     expect(MELODY_ROLE.chart(tune)).toEqual(tune.melody);
-    expect(CHORDS_ROLE.chart(tune)).not.toEqual(tune.melody);
-    // The game plays whichever half the player does not.
-    expect(MELODY_ROLE.backing(tune).notes).toBeNull();
-    expect(CHORDS_ROLE.backing(tune).notes).toEqual(tune.melody);
-    expect(MELODY_ROLE.backing(tune).parts).toContain('chord');
-    expect(CHORDS_ROLE.backing(tune).parts).toEqual(['bass']);
+    expect(MELODY_ROLE.backing(tune).parts).toEqual(['chord','bass','wash']);
   });
-
-  it('describes the part being played rather than the piece', () => {
-    // Canon in D is the hardest melody in the game and one of the easiest
-    // progressions there is, and the card has to say so.
-    const canon = findTune('canon-in-d')!;
-    expect(MELODY_ROLE.card(canon).difficulty).toBe(5);
-    expect(CHORDS_ROLE.card(canon).difficulty).toBeLessThan(5);
-    expect(CHORDS_ROLE.card(canon).teaches).not.toBe(canon.teaches);
+  it('keeps the wire identity while presenting the musical role', () => {
+    expect(CHORDS_ROLE.id).toBe('chords');
+    expect(CHORDS_ROLE.title).toBe('Play Backing');
+    expect(CHORDS_ROLE.label).toBe('Backing');
   });
-
-  it('voices the player as the bed, and the two parts apart', () => {
-    for (const { tune } of CHORD_CURVE) {
-      const v = CHORDS_ROLE.voices(tune);
-      // The whole point of the role: a key is the backing layer, not a note.
-      expect(v.keyVoicing, tune.id).toBe('bed');
-      // Both halves come from the bed bank, so only the pairing tells them
-      // apart. The same voice twice would be one indistinguishable wash.
-      expect(BED_VOICES.map((b) => b.id), tune.id).toContain(v.keys);
-      expect(BED_VOICES.map((b) => b.id), tune.id).toContain(v.backing);
-      expect(v.keys, tune.id).not.toBe(v.backing);
-    }
-    // The melody role is unchanged: keys are an instrument there.
-    expect(MELODY_ROLE.voices(findTune('twinkle')!).keyVoicing).toBe('lead');
-  });
-
-  it('never puts a plucked voice under the player', () => {
-    // A harp is over within a second of being struck, held key or not, and this
-    // role asks for chords to be held. `chordProblems` already refuses one; this
-    // says so where the reason is readable.
-    for (const { tune } of CHORD_CURVE) {
-      const id = CHORDS_ROLE.voices(tune).keys;
-      expect(BED_VOICES.find((b) => b.id === id)?.spec.pluck, `${tune.id} on ${id}`)
-        .toBeUndefined();
-    }
-  });
-
-  it('refuses a role that is not one of the two', async () => {
-    // `load` checks the shape of what came out of storage and nothing about
-    // what the values mean, so a stale or hand-edited settings blob can hold
-    // any string. Unnormalised it reaches `ROLES[...]` as undefined and throws
-    // while PlayTune is being built — which stops the app starting when
-    // PlayTune is the mode it is trying to resume.
-    localStorage.setItem('pianoball.playtuneSettings', JSON.stringify({ role: 'harmonica' }));
-    vi.resetModules();
-    const { playTuneSettings: fresh } = await import('../src/modes/playtune/settings');
-    expect(fresh().role).toBe('melody');
-    expect(ROLES[fresh().role]).toBeDefined();
-  });
-
-  it('keeps the two chains of unlocks apart', () => {
-    resetProgress(MELODY_STORE, TUNE_ORDER);
-    const chords = resetProgress(CHORD_STORE, CHORD_ORDER);
-    recordRun(CHORD_STORE, chords, CHORD_ORDER[0], CHORD_ORDER,
-      { accuracy: 0.95, score: 1, grade: 'A', passed: true });
-
-    expect(loadProgress(CHORD_STORE, CHORD_ORDER).unlocked).toHaveLength(4);
-    expect(loadProgress(MELODY_STORE, TUNE_ORDER).unlocked)
-      .toEqual([TUNE_ORDER[0], TUNE_ORDER[1], TUNE_ORDER[2]]);
+  it('merges repeated harmony labels without changing their written data', () => {
+    const chords = [{ beat: 0, len: 1, degree: 0, quality: 'min' as const }, { beat: 1, len: 3, degree: 0, quality: 'min' as const }];
+    expect(mergedChords(chords)).toEqual([{ beat: 0, len: 4, degree: 0, quality: 'min' }]);
+    expect(chords[0].len).toBe(1);
   });
 });
-
 describe('accompaniment parts', () => {
   it('tags every event as chord, bass or wash', () => {
     const voiced = chordNotes(60, 'maj');

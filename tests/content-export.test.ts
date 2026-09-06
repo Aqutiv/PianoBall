@@ -134,9 +134,9 @@ describe('deterministic written backing parity', () => {
     },
   );
 
-  it('uses the browser note helper, semantic melody part, and keeps the bass-plus-melody split', () => {
+  it('uses the browser note helper, semantic melody part, and leaves the entire accompaniment to the player', () => {
     const entry = published.entries.find((e) => e.role === 'chords')!;
-    expect(new Set(entry.backingEvents.map((e) => e.part))).toEqual(new Set(['bass', 'melody']));
+    expect(new Set(entry.backingEvents.map((e) => e.part))).toEqual(new Set(['melody']));
     const tune = ROLES.chords.tunes.find((t) => t.id === entry.id)!;
     expect(entry.backingEvents.filter((e) => e.part === 'melody')).toEqual(tune.melody.map((note) => {
       const { offset: _offset, ...event } = writtenNoteEvent(note);
