@@ -1,5 +1,5 @@
 import { DRUM_SPECS, type DrumVoice } from '../../audio/drums';
-import type { Scheduled } from '../../audio/engine';
+import type { DrumTrack, Scheduled } from '../../audio/engine';
 import { PATTERNS, STEP_LEVELS } from '../../audio/patterns';
 import type { RhythmHit, TuneRhythm } from './chart';
 import type { Transport } from './transport';
@@ -75,7 +75,7 @@ export function rhythmEvents(rhythm: TuneRhythm | undefined, pickup = 0): Rhythm
 export interface TuneDrumSink {
   readonly now: number;
   readonly running: boolean;
-  drum(voice: DrumVoice, gain: number, at: number): Scheduled;
+  createDrumTrack(): DrumTrack;
 }
 
 const TICK_MS = 40;
@@ -95,6 +95,8 @@ export class TuneDrums {
   private events: RhythmHit[] = [];
   private next = 0;
   private placed: { endsAt: number; sound: Scheduled }[] = [];
+  private track: DrumTrack | null = null;
+  private tailEndsAt = 0;
 
   private readonly sink: TuneDrumSink;
 
@@ -114,6 +116,9 @@ export class TuneDrums {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     for (const hit of this.placed) hit.sound.cancel();
+    this.track?.cancel();
+    this.track = null;
+    this.tailEndsAt = 0;
     this.placed = [];
     this.events = [];
     this.next = 0;
@@ -124,6 +129,9 @@ export class TuneDrums {
     const clock = this.clock;
     if (!clock?.running) { this.stop(); return; }
     if (!this.sink.running) return;
+    // Start can precede the browser's first audio gesture. Build the route
+    // only once its context exists, so an inert pre-audio track cannot stick.
+    const track = this.track ??= this.sink.createDrumTrack();
     const now = this.sink.now;
     this.placed = this.placed.filter((hit) => hit.endsAt > now);
     while (this.next < this.events.length) {
@@ -135,10 +143,11 @@ export class TuneDrums {
       if (at < now) continue;
       this.placed.push({
         endsAt: at + MAX_TAIL,
-        sound: this.sink.drum(hit.voice, hit.gain, at),
+        sound: track.drum(hit.voice, hit.gain, at),
       });
+      this.tailEndsAt = Math.max(this.tailEndsAt, at + MAX_TAIL + track.tailSeconds);
     }
-    // Let the ending decay before releasing the scheduler's last handles.
-    if (this.next === this.events.length && !this.placed.length) this.stop();
+    // Let the ending and its room decay before releasing the scheduler's last handles.
+    if (this.next === this.events.length && !this.placed.length && now >= this.tailEndsAt) this.stop();
   }
 }

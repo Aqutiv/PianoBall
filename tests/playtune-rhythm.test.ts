@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AudioEngine } from '../src/audio/engine';
+import { AudioEngine, type DrumTrack } from '../src/audio/engine';
 import type { DrumVoice } from '../src/audio/drums';
 import { MusicState } from '../src/audio/musicState';
 import { STEP_LEVELS } from '../src/audio/patterns';
@@ -22,6 +22,16 @@ const ROCK: TuneRhythm = { sections: [{ beat: 0, len: 8, patternId: 'rock', gain
 class Sink {
   now = 7.137;
   running = true;
+  tracks: (DrumTrack & { cancel: ReturnType<typeof vi.fn> })[] = [];
+  createDrumTrack(): DrumTrack {
+    const track = {
+      drum: (voice: DrumVoice, gain: number, at: number) => this.drum(voice, gain, at),
+      tailSeconds: 2.463,
+      cancel: vi.fn(),
+    };
+    this.tracks.push(track);
+    return track;
+  }
   hits: { voice: DrumVoice; gain: number; at: number; cancel: ReturnType<typeof vi.fn> }[] = [];
   drum(voice: DrumVoice, gain: number, at: number) {
     const hit = { voice, gain, at, cancel: vi.fn() };
@@ -165,6 +175,7 @@ describe('tune drum transport', () => {
     clock.start(sink.now, 4);
     drums.start(ROCK, clock);
     expect(previous.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
+    expect(sink.tracks[0].cancel).toHaveBeenCalledOnce();
     run(sink, 4 * clock.beatSeconds - 0.2);
     expect(sink.hits).toHaveLength(before);
     run(sink, 0.2);
@@ -199,6 +210,23 @@ describe('tune drum transport', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('creates no route before the audio context runs and owns the full wet decay', () => {
+    const { sink, clock, drums } = rig();
+    sink.running = false;
+    drums.start({ sections: [], hits: [{ beat: 0, voice: 'kick', gain: 0.4 }] }, clock);
+    vi.advanceTimersByTime(200);
+    expect(sink.tracks).toHaveLength(0);
+    sink.running = true;
+    run(sink, 4 * clock.beatSeconds + 2.1);
+    expect(sink.tracks).toHaveLength(1);
+    expect(sink.tracks[0].cancel).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(1);
+    // The source's conservative lifetime has passed, but its room still lives.
+    drums.stop();
+    expect(sink.tracks[0].cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('releases the timer after its authored ending and stays absent on ordinary tunes', () => {
     const { sink, clock, drums } = rig();
     drums.start(undefined, clock);
@@ -217,6 +245,7 @@ function modeRig() {
   vi.spyOn(engine, 'now', 'get').mockImplementation(() => sink.now);
   vi.spyOn(engine, 'running', 'get').mockImplementation(() => sink.running);
   vi.spyOn(engine, 'drum').mockImplementation((voice, gain = 1, at = 0) => sink.drum(voice, gain, at));
+  vi.spyOn(engine, 'createDrumTrack').mockImplementation(() => sink.createDrumTrack());
   const panel = () => ({ innerHTML: '', querySelector: () => ({ textContent: '', innerHTML: '', style: {} }), classList: { toggle: vi.fn() } });
   const hud = { left: panel(), right: panel(), banner: vi.fn(), clearPanels: vi.fn() } as unknown as Hud;
   const bed = { clearTracks: vi.fn(), stop: vi.fn(), setTrack: vi.fn(), setNoteTrack: vi.fn(), start: vi.fn() } as unknown as ChordBed;
@@ -270,6 +299,7 @@ describe('Hopscotch drum lifecycle in both play roles', () => {
     else if (action === 'role') mode.setRole('chords');
     else mode.exit();
     expect(previous.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
+    expect(sink.tracks[0].cancel).toHaveBeenCalledOnce();
     if (action !== 'restart') expect(vi.getTimerCount()).toBe(0);
     mode.exit();
   });

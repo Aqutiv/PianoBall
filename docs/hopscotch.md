@@ -29,3 +29,19 @@ All 969 tests passed across 48 files; the TypeScript/production build and 38-ent
 Two complete Chromium playthroughs drove the real input and audio engines. Melody scored 35 perfect notes (100%); Backing scored 60 perfect and 2 good (99.35%), with no missed or wrong notes. Each role scheduled exactly 194 drums and the other role's written notes (62 backing notes or 35 melody notes). No browser warnings or errors were reported. Unit tests cover pause, restart, role changes, count-in, stalled tabs, exit, and the final drum tail.
 
 A 44.1 kHz stereo arrangement preview was rendered through the real Web Audio engine into the ignored local artifact `.shots/hopscotch.wav`. It uses the automatic Electric Piano melody voice plus the authored Felt Piano backing and drums, with 0.4 seconds of lead-in and a release tail. Duration is 48.71 seconds; measured peak is 0.302 full scale and RMS is 0.0357. This render is a listening aid; the game continues to synthesize and judge notes live.
+
+## PR review: stopping drum reverb
+
+The review finding was reproduced with Chromium's real OfflineAudioContext: after cancelling a snare at 0.2 seconds with its dry output muted, the shared hall/cabinet returns still measured 0.00552 RMS from 0.3–1.0 seconds. Source cancellation could not silence audio already inside those convolvers.
+
+PlayTune now owns a drum track with one isolated hall/cabinet pair per arrangement, using cached impulse buffers. Cancellation fades the dry output and the post-convolution returns over 10 ms, then disconnects them on the audio clock. A new run gets a fresh track. Shared instrument returns and the existing live volume/reverb controls remain intact. The scheduler keeps ownership through the full natural room tail.
+
+The reproducible real-audio check is [scripts/drum-stop-bench.mjs](../scripts/drum-stop-bench.mjs). On a Vite dev page, run:
+
+```js
+await (await import('/scripts/drum-stop-bench.mjs')).run()
+```
+
+The check measures actual rendered samples, including a positive control that reproduces the old failure. It covers full/lite reverb, scheduled future hits, immediate restart, uninterrupted sound parity, and preservation of another sound's shared effect return. Fixed stopped-tail RMS measured below 0.00000008; future-hit and restart leakage measured zero. These checks supplement the scheduler and graph-routing unit tests.
+
+After this fix, all 976 tests passed across 49 files, along with the TypeScript/production build and the 38-entry content export. An independent agent review found no further issues in the engine, scheduler, or regression checks.
