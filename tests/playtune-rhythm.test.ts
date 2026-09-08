@@ -12,7 +12,7 @@ import { lastBeat, validate } from '../src/modes/playtune/chart';
 import { HOPSCOTCH } from '../src/modes/playtune/library/hopscotch';
 import { PlayTuneMode } from '../src/modes/playtune/playtune';
 import { rhythmEvents, rhythmProblems, TuneDrums } from '../src/modes/playtune/rhythm';
-import { resetPlayTuneSettings } from '../src/modes/playtune/settings';
+import { resetPlayTuneSettings, setPlayTuneSettings } from '../src/modes/playtune/settings';
 import { Transport } from '../src/modes/playtune/transport';
 import type { Stage } from '../src/render/stage';
 import type { Hud } from '../src/ui/hud';
@@ -295,7 +295,7 @@ describe('Hopscotch drum lifecycle in both play roles', () => {
     expect(previous.length).toBeGreaterThan(0);
     if (action === 'restart') mode.restart();
     else if (action === 'song-list') mode.newGame();
-    else if (action === 'selection') mode.start('first-light');
+    else if (action === 'selection') mode.start('fur-elise');
     else if (action === 'role') mode.setRole('chords');
     else mode.exit();
     expect(previous.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
@@ -326,6 +326,80 @@ describe('Hopscotch drum lifecycle in both play roles', () => {
     expect(mode.phase).toBe('finished');
     expect(sink.hits.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
+    mode.exit();
+  });
+});
+
+describe('the shared tune rhythm preference', () => {
+  it.each(['melody', 'chords'] as const)('starts silently with rhythm disabled in %s without muting the other part', role => {
+    setPlayTuneSettings({ rhythmEnabled: false });
+    const { mode, sink, bed } = modeRig();
+    mode.setRole(role);
+    expect(mode.start(HOPSCOTCH.id)).toBe(true);
+    expect(bed.start).toHaveBeenCalledOnce();
+    run(sink, 10);
+    expect(sink.hits).toEqual([]);
+    expect(sink.tracks).toEqual([]);
+    mode.exit();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['melody', 'chords'] as const)('cancels the lookahead and wet route, then joins the same %s timeline', role => {
+    const { mode, sink, bed } = modeRig();
+    mode.setRole(role);
+    const startedAt = sink.now;
+    mode.start(HOPSCOTCH.id);
+    const beatSeconds = 60 / HOPSCOTCH.bpm;
+    const zero = startedAt + 4 * beatSeconds;
+    run(sink, 4 * beatSeconds - 0.1);
+    const queued = [...sink.hits];
+    expect(queued.length).toBeGreaterThan(0);
+    setPlayTuneSettings({ rhythmEnabled: false });
+    mode.applySettings();
+    expect(queued.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
+    expect(sink.tracks[0].cancel).toHaveBeenCalledOnce();
+    const judge = (mode as unknown as { judge: unknown }).judge;
+    const phase = mode.phase;
+    run(sink, 2.25);
+    expect(sink.hits).toHaveLength(queued.length);
+    const enabledAt = sink.now;
+    setPlayTuneSettings({ rhythmEnabled: true });
+    mode.applySettings();
+    expect(mode.phase).toBe(phase);
+    expect((mode as unknown as { judge: unknown }).judge).toBe(judge);
+    expect(bed.start).toHaveBeenCalledOnce();
+    run(sink, 3);
+    const resumed = sink.hits.slice(queued.length);
+    const expected = rhythmEvents(HOPSCOTCH.rhythm)
+      .map(h => ({ ...h, at: zero + h.beat * beatSeconds }))
+      .filter(h => h.at >= enabledAt && h.at <= sink.now);
+    expect(resumed.filter(h => h.at <= sink.now).map(h => [h.voice, h.at]))
+      .toEqual(expected.map(h => [h.voice, h.at]));
+    expect(resumed.length).toBeGreaterThan(0);
+    expect(resumed.every(h => h.at >= enabledAt)).toBe(true);
+    const tracks = sink.tracks.length;
+    mode.applySettings();
+    expect(sink.tracks).toHaveLength(tracks);
+    expect(sink.tracks.at(-1)?.cancel).not.toHaveBeenCalled();
+    mode.exit();
+  });
+
+  it('applies reset while playing, and keeps non-rhythmic classics silent', () => {
+    setPlayTuneSettings({ rhythmEnabled: false });
+    const { mode, sink } = modeRig();
+    mode.start(HOPSCOTCH.id);
+    resetPlayTuneSettings();
+    mode.applySettings();
+    run(sink, 4);
+    expect(sink.hits.length).toBeGreaterThan(0);
+    mode.start('fur-elise');
+    const before = sink.hits.length;
+    run(sink, 5);
+    expect(sink.hits).toHaveLength(before);
+    setPlayTuneSettings({ rhythmEnabled: false }); mode.applySettings();
+    setPlayTuneSettings({ rhythmEnabled: true }); mode.applySettings();
+    run(sink, 1);
+    expect(sink.hits).toHaveLength(before);
     mode.exit();
   });
 });

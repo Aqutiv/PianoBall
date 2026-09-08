@@ -398,6 +398,9 @@ export class SettingsPanel {
       + '<p class="settings-note">Choose instruments, rhythm and Backing (Auto or Manual chord keys) on the Freestyle screen during play.</p>';
     const tune = () => playTuneSettings();
     return selector
+      + this.toggle('pt-rhythm', 'Tune rhythm', () => tune().rhythmEnabled, (v) => {
+        setPlayTuneSettings({ rhythmEnabled: v }); this.shell.applyModeSettings();
+      }, 'Play arranged percussion in Play Tune and Play Backing where the song includes it.')
       + this.select('pt-lead', 'Note preview time', LEAD_BEAT_CHOICES.map((b): Choice => [b, `${b} beats`]),
         () => tune().leadBeats, (v) => setPlayTuneSettings({ leadBeats: Number(v) }),
         `More beats gives you more warning. Above ${APPROACH_BPM_CAP} bpm, the preview stops getting shorter.`)

@@ -57,8 +57,7 @@ describe('authored rhythm content export', () => {
   });
 
   it('labels authored accompaniment as chords and the automatic tune as melody, preserving sound parameters', () => {
-    for (const role of Object.values(ROLES)) {
-      const tune = role.tunes.find((t) => t.id === HOPSCOTCH.id)!;
+    for (const role of Object.values(ROLES)) for (const tune of role.tunes.filter(t => t.backingNotes)) {
       const entry = published.entries.find((e) => e.id === tune.id && e.role === role.id)!;
       const expected = role.backing(tune).notes!.map((note) => {
         const { offset: _offset, ...event } = writtenNoteEvent(note);

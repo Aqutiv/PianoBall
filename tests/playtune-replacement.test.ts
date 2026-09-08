@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TUNE_ORDER } from '../src/modes/playtune/library';
 import { CHORD_ORDER } from '../src/modes/playtune/library/chordcurve';
+import { CA92_MELODY_ORDER, CA92_BACKING_ORDER } from './fixtures/course-orders-ca92';
 import {
   BACKING_STORE, CHORD_STORE, MELODY_STORE, loadProgress, recordRun, resetProgress,
   type Progress,
@@ -22,8 +23,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 for (const [key, source, order] of [
-  [MELODY_STORE, 'playtune.v2', TUNE_ORDER],
-  [BACKING_STORE, 'playbacking.v1', CHORD_ORDER],
+  [MELODY_STORE, 'playtune.v2', CA92_MELODY_ORDER],
+  [BACKING_STORE, 'playbacking.v1', CA92_BACKING_ORDER],
 ] as const) describe(`${key}: replacing Drift with Hopscotch`, () => {
   const oldOrder = order.map(id => id === 'hopscotch' ? 'drift' : id);
   const load = () => loadProgress(key, order);
@@ -160,18 +161,19 @@ describe('historical melody pass evidence around the replaced slot', () => {
 });
 describe('existing Backing imports through the replacement', () => {
   it('keeps imported access credit separate from the retired composition’s pass', () => {
-    const oldOrder = CHORD_ORDER.map(id => id === 'hopscotch' ? 'drift' : id);
+    const order = CA92_BACKING_ORDER;
+    const oldOrder = order.map(id => id === 'hopscotch' ? 'drift' : id);
     write('playbacking.v1', {
       unlocked: oldOrder.slice(0, 9), epoch: 4, unlockCredit: 2,
       best: Object.fromEntries([...oldOrder.slice(0, 3), 'drift'].map(id => [id, record])),
     });
-    const p = loadProgress(BACKING_STORE, CHORD_ORDER);
+    const p = loadProgress(BACKING_STORE, order);
     expect(p.unlockCredit).toBe(2);
     expect(p.retiredPasses).toEqual(['drift']);
-    expect(p.unlocked).toEqual(CHORD_ORDER.slice(0, 9));
-    expect(recordRun(BACKING_STORE, p, 'hopscotch', CHORD_ORDER, pass).unlocked).toBe(CHORD_ORDER[9]);
-    expect(loadProgress(BACKING_STORE, CHORD_ORDER).unlockCredit).toBe(2);
-    expect(loadProgress(BACKING_STORE, CHORD_ORDER).unlocked).toHaveLength(10);
+    expect(p.unlocked).toEqual(order.slice(0, 9));
+    expect(recordRun(BACKING_STORE, p, 'hopscotch', order, pass).unlocked).toBe(order[9]);
+    expect(loadProgress(BACKING_STORE, order).unlockCredit).toBe(2);
+    expect(loadProgress(BACKING_STORE, order).unlocked).toHaveLength(10);
   });
 
   it('does not infer a retired pass from an unrelated opening song', () => {
