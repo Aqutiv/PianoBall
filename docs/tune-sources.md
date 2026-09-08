@@ -1,7 +1,6 @@
 # Familiar-tune source ledger
 
-Reviewed 6 September 2026. Applies to the five additions in
-`src/modes/playtune/library/familiar.ts`, in Melody and Backing (the compatible wire role is still `chords`).
+Reviewed 8 September 2026. Covers the familiar and traditional additions in Melody and Backing (the compatible wire role is still `chords`). The original five additions in `library/familiar.ts` retain the source evidence below.
 
 The shipped material consists of authored note arrays, reductions and harmony,
 rendered by PianoBall's existing synthesizer. No sound recording, downloaded
@@ -86,20 +85,23 @@ independent critique are recorded in [the track review](hopscotch.md).
 | 3 | Ground | Root and fifth on one and three. |
 | 4 | Twinkle, Twinkle | Bass and two-note chord answers. |
 | 5 | Off the Beat | Bass on one/three, chord answers on two/four. |
-| 6 | Hopscotch | Bass on one, held or delayed compact chord answers; Dorian sevenths and phrase rests with drums. |
-| 7 | Drunken Sailor | D-minor/C-major bass-and-chord march. |
-| 8 | Canon in D | Repeating bass ground with broken-chord answers. |
-| 9 | Amazing Grace | Bass and gentle chord answers in three, with pickup. |
-| 10 | Scarborough Fair | Three-note flowing figures following the harmony. |
-| 11 | Gymnopédie No. 1 | Bass on one, seventh shell on two held through three. |
-| 12 | Londonderry Air | Broken chords and a breath before the closing cadence. |
-| 13 | Greensleeves | Bass anchors at each group of three in 6/8. |
-| 14 | Can-Can | Short bass/chord attacks supporting the galop. |
-| 15 | The Blue Danube | Bass–chord–chord waltz with compact inversions. |
-| 16 | Für Elise | Broken-chord gestures; opening and returning melody runs left unaccompanied. |
-| 17 | Minuet in G | Moving bass tones and occasional dyads. |
-| 18 | Jesu, Joy of Man’s Desiring | Three compound bass anchors with economical chord answers. |
-| 19 | The Entertainer | Root/fifth bass alternating with compact chord shells. |
+| 6 | Yankee Doodle | Alternating marching root and fifth; final chord. |
+| 7 | Hopscotch | Bass on one, held or delayed compact chord answers; Dorian sevenths and phrase rests with drums. |
+| 8 | Drunken Sailor | D-minor/C-major bass-and-chord march. |
+| 9 | Canon in D | Repeating bass ground with broken-chord answers. |
+| 10 | Amazing Grace | Bass and gentle chord answers in three, with pickup. |
+| 11 | Scarborough Fair | Three-note flowing figures following the harmony. |
+| 12 | La Bamba | Compact plucked bass/chord teaching pattern for piano. |
+| 13 | Gymnopédie No. 1 | Bass on one, seventh shell on two held through three. |
+| 14 | Londonderry Air | Broken chords and a breath before the closing cadence. |
+| 15 | Greensleeves | Bass anchors at each group of three in 6/8. |
+| 16 | The Irish Washerwoman | Two compound bass pulses with short chord answers. |
+| 17 | Can-Can | Short bass/chord attacks supporting the galop. |
+| 18 | The Blue Danube | Bass–chord–chord waltz with compact inversions. |
+| 19 | Für Elise | Broken-chord gestures; opening and returning melody runs left unaccompanied. |
+| 20 | Minuet in G | Moving bass tones and occasional dyads. |
+| 21 | Jesu, Joy of Man’s Desiring | Three compound bass anchors with economical chord answers. |
+| 22 | The Entertainer | Root/fifth bass alternating with compact chord shells. |
 
 Felt Piano articulates the player's backing part. Hopscotch uses Electric Piano
 for its melody, with the same authored backing audible in PlayTune and playable
@@ -107,3 +109,20 @@ in Play Backing. Other automatic melody voice choices are retained. Matching pia
 register and articulation distinguish the parts. Three Ways Home is retired;
 First Light and Two Hands remain in Melody only. Existing source evidence and
 territory assessments above concern the same underlying material.
+
+
+## September rhythm and traditional additions
+
+The complete source readings are recorded in [Yankee Doodle and The Irish Washerwoman](traditional-marching-jig.md) and [La Bamba](traditional-la-bamba.md). These notes identify the exact passages, source-to-chart pitches, pickups, repeated forms, beat units, reductions and synthetic percussion choices. La Bamba uses the traditional lead line from the official SEP/ConArte songbook; this is a documented substitution for the planned 1939 recording transcription, which was not audibly verified in this environment. No recording or modern second voice/accompaniment is included.
+
+| Track | Melody / Backing level | Chart beat / BPM | Form / chart beats | Melody: player / automatic accompaniment | Backing: player / automatic melody | Pass marks |
+|---|---|---|---|---|---|---|
+| Yankee Doodle | 2 / 2 | Eighth / 132 (quarter 66) | Complete Stewart Theme, before Variation 1 / 97 | Felt Piano / Felt Piano | Felt Piano / Felt Piano | .63 / .60 |
+| La Bamba | 3 / 3 | Eighth / 120 (quarter 60) | First complete sourced copla and response, twice / 144 including editorial breaths | Felt Piano / Nylon Guitar | Felt Piano / Felt Piano | .65 / .63 |
+| The Irish Washerwoman | 4 / 4 | Eighth / 132 | O’Neill no. 317 AABB / 192 | Felt Piano / Harp | Felt Piano / Felt Piano | .67 / .67 |
+
+Yankee Doodle and La Bamba are slower than the initial proposal so their source sixteenths remain at least 220 ms apart; the written rhythm is preserved. Yankee Doodle’s selected printed Theme has no repeat signs. Yankee Doodle and La Bamba use eighth-note chart units to keep the visible approach readable; La Bamba’s additional practice slowdown keeps its densest passage within the existing eight-onset limit. The Irish Washerwoman retains its initial two-sixteenth pickup, later pickups and shortened repeat bars.
+
+First Light adds a soft quarter-note rim pulse with a slightly stronger downbeat. Two Hands adds quiet kick on one/three, rim on two/four and eighth-note hi-hat. Ground adds soft kick on one/three and quarter-note hi-hat. Off the Beat adds kick on one/three, rim on two/four and quarter-note hi-hat. Hopscotch’s authored parts, phrase changes and ending remain unchanged. These original arrangements keep their playable notes and course membership. None of the 32 existing classical/traditional role entries gains percussion.
+
+The three new pieces use restrained synthetic marching or dance accents as editorial arrangements. They do not claim a historically performed drum part. Every new playable part uses piano; percussion remains an optional live layer shared across both roles, while the exported score always retains its authored drum events.

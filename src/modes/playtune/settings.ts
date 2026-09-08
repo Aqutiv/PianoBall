@@ -12,6 +12,8 @@ export interface PlayTuneSettings {
    * chain of unlocks, and both roles want the same offset, lane and assist.
    */
   role: RoleId;
+  /** Play the tune's authored percussion in either role. */
+  rhythmEnabled: boolean;
   /**
    * Milliseconds added to the device's own reported latency.
    *
@@ -49,6 +51,7 @@ export const MAX_LEAD_BEATS = LEAD_BEAT_CHOICES[LEAD_BEAT_CHOICES.length - 1];
 
 export const DEFAULT_PLAYTUNE: PlayTuneSettings = {
   role: 'melody',
+  rhythmEnabled: true,
   offsetMs: 0,
   leadBeats: 4,
   assist: true,
@@ -74,7 +77,11 @@ function asRole(value: unknown): RoleId {
     : DEFAULT_PLAYTUNE.role;
 }
 
-const settle = (s: PlayTuneSettings): PlayTuneSettings => ({ ...s, role: asRole(s.role) });
+const settle = (s: PlayTuneSettings): PlayTuneSettings => ({
+  ...s,
+  role: asRole(s.role),
+  rhythmEnabled: typeof s.rhythmEnabled === 'boolean' ? s.rhythmEnabled : DEFAULT_PLAYTUNE.rhythmEnabled,
+});
 
 let current: PlayTuneSettings = settle({ ...DEFAULT_PLAYTUNE, ...load(KEY, {}) });
 

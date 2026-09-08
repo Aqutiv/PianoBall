@@ -107,6 +107,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private readonly auras: AuraStage;
   private readonly transport = new Transport();
   private readonly drums: TuneDrums;
+  /** Last applied preference, so unrelated settings never replay queued hits. */
+  private rhythmEnabled = playTuneSettings().rhythmEnabled;
   private readonly panel: TuneHud;
   private readonly scoring = new Scoring();
   private readonly ctx: ModeContext;
@@ -145,7 +147,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.ctx = ctx;
     this.drums = new TuneDrums(ctx.audio);
     this.auras = new AuraStage(ctx.stage, this.deck);
-    this.panel = new TuneHud(ctx.hud);
+    this.panel = new TuneHud(ctx.hud, () => {
+      setPlayTuneSettings({ rhythmEnabled: !playTuneSettings().rhythmEnabled });
+      this.applySettings();
+    });
     this.roleId = playTuneSettings().role;
     this.progress = loadProgress(this.role.storageKey, this.role.order);
     this.remap();
@@ -189,10 +194,19 @@ export class PlayTuneMode extends ModeBase implements GameMode {
    * `enter` as well as from the shell's reset, because the reset only reaches
    * the mode that is currently on screen and this one is usually not.
    *
-   * A no-op when the role has not actually changed: `setRole` returns early.
+   * A changed rhythm preference cancels its owned route or rejoins the same
+   * transport. Unrelated settings leave already queued notes and hits alone.
    */
   applySettings(): void {
     this.setRole(playTuneSettings().role);
+    const enabled = playTuneSettings().rhythmEnabled;
+    this.panel.setRhythm(enabled);
+    if (enabled === this.rhythmEnabled) return;
+    this.rhythmEnabled = enabled;
+    if (!enabled) this.drums.stop();
+    else if (this.tune && (this.phase === 'countin' || this.phase === 'playing')) {
+      this.drums.start(this.tune.rhythm, this.transport, this.tune.pickup ?? 0);
+    }
   }
 
   // -------------------------------------------------------------- lifecycle ---
@@ -332,7 +346,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       backing.notes ? fitted(backing.notes, shift) : null, t,
     );
     this.ctx.bed.start();
-    this.drums.start(tune.rhythm, t, tune.pickup ?? 0);
+    this.rhythmEnabled = settings.rhythmEnabled;
+    this.panel.setRhythm(this.rhythmEnabled);
+    if (this.rhythmEnabled) this.drums.start(tune.rhythm, t, tune.pickup ?? 0);
 
     this.panel.setTune(tune, this.roleId === 'chords' ? this.role.card(tune).teaches : undefined);
     this.ctx.hud.banner(tune.title, 1.6);
