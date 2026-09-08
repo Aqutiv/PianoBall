@@ -32,12 +32,12 @@ function perform(id: string, options: { late?: number; release?: number; omit?: 
 
 describe('Play Backing course', () => {
   it('contains the planned 19 tracks and retains all classics', () => {
-    expect(CHORD_ORDER).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march', 'drift',
+    expect(CHORD_ORDER).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march', 'hopscotch',
       'drunken-sailor', 'canon-in-d', 'amazing-grace', 'scarborough-fair', 'gymnopedie', 'londonderry-air',
       'greensleeves', 'can-can', 'blue-danube', 'fur-elise', 'minuet-in-g', 'jesu-joy', 'the-entertainer']);
     expect(LIBRARY).toHaveLength(19);
     for (const t of LIBRARY.filter(t => t.origin === 'classic')) expect(CHORD_ORDER).toContain(t.id);
-    expect(LIBRARY.map(t => t.id)).toEqual(expect.arrayContaining(['first-light', 'two-hands', 'drift']));
+    expect(LIBRARY.map(t => t.id)).toEqual(expect.arrayContaining(['first-light', 'two-hands', 'hopscotch']));
     expect(ALL_TUNES.map(t => t.id)).not.toContain('chord-three');
   });
   it('uses five ascending levels and the agreed pass marks', () => {
@@ -108,9 +108,9 @@ describe('authored musical phrases', () => {
     expect(on('the-entertainer', 1)[0].note).toBe(48);
     expect(on('the-entertainer', 3)[0].note).toBe(55);
   });
-  it('retains seventh color and the low foundation in Drift', () => {
-    const seventh = findTune('drift')!.chords.find(c => c.quality === 'min7')!;
-    expect(on('drift', seventh.beat).map(n => n.note)).toEqual([50,53,60]);
+  it('retains seventh color and a bass foundation in Hopscotch', () => {
+    const seventh = findTune('hopscotch')!.chords.find(c => c.quality === 'min7')!;
+    expect(on('hopscotch', seventh.beat).map(n => n.note)).toEqual([50]);
   });
 });
 
@@ -125,18 +125,18 @@ describe('performance and ownership', () => {
   it('grades missing bass, incomplete chords, short holds, and wrong notes', () => {
     expect(perform('chord-march', { omit: (_n, b) => b % 2 === 0 }).accuracy).toBeLessThan(1);
     expect(perform('chord-march', { omit: n => n === 67 }).accuracy).toBeLessThan(1);
-    expect(perform('drift', { release: .1 }).accuracy).toBeLessThan(.8);
+    expect(perform('hopscotch', { release: .1 }).accuracy).toBeLessThan(.8);
     expect(perform('gymnopedie', { release: .1 }).accuracy).toBeLessThan(1);
     expect(perform('frere-jacques', { wrong: true }).tally.wrong).toBe(1);
     expect(perform('frere-jacques', { omit: () => true }).accuracy).toBe(0);
   });
   it.each(CHORD_CURVE)('$tune.id leaves the entire accompaniment to the player', ({ tune }) => {
     expect(CHORDS_ROLE.backing(tune)).toEqual({ chords: [], pattern: 'sustain', parts: [], notes: tune.melody });
-    expect(CHORDS_ROLE.voices(tune).keyVoicing).toBe(tune.id === 'drift' ? 'bed' : 'lead');
-    expect(CHORDS_ROLE.voices(tune).keys).toBe(tune.id === 'drift' ? 'glass-pad' : 'felt-piano');
+    expect(CHORDS_ROLE.voices(tune).keyVoicing).toBe('lead');
+    expect(CHORDS_ROLE.voices(tune).keys).toBe('felt-piano');
     expect(CHORDS_ROLE.voices(tune).backing).toBe(findChordEntry(tune.id)!.role.melodyVoiceId);
     expect(MELODY_ROLE.chart(tune)).toEqual(tune.melody);
-    expect(MELODY_ROLE.backing(tune).parts).toEqual(['chord','bass','wash']);
+    expect(MELODY_ROLE.backing(tune).parts).toEqual(tune.backingNotes ? [] : ['chord','bass','wash']);
   });
   it('keeps the wire identity while presenting the musical role', () => {
     expect(CHORDS_ROLE.id).toBe('chords');

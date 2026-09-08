@@ -252,7 +252,7 @@ export const GREENSLEEVES: Tune = {
   // is 2.11 notes a second held up for eighteen seconds with almost no rest —
   // denser than the Canon, which is difficulty 5 and six places later, and a
   // step up from the 1.5 that nothing before this tune in the chain exceeds.
-  // The tune before it is Drift, at 0.2.
+  // The earlier hold study is Hopscotch.
   //
   // At 132 the rate is 1.66, which puts this between Scarborough Fair and Für
   // Elise instead of past the end of the library.

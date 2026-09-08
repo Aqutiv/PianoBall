@@ -139,8 +139,8 @@ describe('the tune library', () => {
     // tune's thirty-seven notes are longer than a beat, so letting go of each
     // as the next arrived took them all to the hold floor, and 0.75 of that
     // was 68.9% against a 70% mark. Playing detached is a style, not an error,
-    // and Greensleeves is not a tune about holding — unlike Drift, which is,
-    // and which should still fail a run that holds nothing.
+    // and Greensleeves is not a tune about holding — unlike the hold studies,
+    // which still reward carrying each note through its tail.
     const tune = findTune('greensleeves')!;
     const judge = playedWell(tune, { release: true });
     judge.finish();

@@ -72,10 +72,12 @@ quarter-note beats per bar.
 
 All backing arrangements are PianoBall teaching reductions using the existing
 melodies and harmony, not transcriptions of complete original left-hand parts.
-Their explicit charts replace the old block-chord curve. The game supplies only
-the melody: the player supplies the bass and harmony. Parts use a fixed compact
-register before the existing whole-octave keyboard fitting. No melody, source
-passage, tempo, pickup or beat-unit change accompanies this revision.
+Their explicit charts replace the old block-chord curve. The game supplies
+the melody and any authored drums: the player supplies the bass and harmony.
+Parts use a fixed compact register before whole-octave keyboard fitting.
+The classic reductions retain their source passages, tempos, pickups, and beat
+units. Hopscotch is a new original replacing Drift; its composition and
+independent critique are recorded in [the track review](hopscotch.md).
 
 | Order | Piece | Backing arrangement |
 |---|---|---|
@@ -84,7 +86,7 @@ passage, tempo, pickup or beat-unit change accompanies this revision.
 | 3 | Ground | Root and fifth on one and three. |
 | 4 | Twinkle, Twinkle | Bass and two-note chord answers. |
 | 5 | Off the Beat | Bass on one/three, chord answers on two/four. |
-| 6 | Drift | Sustained triads and seventh shells, with their root in the bass. |
+| 6 | Hopscotch | Bass on one, held or delayed compact chord answers; Dorian sevenths and phrase rests with drums. |
 | 7 | Drunken Sailor | D-minor/C-major bass-and-chord march. |
 | 8 | Canon in D | Repeating bass ground with broken-chord answers. |
 | 9 | Amazing Grace | Bass and gentle chord answers in three, with pickup. |
@@ -99,9 +101,9 @@ passage, tempo, pickup or beat-unit change accompanies this revision.
 | 18 | Jesu, Joy of Man’s Desiring | Three compound bass anchors with economical chord answers. |
 | 19 | The Entertainer | Root/fifth bass alternating with compact chord shells. |
 
-Felt Piano articulates the player's part in every track except Drift, whose
-Glass Pad makes sustained harmony audible. Automatic melody voice choices are
-retained from the previous chord course. Matching piano timbres are intentional;
+Felt Piano articulates the player's backing part. Hopscotch uses Electric Piano
+for its melody, with the same authored backing audible in PlayTune and playable
+in Play Backing. Other automatic melody voice choices are retained. Matching piano timbres are intentional;
 register and articulation distinguish the parts. Three Ways Home is retired;
 First Light and Two Hands remain in Melody only. Existing source evidence and
 territory assessments above concern the same underlying material.

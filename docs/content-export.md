@@ -115,6 +115,7 @@ interface CourseEntryV1 {
     attack: number; part: 'chord' | 'bass' | 'wash' | 'melody';
     offset?: number;
   }[];
+  drumEvents?: { beat: number; voice: string; gain: number }[]; // drum-bank voice ID
 }
 ```
 
@@ -135,13 +136,14 @@ Every number must be finite and correctly typed; no numeric string coercion.
 | Difficulty | Integer 1–10 on the wire; authored source retains 1–5 |
 | Player notes | 1–20,000 per course |
 | Backing events | 0–20,000 per course, required even when empty |
+| Drum events | Optional; 0–20,000 per course; voice names a drum-bank entry, gain 0–1 |
 | Note/event beat | 0–65,536, nondecreasing; equal onsets allowed |
-| Note/event length | 0.001–1,024 beats |
+| Pitched note/event length | 0.001–1,024 beats |
 | Player/backing pitch and root | Integer MIDI 0–127 |
 | Backing gain | 0–1, original normalized pad gain |
 | Pitches per backing event | Producer 1–16; native also permits empty |
 | Attack/optional offset | Finite nonnegative beats |
-| Expanded notes | At most 250,000: player count + sum of backing pitch counts |
+| Expanded notes | At most 250,000: player count + sum of backing pitch counts + drum hit count |
 | Manifest bytes | At most 16,384 |
 | Catalogue bytes | At most 8,388,608 |
 
@@ -255,5 +257,14 @@ its existing policy. Browser migration is separate from native save handling.
 Player charts are authored in `library/chordcurve.ts` with shared notation
 helpers. Validation checks finite timing, pitch, repeated-pitch overlap,
 three-note polyphony including holds, octave hand span, passage bounds and the
-standard 25-key fit. Keys use the lead bank's Felt Piano except for Drift's bed
-bank Glass Pad. Existing Melody entries retain their previous musical output.
+standard 25-key fit. Backing keys use the lead bank's Felt Piano. Hopscotch
+replaces Drift in both roles at level 2; other Melody entries retain their output.
+
+Rhythmic entries include optional `drumEvents`: sorted `{ beat, voice, gain }`
+objects expanded from the same Freestyle patterns and authored fills as browser
+playback. Beats use the course clock; gains are 0–1 and voices name the drum
+bank. The field is absent on existing pieces without percussion. Schema v1 is
+retained as an additive extension; older native clients may ignore drums until
+they implement this field. Pitched `backingEvents` remain separate. In Melody,
+Hopscotch's authored accompaniment events are labeled `chord`; in Backing,
+the automatic melody remains labeled `melody`.
