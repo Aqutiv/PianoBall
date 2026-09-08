@@ -7,10 +7,10 @@ export const NOTE_GAIN = 0.05;
 export const NOTE_ATTACK = 0.02;
 
 /** A written melody note uses the same pad path as a struck chord. */
-export function writtenNoteEvent(note: { note: number; len: number }): CompEvent {
+export function writtenNoteEvent(note: { note: number; len: number; gain?: number; attack?: number; soundingLen?: number }): CompEvent {
   return {
-    offset: 0, len: note.len, notes: [note.note],
-    gain: NOTE_GAIN, attack: NOTE_ATTACK, part: 'chord',
+    offset: 0, len: note.soundingLen ?? note.len, notes: [note.note],
+    gain: note.gain ?? NOTE_GAIN, attack: note.attack ?? Math.min(NOTE_ATTACK, note.soundingLen ?? note.len), part: 'chord',
   };
 }
 

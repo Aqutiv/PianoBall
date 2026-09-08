@@ -1,0 +1,233 @@
+{
+  "sourceCommit": "9840971",
+  "entries": [
+    {
+      "id": "first-light",
+      "role": "melody",
+      "onsets": 20,
+      "signature": "61158d1380ada991c30d374b8a4643940f9442c31e91ca9ccb45ae1afe35c5a2"
+    },
+    {
+      "id": "ode-to-joy",
+      "role": "melody",
+      "onsets": 30,
+      "signature": "d4e393630e8f312a5389c46a135f4c4f6e6b36f09113a4b65cb9fc12af5d11f9"
+    },
+    {
+      "id": "twinkle",
+      "role": "melody",
+      "onsets": 42,
+      "signature": "2c20c2048787e952b437258f7cbf7c353dc5b1f170513e47906a6f91c35386da"
+    },
+    {
+      "id": "frere-jacques",
+      "role": "melody",
+      "onsets": 64,
+      "signature": "f5ac76e6e74d6647ccaaa44fcc018e9d344b32cfb1cbe3176f9dcb77a282c38c"
+    },
+    {
+      "id": "amazing-grace",
+      "role": "melody",
+      "onsets": 31,
+      "signature": "fcdee8404e7d0b5e703889837ae9351808abdda26cd96c6e7b86d83d97cb180f"
+    },
+    {
+      "id": "scarborough-fair",
+      "role": "melody",
+      "onsets": 33,
+      "signature": "dace542bc103c2b36fef9f2d3f4942333a958fb541d23f89927e8cc871db7bfa"
+    },
+    {
+      "id": "drift",
+      "role": "melody",
+      "onsets": 12,
+      "signature": "ff9bd68a480856b5124d7f6c7bf770aa8319eaf1aa2456beb4f644d20bbd0c56"
+    },
+    {
+      "id": "drunken-sailor",
+      "role": "melody",
+      "onsets": 126,
+      "signature": "011fd9238b0bdd36c9890b32a5833ef9080e1b22d72bf690c4a953fe6420fcd2"
+    },
+    {
+      "id": "greensleeves",
+      "role": "melody",
+      "onsets": 37,
+      "signature": "ea51efd2db8ec8327797a859ee77e7e97d5386558d7336ea0db9c50c84df3055"
+    },
+    {
+      "id": "fur-elise",
+      "role": "melody",
+      "onsets": 27,
+      "signature": "d0402c7b214a2a12ba546751ec258eb7b059e50fb438230b2eb17d64092f3478"
+    },
+    {
+      "id": "londonderry-air",
+      "role": "melody",
+      "onsets": 19,
+      "signature": "3355c938eb697f0ca2964545d623626b2bf3f5c0b27f1b1f9418db6ca0b65b69"
+    },
+    {
+      "id": "can-can",
+      "role": "melody",
+      "onsets": 120,
+      "signature": "f1bc73fbd80a59c1f1315b47ee458826a8e5296b733ff47b065fc206f3e2b307"
+    },
+    {
+      "id": "minuet-in-g",
+      "role": "melody",
+      "onsets": 32,
+      "signature": "8d34ec2f2177173962e6ab6e7f91158d7fdd04684499e4e5a4d562a9275ec735"
+    },
+    {
+      "id": "gymnopedie",
+      "role": "melody",
+      "onsets": 21,
+      "signature": "a601521a0351e171a473c563723c9f32b6d7c380acce2e35f31ba0882f649196"
+    },
+    {
+      "id": "two-hands",
+      "role": "melody",
+      "onsets": 66,
+      "signature": "b1b5a41044d35e00fc95f44d20db4c9126329228dac3c1baee11477fe4381291"
+    },
+    {
+      "id": "blue-danube",
+      "role": "melody",
+      "onsets": 68,
+      "signature": "025da21940be89846c80ac25c57e45fdeb051c97ff52c7923e6f34f02d725b26"
+    },
+    {
+      "id": "canon-in-d",
+      "role": "melody",
+      "onsets": 80,
+      "signature": "30a1363e3b8825e29f9180b227aec39179bd4f599ee7ab2a9983570bfac4190e"
+    },
+    {
+      "id": "jesu-joy",
+      "role": "melody",
+      "onsets": 84,
+      "signature": "67bea8b5c219a6c1d397897d02b4f84b632ef90a9dcfaf030acadb37aebfe481"
+    },
+    {
+      "id": "the-entertainer",
+      "role": "melody",
+      "onsets": 154,
+      "signature": "2ee8280b48db537c4b7bcc6ce5926d4e399b0bda00e85b489ab7c122ba6c00a3"
+    },
+    {
+      "id": "frere-jacques",
+      "role": "chords",
+      "onsets": 16,
+      "signature": "0a5c323b83e8c6a2fa84b1464c5ffa582e1b20d7b4bcbc59f3ea9ad901f232f1"
+    },
+    {
+      "id": "ode-to-joy",
+      "role": "chords",
+      "onsets": 12,
+      "signature": "5aefdb46fa36cd0aaf7c69d1b8df094401f4868bad0611afacb2e4c957aeac5d"
+    },
+    {
+      "id": "chord-ground",
+      "role": "chords",
+      "onsets": 16,
+      "signature": "c970cab0dd440d920986d1dfd5320af17d0e84f5010cf5e84fdbcdd0e76dc9fc"
+    },
+    {
+      "id": "twinkle",
+      "role": "chords",
+      "onsets": 72,
+      "signature": "8ee1e614fb7d2295431ed06d1e8090d43231a4407607f85633c1c590cdb349e8"
+    },
+    {
+      "id": "chord-march",
+      "role": "chords",
+      "onsets": 45,
+      "signature": "58c9a9202c5e0a395572fcc2d4996508210102ab9993859591f53b371cac7ca0"
+    },
+    {
+      "id": "drift",
+      "role": "chords",
+      "onsets": 48,
+      "signature": "40efd44e7f5c086050f800aba8c1fc64525296aafa0eb8617b4b6e525d9ccdff"
+    },
+    {
+      "id": "drunken-sailor",
+      "role": "chords",
+      "onsets": 189,
+      "signature": "24061e593b1ac4eb0ae08bba7bf3ca8f12a00d308341717086ddea41d6ea8800"
+    },
+    {
+      "id": "canon-in-d",
+      "role": "chords",
+      "onsets": 65,
+      "signature": "8310cc8af735959437126a2178dd3146b770a59e8227a6aa3af2c324f31755f3"
+    },
+    {
+      "id": "amazing-grace",
+      "role": "chords",
+      "onsets": 71,
+      "signature": "47ef29a363ee0227bf22f30ed6005e83e004a076d4cfae0623987abb9bcfe6ed"
+    },
+    {
+      "id": "scarborough-fair",
+      "role": "chords",
+      "onsets": 45,
+      "signature": "7662efb77e6759b8659bb5edd4d0b02590d226f3b72f499ca846d05967958f64"
+    },
+    {
+      "id": "gymnopedie",
+      "role": "chords",
+      "onsets": 64,
+      "signature": "74fcc7e2fbecd63d0ff763313c8e4cb25049580d2c772c006c0d4fab4c77ad08"
+    },
+    {
+      "id": "londonderry-air",
+      "role": "chords",
+      "onsets": 33,
+      "signature": "fdb44c505f574b8990ac80e566c50e5797963117ef535448cb0b7e638c4bcbcd"
+    },
+    {
+      "id": "greensleeves",
+      "role": "chords",
+      "onsets": 49,
+      "signature": "9846b9d2d7f01d72f361183a845d95566c3613260127fb4562a6338c14ca95b4"
+    },
+    {
+      "id": "can-can",
+      "role": "chords",
+      "onsets": 189,
+      "signature": "c6965ab445c8da7e5c8a7f5dee206feee69c47ed05a35fc3672b1d7bc8da4760"
+    },
+    {
+      "id": "blue-danube",
+      "role": "chords",
+      "onsets": 220,
+      "signature": "f0c281c65e62d0a2a010b270ed0729547bb10121cc0594d29b9e4e09cb518468"
+    },
+    {
+      "id": "fur-elise",
+      "role": "chords",
+      "onsets": 18,
+      "signature": "c79c17e2d5ba5504bf8d392e9cd15310b1cd397410afc3cc0c243d7122eb9235"
+    },
+    {
+      "id": "minuet-in-g",
+      "role": "chords",
+      "onsets": 33,
+      "signature": "294f6baf21441ba090e442d871da4134f1fa8c3dad32982401b936e527ddd70c"
+    },
+    {
+      "id": "jesu-joy",
+      "role": "chords",
+      "onsets": 73,
+      "signature": "8f6820cf603aea61b09cad5e3be6317b5aa8b47973de3525791d2d4c233893d1"
+    },
+    {
+      "id": "the-entertainer",
+      "role": "chords",
+      "onsets": 254,
+      "signature": "520c1e9d40dcb876ba35f5935e712fb6bc31b8e9f0d9e814d91dac2dc0029c80"
+    }
+  ]
+}

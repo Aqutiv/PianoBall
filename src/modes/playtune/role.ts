@@ -64,7 +64,9 @@ export const MELODY_ROLE: TuneRole = {
   tunes: LIBRARY,
   order: TUNE_ORDER,
   chart: (tune) => tune.melody,
-  backing: (tune) => ({
+  backing: (tune) => tune.backingNotes !== undefined ? {
+    chords: [], pattern: 'sustain', parts: [], notes: tune.backingNotes,
+  } : ({
     chords: tune.chords,
     pattern: tune.accompaniment,
     parts: ['chord', 'bass', 'wash'],

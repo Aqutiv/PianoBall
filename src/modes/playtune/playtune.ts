@@ -8,7 +8,7 @@ import { clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
 import type { ChartChord, Tune } from './chart';
-import { fitToRange, fitted, lastBeat } from './chart';
+import { fitToRange, fitted, lastBeat, soundingEndBeat } from './chart';
 import { mergedChords } from './chords';
 import { HOLD_FLOOR, Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
 import { Transport } from './transport';
@@ -311,7 +311,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       ? specs.length / new Set(specs.map((s) => s.beat)).size
       : 1;
     this.lastStruck = -1;
-    this.endsAt = t.timeOf(lastBeat(tune) + tune.beatsPerBar);
+    this.endsAt = t.timeOf(Math.max(lastBeat(tune) + tune.beatsPerBar, soundingEndBeat(tune)));
     this.phase = 'countin';
 
     // Before the bed is wired, not after: an instrument only takes effect on
@@ -322,11 +322,11 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // tune's own key, without disturbing the scale picked in settings.
     const backing = this.role.backing(tune);
     this.ctx.bed.setTrack(
-      backing.chords, t, tune.root + shift, SCALES[tune.scaleId],
+      backing.chords, t, tune.root, SCALES[tune.scaleId],
       backing.pattern, tune.pickup ?? 0, backing.parts,
     );
     this.ctx.bed.setNoteTrack(
-      backing.notes ? fitted(backing.notes, shift) : null, t,
+      backing.notes, t,
     );
     this.ctx.bed.start();
 

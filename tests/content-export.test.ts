@@ -33,7 +33,7 @@ describe('shared catalogue source membership', () => {
     for (const role of Object.values(ROLES)) {
       for (const tune of role.tunes) {
         const entry = published.entries.find((e) => e.role === role.id && e.id === tune.id)!;
-        expect(entry.playerNotes, `${role.id}:${tune.id}`).toEqual(role.chart(tune));
+        expect(entry.playerNotes, `${role.id}:${tune.id}`).toEqual(role.chart(tune).map(({ beat, len, note }) => ({ beat, len, note })));
         expect(entry).toMatchObject({ ...role.card(tune), voices: role.voices(tune), root: tune.root, pickup: tune.pickup ?? 0 });
       }
     }
@@ -147,14 +147,18 @@ describe('deterministic written backing parity', () => {
   });
 
   it('preserves same-beat generation order and pad tails past the next chord', () => {
-    const entry = published.entries.find((e) => e.role === 'melody' && e.id === 'first-light')!;
+    const tune = structuredClone(ROLES.melody.tunes.find(t => t.id === 'first-light')!);
+    delete tune.backingNotes;
+    const entry = compileCatalog(provenance, [
+      { ...ROLES.melody, tunes: [tune], order: [tune.id] }, ROLES.chords,
+    ]).entries[0];
     expect(entry.backingEvents.filter((e) => e.beat === 0).map((e) => e.part)).toEqual(['wash', 'wash', 'bass', 'chord']);
     expect(entry.backingEvents[0].len).toBe(4.2);
     expect(entry.backingEvents[0].beat + entry.backingEvents[0].len).toBeGreaterThan(ROLES.melody.tunes.find((t) => t.id === entry.id)!.chords[1].beat);
   });
 
   it('removes wash for plucked voices, retaining it for pads without altering other events', () => {
-    const tune = { ...structuredClone(ROLES.melody.tunes[0]), accompaniment: 'pulse' as const, bedVoiceId: 'bed-harp' };
+    const tune = { ...structuredClone(ROLES.melody.tunes[0]), accompaniment: 'pulse' as const, bedVoiceId: 'bed-harp', backingNotes: undefined };
     const role = { ...ROLES.melody, tunes: [tune], order: [tune.id] };
     const plucked = compileCatalog(provenance, [role, ROLES.chords]).entries[0];
     expect(plucked.backingEvents.some((e) => e.part === 'wash')).toBe(false);

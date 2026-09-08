@@ -167,13 +167,13 @@ describe('playtune instruments', () => {
     mode.exit();
   });
 
-  it('leaves the app its own sound on a tune that names none', () => {
+  it('uses matching piano parts in the introductory original', () => {
     const { mode, engine } = playtuneRig();
     mode.enter();
     expect(mode.start('first-light')).toBe(true);
 
     expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
-    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
+    expect(engine.bedVoice).toBe('bed-felt-piano');
     mode.exit();
   });
 
@@ -192,14 +192,14 @@ describe('playtune instruments', () => {
     mode.enter();
     mode.start('jesu-joy');
 
-    // A voice keeps the spec it was struck with, so the pipe organ under a key
+    // A voice keeps the spec it was struck with, so the old piano under a key
     // still down when the next tune is chosen would play on through its
     // count-in. Counted rather than heard: the engine has no context here.
     let cleared = 0;
     const real = engine.allNotesOff.bind(engine);
     engine.allNotesOff = () => { cleared++; real(); };
 
-    mode.start('twinkle');
+    mode.start('frere-jacques');
 
     expect(cleared).toBe(1);
     expect(engine.leadVoice).toBe('music-box');
@@ -210,7 +210,7 @@ describe('playtune instruments', () => {
     const { mode, engine } = playtuneRig();
     mode.enter();
     mode.start('fur-elise');
-    mode.start('twinkle');
+    mode.start('frere-jacques');
 
     expect(engine.leadVoice).toBe('music-box');
     expect(engine.bedVoice).toBe('bed-harp');
@@ -286,12 +286,12 @@ describe('playtune role', () => {
     expect(mode.start('drift')).toBe(true);
     expect(engine.keyVoicing).toBe('bed');
     expect(engine.keyBedVoice).toBe('glass-pad');
-    expect(mode.start('twinkle')).toBe(true);
+    expect(mode.start('frere-jacques')).toBe(true);
     expect(engine.keyVoicing).toBe('lead');
     expect(engine.leadVoice).toBe('felt-piano');
     expect(engine.bedVoice).toBe('bed-music-box');
     mode.setRole('melody');
-    expect(mode.start('twinkle')).toBe(true);
+    expect(mode.start('frere-jacques')).toBe(true);
     expect(engine.leadVoice).toBe('music-box');
     expect(engine.bedVoice).toBe('bed-harp');
     mode.exit();

@@ -36,7 +36,7 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked, best, epoch: 7 }));
     const p = loadProgress(role.storageKey, role.order);
     expect(p.epoch).toBe(7);
-    expect(p.best).toEqual(best);
+    expect({ ...p.previousBest, ...p.best }).toEqual(best);
     for (const id of unlocked) expect(p.unlocked).toContain(id);
     for (const id of role.order.filter(id => !old.includes(id))) {
       expect(p.best[id]).toBeUndefined();
@@ -52,7 +52,7 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
       localStorage.removeItem(`pianoball.${role.storageKey}`);
       localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: [id, next], best: { [id]: legacy } }));
       const p = loadProgress(role.storageKey, role.order);
-      expect(p.best[id], id).toEqual(record);
+      expect(p.best[id] ?? p.previousBest?.[id], id).toEqual(record);
       expect(p.unlocked).toContain(next);
     }
   });
@@ -64,8 +64,8 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: old, best }));
     const p = loadProgress(role.storageKey, role.order);
     for (const id of old) {
-      expect(p.best[id].passed, id).toBe(true);
-      expect(p.best[id].score).toBe(12345);
+      expect((p.best[id] ?? p.previousBest?.[id])?.passed, id).toBe(true);
+      expect((p.best[id] ?? p.previousBest?.[id])?.score).toBe(12345);
       expect(p.unlocked).toContain(id);
     }
     // New material remains earnable; old completions don't fabricate new scores.

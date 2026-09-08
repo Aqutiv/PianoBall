@@ -12,6 +12,12 @@ export interface ChartNote {
   len: number;
   /** MIDI note, as authored. `fitToRange` moves it by whole octaves. */
   note: number;
+  /** Automatic performance only: linear peak gain (0..1). */
+  gain?: number;
+  /** Automatic attack, in beats. Omitted uses the written-note default. */
+  attack?: number;
+  /** Audible duration in beats, independent of the player's graded hold. */
+  soundingLen?: number;
 }
 
 /** One chord the game plays underneath, in the tune's own scale degrees. */
@@ -46,21 +52,15 @@ export interface Tune {
   scaleId: ScaleName;
   melody: ChartNote[];
   chords: ChartChord[];
+  /** Exact automatic accompaniment; the playable Backing reduction is independent. */
+  backingNotes?: ChartNote[];
   /** How the bed plays those chords: the rhythm, not the harmony. */
   accompaniment: CompPattern;
-  /**
-   * What the keys sound like, and what the bed sounds like under them.
-   *
-   * Both are left out rather than defaulted here, because the absence carries
-   * the rule: a tune that names no instrument is a tune with nothing to name,
-   * and gets the sound the app makes everywhere else. Für Elise names a piano
-   * and Twinkle names a music box; the originals name neither, so they say
-   * nothing and keep the voice PianoBall has always had.
-   */
+  /** Authored instruments. Omitted values retain the app's default voices. */
   voiceId?: string;
   bedVoiceId?: string;
   /**
-   * Chord tones from outside `scaleId` this tune means to use, as semitones
+   * Written melody, accompaniment or chord tones from outside `scaleId` this tune means to use, as semitones
    * above the tonic.
    *
    * Borrowing is normal — a minor tune raises its seventh at a cadence, and
@@ -76,8 +76,19 @@ export interface Tune {
 /** Beat the last note finishes on. */
 export function lastBeat(tune: Tune): number {
   let end = 0;
-  for (const n of tune.melody) end = Math.max(end, n.beat + n.len);
+  for (const n of [...tune.melody, ...(tune.backingNotes ?? [])]) {
+    end = Math.max(end, n.beat + n.len);
+  }
   for (const c of tune.chords) end = Math.max(end, c.beat + c.len);
+  return end;
+}
+
+/** Last audible score event, including performance tails but no graded holds. */
+export function soundingEndBeat(tune: Tune): number {
+  let end = lastBeat(tune);
+  for (const notes of [tune.melody, tune.backingNotes ?? []]) {
+    for (const n of notes) end = Math.max(end, n.beat + (n.soundingLen ?? n.len));
+  }
   return end;
 }
 
@@ -130,9 +141,26 @@ export function fitted(notes: readonly ChartNote[], semitones: number): ChartNot
     .sort((a, b) => a.beat - b.beat || a.note - b.note);
 }
 
+/** Validate automatic annotations without applying the player's density/range limits. */
+export function performanceProblems(notes: readonly ChartNote[], label = 'notes'): string[] {
+  const problems: string[] = [];
+  let previous = -Infinity;
+  for (const [i, n] of notes.entries()) {
+    const at = `${label}[${i}]`;
+    if (!Number.isFinite(n.beat) || n.beat < 0 || n.beat > 65_536 || n.beat < previous) problems.push(`${at}: invalid or unordered beat`);
+    if (!Number.isFinite(n.len) || n.len < 0.001 || n.len > 1_024) problems.push(`${at}: invalid length`);
+    if (!Number.isInteger(n.note) || n.note < 0 || n.note > 127) problems.push(`${at}: invalid MIDI note`);
+    if (n.gain !== undefined && (!Number.isFinite(n.gain) || n.gain < 0 || n.gain > 1)) problems.push(`${at}: gain must be within [0, 1]`);
+    if (n.soundingLen !== undefined && (!Number.isFinite(n.soundingLen) || n.soundingLen < 0.001 || n.soundingLen > 1_024)) problems.push(`${at}: invalid sounding length`);
+    if (n.attack !== undefined && (!Number.isFinite(n.attack) || n.attack < 0 || n.attack > (n.soundingLen ?? n.len))) problems.push(`${at}: attack must fit the sounding length`);
+    previous = n.beat;
+  }
+  return problems;
+}
+
 /** Chart problems, as human-readable lines. Empty means the tune is sound. */
 export function validate(tune: Tune): string[] {
-  const problems: string[] = [];
+  const problems = [...performanceProblems(tune.melody, 'melody'), ...performanceProblems(tune.backingNotes ?? [], 'backing')];
   const scale = SCALES[tune.scaleId] as readonly number[] | undefined;
   if (!scale) problems.push(`unknown scale "${tune.scaleId}"`);
   if (!COMP_PATTERNS.includes(tune.accompaniment)) {
