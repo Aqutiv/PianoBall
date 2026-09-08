@@ -279,13 +279,14 @@ describe('ModeBase subscriptions', () => {
  * caches from settings has to be able to hear that the settings moved.
  */
 describe('playtune role', () => {
-  it('switches between held backing, articulated backing, and melody without leaking voices', () => {
+  it('switches between original backing, classic backing, and melody without leaking voices', () => {
     const { mode, engine } = playtuneRig();
     mode.enter();
     mode.setRole('chords');
-    expect(mode.start('drift')).toBe(true);
-    expect(engine.keyVoicing).toBe('bed');
-    expect(engine.keyBedVoice).toBe('glass-pad');
+    expect(mode.start('hopscotch')).toBe(true);
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe('felt-piano');
+    expect(engine.bedVoice).toBe('bed-electric-piano');
     expect(mode.start('twinkle')).toBe(true);
     expect(engine.keyVoicing).toBe('lead');
     expect(engine.leadVoice).toBe('felt-piano');

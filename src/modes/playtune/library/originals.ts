@@ -1,10 +1,11 @@
+import { HOPSCOTCH } from './hopscotch';
 import type { Tune } from '../chart';
 import { line, progression, merge, harmonise, shift } from './notation';
 
 // Middle C is 60. These are written where they read best; `fitToRange` moves
 // each chart by whole octaves onto whatever keyboard is actually plugged in.
 const D4 = 62, E4 = 64, F4 = 65, G4 = 67, A4 = 69, Bb4 = 70, C5 = 72;
-const D5 = 74, E5 = 76, F5 = 77, A5 = 81;
+const D5 = 74;
 
 /**
  * Three notes, four square bars, nothing syncopated.
@@ -50,60 +51,6 @@ export const FIRST_LIGHT: Tune = {
     [3, 'min', 2], [1, 'maj', 2],
     [0, 'min', 4],
     [0, 'min', 4],
-  ]),
-};
-
-/**
- * Long notes on a five-note scale, where the only difficulty is patience.
- *
- * Everything before this rewards hitting; this one rewards holding, so the
- * sustain tail has somewhere to be learned before a tune depends on it. The bed
- * is the one place in the library that stays a slow swell: a chord comping
- * along in time would be counting the note for the player.
- *
- * The only original that names an instrument, and it names one for the same
- * reason: glass still rings while the key is down. A mallet voice would decay
- * to nothing inside the first bar and the tune would be teaching a hold the
- * player cannot hear themselves holding.
- */
-export const DRIFT: Tune = {
-  id: 'drift',
-  title: 'Drift',
-  composer: 'PianoBall',
-  origin: 'original',
-  difficulty: 2,
-  teaches: 'Hold the key for the whole tail.',
-  bpm: 64,
-  beatsPerBar: 4,
-  root: D4,
-  scaleId: 'kumoi',
-  accompaniment: 'sustain',
-  voiceId: 'glass',
-  bedVoiceId: 'glass-pad',
-  // Kumoi is D E F A B: no C at all. The harmony wants one — it is what makes
-  // an F major an F major and a D minor seventh a seventh — and nothing else
-  // from outside the scale is allowed in.
-  borrows: [10],
-  pass: 0.6,
-  melody: line([
-    [A4, 4], [E4, 4],
-    [D5, 8],
-    [F5, 4], [E5, 4],
-    [D5, 8],
-    [A5, 4], [F5, 4],
-    [E5, 8],
-    [D5, 4], [A4, 4],
-    [D4, 8],
-  ]),
-  chords: progression([
-    [0, 'min', 4], [0, 'min', 4],
-    [2, 'maj', 4], [2, 'maj', 4],
-    [1, 'sus4', 4], [1, 'sus4', 4],
-    [0, 'min7', 4], [0, 'min7', 4],
-    [3, 'min', 4], [2, 'maj', 4],
-    [1, 'sus4', 4], [1, 'sus4', 4],
-    [0, 'min', 4], [3, 'min', 4],
-    [0, 'min', 4], [0, 'min', 4],
   ]),
 };
 
@@ -164,4 +111,4 @@ export const TWO_HANDS: Tune = {
   chords: [...TWO_HANDS_CHORDS, ...shift(TWO_HANDS_CHORDS, 32)],
 };
 
-export const ORIGINALS: Tune[] = [FIRST_LIGHT, DRIFT, TWO_HANDS];
+export const ORIGINALS: Tune[] = [FIRST_LIGHT, HOPSCOTCH, TWO_HANDS];

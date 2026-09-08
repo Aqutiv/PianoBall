@@ -30,7 +30,7 @@ describe('Backing access migration', () => {
     const p = load();
     expect(p.best).toEqual({});
     expect(p.unlocked).toHaveLength(6);
-    expect(p.unlocked).toEqual(expect.arrayContaining(['chord-ground','drift','chord-march',...CHORD_ORDER.slice(0,3)]));
+    expect(p.unlocked).toEqual(expect.arrayContaining(['chord-ground','hopscotch','chord-march',...CHORD_ORDER.slice(0,3)]));
     expect(p.unlockCredit).toBe(3);
     expect(read(source)).toBe(before);
     expect(load()).toEqual(p);
@@ -52,15 +52,15 @@ describe('Backing access migration', () => {
     write(CHORD_STORE, { unlocked: ['the-entertainer','chord-three','first-light','two-hands','drift'], best: {} });
     const p = load();
     expect(p.unlocked).toContain('the-entertainer');
-    expect(p.unlocked).toContain('drift');
+    expect(p.unlocked).toContain('hopscotch');
     expect(p.unlocked.slice(0,3)).toEqual(CHORD_ORDER.slice(0,3));
     const before = p.unlocked.length;
     const next = CHORD_ORDER.find(id => !p.unlocked.includes(id));
-    expect(recordRun(BACKING_STORE,p,'drift',CHORD_ORDER,pass).unlocked).toBe(next);
+    expect(recordRun(BACKING_STORE,p,'hopscotch',CHORD_ORDER,pass).unlocked).toBe(next);
     expect(p.unlocked).toHaveLength(before+1);
   });
   it('caps fully unlocked old access at nineteen without fabricating achievements', () => {
-    write(CHORD_STORE, { unlocked: [...CHORD_ORDER,'chord-three','first-light','two-hands'], best: {} });
+    write(CHORD_STORE, { unlocked: [...CHORD_ORDER.map(id => id === 'hopscotch' ? 'drift' : id),'chord-three','first-light','two-hands'], best: {} });
     const p = load();
     expect(p.unlocked).toEqual(CHORD_ORDER);
     expect(p.unlockCredit).toBe(16);
@@ -96,13 +96,13 @@ describe('Backing access migration', () => {
   it('resets import credit and rejects stale scores and credit after reset', () => {
     write(CHORD_STORE, { unlocked: CHORD_ORDER, best: {} });
     const stale=load();
-    recordRun(BACKING_STORE,stale,'drift',CHORD_ORDER,pass);
+    recordRun(BACKING_STORE,stale,'hopscotch',CHORD_ORDER,pass);
     const fresh=resetProgress(BACKING_STORE,CHORD_ORDER);
     expect(fresh).toEqual({ unlocked: CHORD_ORDER.slice(0,3), best: {}, epoch: 1, unlockCredit: 0 });
     recordRun(BACKING_STORE,stale,CHORD_ORDER[0],CHORD_ORDER,pass);
     expect(load().unlocked).toHaveLength(4);
     expect(load().unlockCredit).toBe(0);
-    expect(load().best.drift).toBeUndefined();
+    expect(load().best.hopscotch).toBeUndefined();
     expect(read(CHORD_STORE)).not.toBeNull();
   });
 });

@@ -3,6 +3,8 @@ import type { ScaleName } from '../../audio/music';
 import { SCALES, chordNotes, degreeToNote, inScale } from '../../audio/music';
 import { COMP_PATTERNS, type CompPattern } from '../../audio/comp';
 import { BED_VOICES, LEAD_VOICES } from '../../audio/voices';
+import type { DrumVoice } from '../../audio/drums';
+import { rhythmProblems } from './rhythm';
 
 /** One note the player is asked to play. Simultaneous beats form a chord. */
 export interface ChartNote {
@@ -20,6 +22,28 @@ export interface ChartChord {
   len: number;
   degree: number;
   quality: ChordQuality;
+}
+
+/** A Freestyle drum pattern repeated over part of an authored arrangement. */
+export interface RhythmSection {
+  beat: number;
+  len: number;
+  patternId: string;
+  gain: number;
+}
+
+/** One authored drum accent, fill note, or ending hit. */
+export interface RhythmHit {
+  beat: number;
+  voice: DrumVoice;
+  gain: number;
+}
+
+export interface TuneRhythm {
+  /** Sorted, non-overlapping sections; gaps are intentional rests. */
+  sections: RhythmSection[];
+  /** Explicit hits replace the same voice at the same beat in a pattern. */
+  hits?: RhythmHit[];
 }
 
 export interface Tune {
@@ -46,6 +70,10 @@ export interface Tune {
   scaleId: ScaleName;
   melody: ChartNote[];
   chords: ChartChord[];
+  /** The exact accompaniment, shared with the playable backing chart. */
+  backingNotes?: ChartNote[];
+  /** Optional drums, played from the same beat clock in either role. */
+  rhythm?: TuneRhythm;
   /** How the bed plays those chords: the rhythm, not the harmony. */
   accompaniment: CompPattern;
   /**
@@ -54,8 +82,8 @@ export interface Tune {
    * Both are left out rather than defaulted here, because the absence carries
    * the rule: a tune that names no instrument is a tune with nothing to name,
    * and gets the sound the app makes everywhere else. Für Elise names a piano
-   * and Twinkle names a music box; the originals name neither, so they say
-   * nothing and keep the voice PianoBall has always had.
+   * and Twinkle names a music box; a tune that names neither says
+   * nothing and keeps the voice PianoBall has always had.
    */
   voiceId?: string;
   bedVoiceId?: string;
@@ -78,6 +106,7 @@ export function lastBeat(tune: Tune): number {
   let end = 0;
   for (const n of tune.melody) end = Math.max(end, n.beat + n.len);
   for (const c of tune.chords) end = Math.max(end, c.beat + c.len);
+  for (const n of tune.backingNotes ?? []) end = Math.max(end, n.beat + n.len);
   return end;
 }
 
@@ -174,6 +203,16 @@ export function validate(tune: Tune): string[] {
     if (c.beat < prevChord) problems.push(`chords are not sorted at beat ${c.beat}`);
     prevChord = c.beat;
   }
+
+  let prevBacking = -1;
+  for (const n of tune.backingNotes ?? []) {
+    if (!Number.isFinite(n.beat) || n.beat < 0) problems.push(`backing note at beat ${n.beat} is outside the chart`);
+    if (!Number.isFinite(n.len) || n.len <= 0) problems.push(`backing note at beat ${n.beat} has no length`);
+    if (!Number.isInteger(n.note) || n.note < 0 || n.note > 127) problems.push(`backing note ${n.note} is outside MIDI`);
+    if (n.beat < prevBacking) problems.push(`backing is not sorted at beat ${n.beat}`);
+    prevBacking = n.beat;
+  }
+  if (tune.rhythm) problems.push(...rhythmProblems(tune.rhythm, tune.beatsPerBar, lastBeat(tune)));
 
   // A melody with no harmony under it is allowed; one where the player is
   // asked to hold six keys at once is not.
