@@ -105,4 +105,3 @@ Full-entry fingerprints compare all 38 role/ID pairs against the final compiled 
 | Minuet in G | Backing | Pass | -17.6 | -13.1 | [Player](../.shots/musicality/current_chords_minuet-in-g_player.wav) | [Automatic](../.shots/musicality/current_chords_minuet-in-g_automatic.wav) | [Combined](../.shots/musicality/current_chords_minuet-in-g_combined.wav) |
 | Jesu, Joy of Man’s Desiring | Backing | Pass | -16.6 | -15.3 | [Player](../.shots/musicality/current_chords_jesu-joy_player.wav) | [Automatic](../.shots/musicality/current_chords_jesu-joy_automatic.wav) | [Combined](../.shots/musicality/current_chords_jesu-joy_combined.wav) |
 | The Entertainer | Backing | Pass | -16.3 | -14.8 | [Player](../.shots/musicality/current_chords_the-entertainer_player.wav) | [Automatic](../.shots/musicality/current_chords_the-entertainer_automatic.wav) | [Combined](../.shots/musicality/current_chords_the-entertainer_combined.wav) |
-

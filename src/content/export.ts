@@ -7,6 +7,7 @@ import { chordProblems } from '../modes/playtune/chords';
 import { ALL_TUNES } from '../modes/playtune/library';
 import { CHORD_CURVE } from '../modes/playtune/library/chordcurve';
 import { ROLES, type TuneRole } from '../modes/playtune/role';
+import { rhythmEvents } from '../modes/playtune/rhythm';
 import {
   ROLE_ORDER, array, identifier, number, requireValue, validateCatalog, validateCourse, validatePlayerNotes,
   type BackingEventV1, type CatalogV1, type CourseEntryV1, type Provenance,
@@ -102,6 +103,10 @@ export function compileCatalog(
       validateCourse(entry, path);
       // Own the wire arrays. Never sort/mutate the authored charts.
       entry.playerNotes = entry.playerNotes.map(({ beat, len, note }) => ({ beat, len, note }));
+      if (tune.rhythm !== undefined) {
+        entry.drumEvents = rhythmEvents(tune.rhythm, tune.pickup ?? 0)
+          .map(({ beat, voice, gain }) => ({ beat, voice, gain }));
+      }
       const backing = role.backing(tune);
       validateChords(backing.chords, `${path}.backing.chords`);
       requireValue(COMP_PATTERNS.includes(backing.pattern), `${path}.backing.pattern`, 'unknown accompaniment');

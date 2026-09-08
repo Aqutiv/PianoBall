@@ -63,16 +63,3 @@ export function harmonicBass(tune: Tune): ChartNote[] {
   return tune.chords.flatMap(c => pitches(tune, c.beat, 'bass')
     .map(note => ({ beat: c.beat, len: c.len, note })));
 }
-
-/** Drift's held shells use root position to keep the foundation in the chord. */
-export function heldHarmony(tune: Tune): ChartNote[] {
-  const out: ChartNote[] = [];
-  for (const c of tune.chords) {
-    const root = degreeToNote(c.degree, tune.root, SCALES[tune.scaleId]);
-    const notes = chordNotes(48 + root % 12, c.quality);
-    for (const note of notes.length === 4 ? [notes[0], notes[1], notes[3]] : notes) {
-      out.push({ beat: c.beat, len: c.len, note });
-    }
-  }
-  return out.sort((a, b) => a.beat - b.beat || a.note - b.note);
-}

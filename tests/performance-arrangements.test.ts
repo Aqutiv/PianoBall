@@ -59,6 +59,21 @@ describe('independent authored performances', () => {
     bed.stop();
   });
 
+  it('exports expression and owned rhythm together without making audible tails extend the drum chart', () => {
+    const tune = fixture();
+    tune.rhythm = { sections: [], hits: [{ beat: 3.5, voice: 'rim', gain: .2 }] };
+    const entries = compileCatalog(undefined, courses(tune)).entries;
+    for (const entry of entries) expect(entry.drumEvents).toEqual(tune.rhythm.hits);
+    expect(entries[0].backingEvents.at(-1)).toMatchObject({ beat: 3, len: 3, gain: .02, part: 'chord' });
+    expect(entries[1].backingEvents[0]).toMatchObject({ len: 1.2, gain: .08, attack: .01, part: 'melody' });
+    expect(entries[0].playerNotes[0].len).toBe(1);
+    expect(lastBeat(tune)).toBe(4);
+    expect(soundingEndBeat(tune)).toBe(6);
+    tune.rhythm.hits![0].beat = 4.5;
+    expect(validate(tune)).toContain('rhythm hit at beat 4.5 is outside the chart');
+    expect(() => compileCatalog(undefined, courses(tune))).toThrow(/rhythm hit/);
+  });
+
   it.each([
     { gain: NaN }, { gain: 1.1 }, { gain: -1 }, { attack: Infinity }, { attack: -1 },
     { attack: 3 }, { soundingLen: 0 }, { soundingLen: Infinity }, { soundingLen: 1025 },

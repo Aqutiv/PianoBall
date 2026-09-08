@@ -14,6 +14,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 const record = { accuracy: 0.73, score: 12345, grade: null, plays: 4, passed: true } as const;
 const pass = { accuracy: 0.9, score: 15000, grade: 'A', passed: true } as const;
+const currentId = (id: string) => id === 'drift' ? 'hopscotch' : id;
 
 for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () => {
   const legacyKey = role.id === 'melody' ? 'playtune' : 'playchords';
@@ -36,8 +37,9 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked, best, epoch: 7 }));
     const p = loadProgress(role.storageKey, role.order);
     expect(p.epoch).toBe(7);
-    expect({ ...p.previousBest, ...p.best }).toEqual(best);
-    for (const id of unlocked) expect(p.unlocked).toContain(id);
+    expect({ ...p.previousBest, ...p.best }).toEqual(Object.fromEntries(Object.entries(best).filter(([id]) => id !== 'drift')));
+    expect(p.retiredPasses).toEqual(best.drift ? ['drift'] : undefined);
+    for (const id of unlocked) expect(p.unlocked).toContain(currentId(id));
     for (const id of role.order.filter(id => !old.includes(id))) {
       expect(p.best[id]).toBeUndefined();
     }
@@ -52,8 +54,11 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
       localStorage.removeItem(`pianoball.${role.storageKey}`);
       localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: [id, next], best: { [id]: legacy } }));
       const p = loadProgress(role.storageKey, role.order);
-      expect(p.best[id] ?? p.previousBest?.[id], id).toEqual(record);
-      expect(p.unlocked).toContain(next);
+      if (id === 'drift') {
+        expect(p.retiredPasses).toEqual(['drift']);
+        expect(p.best.hopscotch).toBeUndefined();
+      } else expect(p.best[id] ?? p.previousBest?.[id], id).toEqual(record);
+      expect(p.unlocked).toContain(currentId(next));
     }
   });
 
@@ -64,9 +69,15 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked: old, best }));
     const p = loadProgress(role.storageKey, role.order);
     for (const id of old) {
-      expect((p.best[id] ?? p.previousBest?.[id])?.passed, id).toBe(true);
-      expect((p.best[id] ?? p.previousBest?.[id])?.score).toBe(12345);
-      expect(p.unlocked).toContain(id);
+      if (id === 'drift') {
+        expect(p.retiredPasses).toEqual(['drift']);
+        expect(p.best.drift).toBeUndefined();
+        expect(p.best.hopscotch).toBeUndefined();
+      } else {
+        expect((p.best[id] ?? p.previousBest?.[id])?.passed, id).toBe(true);
+        expect((p.best[id] ?? p.previousBest?.[id])?.score).toBe(12345);
+      }
+      expect(p.unlocked).toContain(currentId(id));
     }
     // New material remains earnable; old completions don't fabricate new scores.
     for (const id of role.order) if (!old.includes(id)) {
@@ -100,7 +111,7 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     const p = loadProgress(role.storageKey, role.order);
     recordRun(role.storageKey, p, id, role.order, { accuracy: 0.1, score: 20, grade: null, passed: false });
     expect(p.best[id]).toEqual({ ...record, plays: 5 });
-    for (const unlocked of old) expect(p.unlocked).toContain(unlocked);
+    for (const unlocked of old) expect(p.unlocked).toContain(currentId(unlocked));
     const other = Object.values(ROLES).find(r => r.id !== role.id)!;
     expect(loadProgress(other.storageKey, other.order).best).toEqual({});
   });

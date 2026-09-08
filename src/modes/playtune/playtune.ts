@@ -12,6 +12,7 @@ import { fitToRange, fitted, lastBeat, soundingEndBeat } from './chart';
 import { mergedChords } from './chords';
 import { HOLD_FLOOR, Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
 import { Transport } from './transport';
+import { TuneDrums } from './rhythm';
 import { AuraStage } from './render';
 import { TuneHud } from './hud';
 import { findTune } from './library';
@@ -105,6 +106,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private readonly deck = new KeyDeck();
   private readonly auras: AuraStage;
   private readonly transport = new Transport();
+  private readonly drums: TuneDrums;
   private readonly panel: TuneHud;
   private readonly scoring = new Scoring();
   private readonly ctx: ModeContext;
@@ -141,6 +143,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
+    this.drums = new TuneDrums(ctx.audio);
     this.auras = new AuraStage(ctx.stage, this.deck);
     this.panel = new TuneHud(ctx.hud);
     this.roleId = playTuneSettings().role;
@@ -329,6 +332,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       backing.notes, t,
     );
     this.ctx.bed.start();
+    this.drums.start(tune.rhythm, t, tune.pickup ?? 0);
 
     this.panel.setTune(tune, this.roleId === 'chords' ? this.role.card(tune).teaches : undefined);
     this.ctx.hud.banner(tune.title, 1.6);
@@ -347,7 +351,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
    *
    * `stopPads` rather than trusting the bed to have cleared: `ChordBed.stop`
    * fades the pad *bus*, and `start` turns it back up. A chord already handed
-   * to the engine is still ringing behind that fade — Drift's swell is nearly
+   * to the engine is still ringing behind that fade — a long swell can last
    * four seconds — so choosing another tune quickly would raise the last one's
    * tail back up, in the last one's timbre, under the new one's first bar.
    *
@@ -371,6 +375,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   private stopRun(): void {
     this.transport.stop();
+    this.drums.stop();
     this.ctx.bed.clearTracks();
     // Stopped, not merely detached: leaving the scheduler running drops the bed
     // back onto the current scale's own loop, which then plays over whatever
@@ -414,6 +419,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const judge = this.judge;
     this.phase = 'finished';
     this.transport.stop();
+    this.drums.stop();
     this.ctx.bed.clearTracks();
     this.ctx.bed.stop();
     if (!tune || !judge) return;

@@ -2,7 +2,8 @@ import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } 
 import type { Tune } from '../chart';
 import { ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
   FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY } from './classics';
-import { FIRST_LIGHT, DRIFT, TWO_HANDS } from './originals';
+import { FIRST_LIGHT, TWO_HANDS } from './originals';
+import { HOPSCOTCH } from './hopscotch';
 import { STUDIES } from './studies';
 
 /**
@@ -19,7 +20,7 @@ export const LIBRARY: Tune[] = [
   FRERE_JACQUES,
   AMAZING_GRACE,
   SCARBOROUGH_FAIR,
-  DRIFT,
+  HOPSCOTCH,
   DRUNKEN_SAILOR,
   GREENSLEEVES,
   FUR_ELISE,

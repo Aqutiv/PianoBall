@@ -212,7 +212,7 @@ than stared at:
 | 4 | Frère Jacques | Repeated phrases and the low bell motif |
 | 5 | Amazing Grace | Counting in three, starting before the bar |
 | 6 | Scarborough Fair | A minor mode that is not quite minor |
-| 7 | Drift | Holding a key for the whole tail |
+| 7 | Hopscotch | A playful Dorian hook, held answers, and a drum groove |
 | 8 | Drunken Sailor | Repeated notes, minor melody, and an answering chorus |
 | 9 | Greensleeves | A lilting six, and a note from outside the key |
 | 10 | Für Elise | Alternating semitones at speed |
@@ -230,7 +230,7 @@ than stared at:
 Bass notes, chord answers, broken chords and phrase rests follow a separate
 19-track course. Frère Jacques, Ode to Joy and Ground are open first; each first
 pass opens one more. Ground introduces root-and-fifth bass movement, Off the
-Beat teaches bass-and-chord alternation, and Drift keeps its sustained harmony.
+Beat teaches bass-and-chord alternation, and Hopscotch adds held and delayed chord answers over a drum groove.
 Three Ways Home is retired; First Light and Two Hands remain in Melody.
 
 All sixteen familiar pieces have compact accompaniment reductions: Gymnopédie
@@ -238,17 +238,25 @@ puts a bass note on one and a seventh shell on two, Für Elise leaves room for
 the melody between broken-chord gestures, and The Entertainer keeps a ragtime
 bass and chord pattern under the syncopation. Every backing chart fits the
 standard 25-key C-to-C mapping, with at most three notes held together within
-an octave. Articulated parts use Felt Piano; Drift uses Glass Pad. The game
-plays only the melody, so your bass and harmony are audible contributions.
+an octave. Backing parts use Felt Piano. The game supplies the melody and,
+for Hopscotch, drums; your bass and harmony complete the arrangement.
+Hopscotch replaces Drift at level 2 in both courses, with 35 whole-beat melody
+attacks over 16 bars at 84 BPM. Its D Dorian hook, Freestyle pop/offbeat patterns,
+phrase fill, and exact authored backing are shared between the two roles.
+Existing Drift access and earned unlocks carry over; Hopscotch starts with fresh scores.
 Levels 1–5 require 55%, 60%, 63%, 67% and 70% accuracy respectively.
 
 Historical editions, selected passages, beat units, instrument choices and the
 public-domain basis for the US, UK, EU and Israel are in the
 [source ledger](docs/tune-sources.md). Playback is synthesized from our own
 reductions; no recordings, downloaded MIDI, modern arrangements or lyrics ship.
-Melody progress is unchanged. Backing imports earned song access once from the
-previous chord course into its own store, while scores and passes start fresh
-for the revised arrangements. Retired tracks still count toward imported
+The musicality upgrade imports each current course once into an isolated store,
+accepting both the Hopscotch release and earlier musicality saves. Bests from
+changed playable arrangements are archived separately; accompaniment-only edits
+retain their bests. Historical and current passes count once per retained track.
+Drift unlocks become Hopscotch unlocks, and a retired Drift pass retains its
+earned access without becoming a Hopscotch score. Earlier chord saves still
+import access into Backing with fresh performance scores. Retired tracks still count toward imported
 access. The first new pass opens the earliest locked song; repeats do not earn
 another unlock. Old chord saves remain separate and untouched. Resetting
 Backing returns to three open songs without importing the old save again.

@@ -139,8 +139,8 @@ describe('the tune library', () => {
     // tune's thirty-seven notes are longer than a beat, so letting go of each
     // as the next arrived took them all to the hold floor, and 0.75 of that
     // was 68.9% against a 70% mark. Playing detached is a style, not an error,
-    // and Greensleeves is not a tune about holding — unlike Drift, which is,
-    // and which should still fail a run that holds nothing.
+    // and Greensleeves is not a tune about holding — unlike the hold studies,
+    // which still reward carrying each note through its tail.
     const tune = findTune('greensleeves')!;
     const judge = playedWell(tune, { release: true });
     judge.finish();
@@ -232,12 +232,13 @@ describe('the tune library', () => {
     }
   });
 
-  it('uses matching piano parts for the originals and glass for Drift', () => {
+  it('uses matching piano parts for the originals and electric piano for Hopscotch', () => {
     for (const id of ['first-light', 'two-hands']) {
       expect(findTune(id)!.voiceId).toBe('grand');
       expect(findTune(id)!.bedVoiceId).toBe('bed-felt-piano');
     }
-    expect(findTune('drift')!.bedVoiceId).toBe('glass-pad');
+    expect(findTune('hopscotch')!.voiceId).toBe('electric-piano');
+    expect(findTune('hopscotch')!.bedVoiceId).toBe('bed-felt-piano');
     expect(DEFAULT_LEAD_VOICE).toBe('grand');
     expect(DEFAULT_BED_VOICE).toBe('warm');
   });

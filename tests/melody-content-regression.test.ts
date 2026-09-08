@@ -15,16 +15,31 @@ function signature(e: CourseEntryV1) {
     pickup: e.pickup, pass: e.pass, notes: e.playerNotes.map(({ beat, len, note }) => ({ beat, len, note })) })).digest('hex');
 }
 
-it('preserves every track ID, role and course position from 9840971', () => {
+it('replaces retired Drift with new Hopscotch at the same course positions', () => {
   const entries = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null }).entries;
-  expect(entries.map(({ id, role }) => ({ id, role }))).toEqual(previous.entries.map(({ id, role }) => ({ id, role })));
+  const expectedPositions = previous.entries.map(({ id, role }) => ({ id: id === 'drift' ? 'hopscotch' : id, role }));
+  expect(entries.map(({ id, role }) => ({ id, role }))).toEqual(expectedPositions);
+  expect(entries.filter(e => !previous.entries.some(p => p.id === e.id && p.role === e.role))
+    .map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: 'hopscotch', role: 'melody' }, { id: 'hopscotch', role: 'chords' },
+    ]);
+  expect(previous.entries.filter(p => !entries.some(e => p.id === e.id && p.role === e.role))
+    .map(({ id, role }) => ({ id, role }))).toEqual([
+      { id: 'drift', role: 'melody' }, { id: 'drift', role: 'chords' },
+    ]);
   expect(new Set(entries.map(e => e.id)).size).toBe(21);
 });
 
-it('archives exactly the roles with changed playable notes, rhythm, tempo or pass marks', () => {
+it('archives changed retained roles without inventing an old Hopscotch signature', () => {
   const entries = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null }).entries;
   for (const role of ['melody', 'chords'] as const) {
-    const changed = entries.filter(e => e.role === role && signature(e) !== previous.entries.find(p => p.id === e.id && p.role === role)!.signature).map(e => e.id).sort();
+    const changed = entries.filter(e => e.role === role).flatMap(e => {
+      const old = previous.entries.find(p => p.id === e.id && p.role === role);
+      // New repertoire has no old performance to invalidate. Replacement access
+      // and retired Drift records are covered by the separate migration tests.
+      if (!old) { expect(e.id).toBe('hopscotch'); return []; }
+      return signature(e) === old.signature ? [] : [e.id];
+    }).sort();
     expect([...(role === 'melody' ? REVISED_MELODY_IDS : REVISED_BACKING_IDS)].sort(), role).toEqual(changed);
   }
 });

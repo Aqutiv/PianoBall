@@ -1,9 +1,11 @@
 # Familiar tunes, originals and studies: musical revision
 
-Reviewed 8 September 2026. This document covers the five familiar additions,
-First Light, Drift, Two Hands, Ground and Off the Beat. These are ten of the
-21 currently listed unique tunes. Hopscotch and Three Ways Home are not current
-course entries.
+Reviewed 8 September 2026 against the pre-integration musicality catalog. This
+document covers the five familiar additions, First Light, Drift, Two Hands,
+Ground and Off the Beat. Drift was subsequently replaced on main by Hopscotch;
+its source notes below are historical. The final catalog retains Hopscotch and
+its authored rhythm; see [its composition notes](hopscotch.md). Three Ways Home
+remains retired.
 
 ## Arrangement policy
 

@@ -44,4 +44,3 @@ A public-domain composition does not authorize a modern performance recording,
 new arrangement or newly written lyrics. None is included here. The game's
 new reductions and generated playback are separate from the expired underlying
 works; this ledger makes no new licensing claim for the repository as a whole.
-

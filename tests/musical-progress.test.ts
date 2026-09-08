@@ -17,8 +17,8 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 for (const [role, key, oldKey, revised] of [
-  [ROLES.melody, MELODY_STORE, 'playtune.v2', REVISED_MELODY_IDS],
-  [ROLES.chords, BACKING_STORE, 'playbacking.v1', REVISED_BACKING_IDS],
+  [ROLES.melody, MELODY_STORE, 'playtune.v3', REVISED_MELODY_IDS],
+  [ROLES.chords, BACKING_STORE, 'playbacking.v2', REVISED_BACKING_IDS],
 ] as const) describe(`${role.id} corrected arrangement history`, () => {
   const changed = revised[0];
   const unchanged = role.order.find(id => !revised.includes(id))!;
@@ -106,4 +106,68 @@ it('prefers the latest existing predecessor, even when it is empty or corrupt', 
   expect(progress.best).toEqual({});
   expect(progress.previousBest).toBeUndefined();
   expect(progress.unlocked).toHaveLength(3);
+});
+
+
+for (const [role, key, correctedKey, upstreamKey, olderKey, revised] of [
+  [ROLES.melody, MELODY_STORE, 'playtune.musicality.v1', 'playtune.v3', 'playtune.v2', REVISED_MELODY_IDS],
+  [ROLES.chords, BACKING_STORE, 'playbacking.musicality.v1', 'playbacking.v2', 'playbacking.v1', REVISED_BACKING_IDS],
+] as const) describe(`${role.id} merged course generations`, () => {
+  const changed = revised[0];
+  const extras = role.id === 'chords' ? { unlockCredit: 0 } : {};
+
+  it('imports upstream Hopscotch scores while archiving revised charts and retaining retired credit', () => {
+    write(upstreamKey, { unlocked: role.order.slice(0, 6), epoch: 5, ...extras,
+      best: { [changed]: record, hopscotch: { ...record, plays: 2 } }, retiredPasses: ['drift'] });
+    const p = loadProgress(key, role.order);
+    expect(p.best.hopscotch).toEqual({ ...record, plays: 2 });
+    expect(p.previousBest?.[changed]).toEqual(record);
+    expect(p.best[changed]).toBeUndefined();
+    expect(p.retiredPasses).toEqual(['drift']);
+    expect(p.unlocked).toHaveLength(6);
+    expect(recordRun(key, p, changed, role.order, pass).unlocked).toBeNull();
+    expect(recordRun(key, p, 'hopscotch', role.order, pass).previous?.plays).toBe(2);
+    expect(p.unlocked).toHaveLength(6);
+    write(upstreamKey, { unlocked: [], best: {}, epoch: 100 });
+    expect(loadProgress(key, role.order)).toEqual(p);
+  });
+
+  it('keeps already-corrected bests and history while retiring Drift exactly once', () => {
+    const current = { ...record, accuracy: .8, score: 900, plays: 2 };
+    write(correctedKey, { unlocked: role.order.slice(0, 5).concat('drift'), epoch: 7, ...extras,
+      best: { [changed]: current, drift: { ...record, passed: false } },
+      previousBest: { [changed]: record, drift: record } });
+    const p = loadProgress(key, role.order);
+    expect(p.best[changed]).toEqual(current);
+    expect(p.previousBest?.[changed]).toEqual(record);
+    expect(p.best.drift).toBeUndefined();
+    expect(p.previousBest?.drift).toBeUndefined();
+    expect(p.best.hopscotch).toBeUndefined();
+    expect(p.previousBest?.hopscotch).toBeUndefined();
+    expect(p.retiredPasses).toEqual(['drift']);
+    expect(p.unlocked).toContain('hopscotch');
+    expect(p.unlocked).not.toContain('drift');
+    expect(recordRun(key, p, changed, role.order, pass).previous).toEqual(current);
+    expect(loadProgress(key, role.order)).toEqual(p);
+    write(correctedKey, { unlocked: [], best: {}, epoch: 100 });
+    write(upstreamKey, { unlocked: role.order, best: { hopscotch: record }, epoch: 101 });
+    expect(loadProgress(key, role.order)).toEqual(p);
+    resetProgress(key, role.order);
+    recordRun(key, p, role.order[0], role.order, pass);
+    expect(p.retiredPasses).toBeUndefined();
+    expect(p.previousBest).toBeUndefined();
+    expect(p.unlocked).toEqual(role.order.slice(0, 4));
+    expect(Object.keys(p.best)).toEqual([role.order[0]]);
+  });
+
+  it.each([upstreamKey, correctedKey])('treats an empty or corrupt %s as a reset boundary', source => {
+    write(olderKey, { unlocked: role.order, best: { [changed]: record }, epoch: 10, ...extras });
+    if (source === correctedKey) write(upstreamKey, {
+      unlocked: role.order, best: { hopscotch: record }, epoch: 11, ...extras });
+    write(source, { unlocked: [], best: {}, epoch: 12, ...extras });
+    expect(loadProgress(key, role.order)).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: 12, ...extras });
+    localStorage.removeItem(`pianoball.${key}`);
+    localStorage.setItem(`pianoball.${source}`, '{broken');
+    expect(loadProgress(key, role.order)).toEqual({ unlocked: role.order.slice(0, 3), best: {}, epoch: 0, ...extras });
+  });
 });

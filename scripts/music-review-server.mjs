@@ -16,7 +16,7 @@ const port=Number(args.get('port')??5174);
 const options={label:args.get('label')??'current',sampleRate:Number(args.get('sample-rate')??48000),autorun:args.has('run'),verifyRepeat:args.has('verify-repeat'),smoke:args.has('smoke')};
 if(args.has('ids'))options.ids=String(args.get('ids')).split(',');
 if(args.has('roles'))options.roles=String(args.get('roles')).split(',');
-if(!['current','baseline'].includes(options.label)||![24000,44100,48000].includes(options.sampleRate))throw Error('Expected label=current|baseline and sample-rate=24000|44100|48000');
+if(!['current','baseline','post-merge'].includes(options.label)||![24000,44100,48000].includes(options.sampleRate))throw Error('Expected label=current|baseline|post-merge and sample-rate=24000|44100|48000');
 await mkdir(output,{recursive:true});
 const vite=await createViteServer({root,server:{middlewareMode:true,host:'127.0.0.1',watch:{ignored:['**/.shots/**']},hmr:false,ws:false},appType:'custom'});
 let done;
@@ -36,12 +36,12 @@ const server=createServer(async(req,res)=>{
   try {
     if(url.pathname==='/__music_review') {res.setHeader('content-type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>PianoBall audio review</title><h1>Production audio review</h1><p id="status">Ready</p><script type="module">import("/scripts/render-music.mjs").then(m=>window.musicReview=m).catch(error=>fetch("/__music_done",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ok:false,error:String(error)})}))</script>');return;}
     if(url.pathname==='/__music_app'){
-      const html=(await readFile(path.join(root,'index.html'),'utf8')).replace('</body>','<script type="module">import {smoke} from "/scripts/render-music.mjs";smoke().then(result=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:true,smoke:result})})).catch(error=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:false,error:error.stack??String(error)})}));</script></body>');
+      const html=(await readFile(path.join(root,'index.html'),'utf8')).replace('</body>','<script type="module">import {smoke} from "/scripts/render-music.mjs";smoke('+JSON.stringify(options)+').then(result=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:true,smoke:result})})).catch(error=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:false,error:error.stack??String(error)})}));</script></body>');
       res.setHeader('content-type','text/html');res.end(await vite.transformIndexHtml('/__music_app',html));return;
     }
     if(url.pathname==='/__music_provenance'){res.setHeader('content-type','application/json');res.end(JSON.stringify(await provenance()));return;}
     if(url.pathname==='/__music_manifest'){
-      const label=url.searchParams.get('label');if(!['current','baseline'].includes(label))throw Error('Invalid manifest label');
+      const label=url.searchParams.get('label');if(!['current','baseline','post-merge'].includes(label))throw Error('Invalid manifest label');
       let prior=null;try{prior=JSON.parse(await readFile(path.join(output,label+'_render-metrics.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
       res.setHeader('content-type','application/json');res.end(JSON.stringify(prior));return;
     }

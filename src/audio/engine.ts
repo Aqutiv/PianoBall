@@ -117,6 +117,19 @@ export interface Scheduled {
   cancel(): void;
 }
 
+/** An arrangement owns its room returns as well as its dry drum sounds. */
+export interface DrumTrack extends Scheduled {
+  drum(voice: DrumVoice, gain: number, at: number): Scheduled;
+  /** Room decay after the sources end; includes a later switch to the full hall. */
+  readonly tailSeconds: number;
+}
+
+interface DrumRoute {
+  dry: AudioNode;
+  hall: AudioNode;
+  cab: AudioNode;
+}
+
 /** What a one-shot that never reached the graph hands back. */
 const NOTHING: Scheduled = { cancel() {} };
 
@@ -562,6 +575,7 @@ export class AudioEngine {
   private hallConv!: ConvolverNode;
   private cabSend!: GainNode;
   private cabWet!: GainNode;
+  private readonly drumTracks = new Set<{ hall: ConvolverNode; cancel(): void }>();
   /** The soundboard: a plate every note can be sent through and answered by. */
   private bodySend!: GainNode;
   private bodyWet!: GainNode;
@@ -693,6 +707,7 @@ export class AudioEngine {
   private build(ctx: AudioContext): void {
     // Impulse responses are rendered at the context's sample rate, so nothing
     // rendered for a previous context may be carried into this one.
+    for (const track of this.drumTracks) track.cancel();
     this.rooms.clear();
     // The master chain. One compressor, and only one: Chromium's carries six
     // milliseconds of look-ahead, which this chain already pays once, and a
@@ -1281,7 +1296,9 @@ export class AudioEngine {
     g.linearRampToValueAtTime(0, ctx.currentTime + HALL_SWAP);
     setTimeout(() => {
       if (!this.ctx || !this.ready || token !== this.swapping) return;
-      this.hallConv.buffer = this.room(spec);
+      const buffer = this.room(spec);
+      this.hallConv.buffer = buffer;
+      for (const track of this.drumTracks) track.hall.buffer = buffer;
       const t = this.ctx.currentTime;
       holdAtTime(g, t);
       g.linearRampToValueAtTime(REVERB_MAX * this.settings.reverb, t + HALL_SWAP);
@@ -2555,6 +2572,68 @@ export class AudioEngine {
    * on a step that has not arrived yet.
    */
   drum(voice: DrumVoice, gain = 1, at = 0): Scheduled {
+    return this.drumOn(voice, gain, at, {
+      dry: this.musicBus, hall: this.hallSend, cab: this.cabSend,
+    });
+  }
+
+  /**
+   * A finite arrangement's drums, with one pair of rooms for the whole run.
+   * Fading a send cannot stop sound already inside a shared convolver. These
+   * returns have their own gates after convolution, so cancelling the track
+   * also takes back its room without disturbing another instrument's tail.
+   * Existing music/reverb/master faders stay downstream and remain live.
+   */
+  createDrumTrack(): DrumTrack {
+    const ctx = this.ctx;
+    if (!ctx || !this.ready) return { drum: () => NOTHING, cancel() {}, tailSeconds: 0 };
+    const dry = ctx.createGain();
+    const hall = ctx.createConvolver();
+    const cab = ctx.createConvolver();
+    hall.buffer = this.room(this.lite ? HALL_LITE : HALL);
+    cab.buffer = this.room(CAB);
+    const hallOut = ctx.createGain();
+    const cabOut = ctx.createGain();
+    dry.connect(this.musicBus);
+    hall.connect(hallOut).connect(this.hallWet);
+    cab.connect(cabOut).connect(this.cabWet);
+    const route: DrumRoute = { dry, hall, cab };
+    let cancelled = false;
+    const cleanup = () => {
+      for (const node of [dry, hall, cab, hallOut, cabOut]) node.disconnect();
+    };
+    const owned = {
+      hall,
+      cancel: () => {
+        if (cancelled) return;
+        cancelled = true;
+        this.drumTracks.delete(owned);
+        if (ctx.state === 'closed') { cleanup(); return; }
+        for (const gate of [dry, hallOut, cabOut]) cutShort(gate, ctx.currentTime);
+        // Disposal follows the audio clock, including an offline render or a
+        // suspended context. A wall timer could detach the gates before their
+        // scheduled fade has rendered. This source is silent and unconnected.
+        const end = ctx.createConstantSource();
+        end.offset.value = 0;
+        end.onended = () => { cleanup(); end.disconnect(); };
+        end.start(ctx.currentTime);
+        end.stop(ctx.currentTime + 0.02);
+      },
+    };
+    this.drumTracks.add(owned);
+    return {
+      drum: (voice, gain, at) => cancelled || this.ctx !== ctx
+        ? NOTHING : this.drumOn(voice, gain, at, route),
+      cancel: owned.cancel,
+      tailSeconds: Math.max(
+        HALL.predelay + HALL.tail.start + HALL.tail.length,
+        CAB.predelay + CAB.tail.start + CAB.tail.length,
+      ),
+    };
+  }
+
+  /** The shared drum synthesis, routed to either the app or an owned track. */
+  private drumOn(voice: DrumVoice, gain: number, at: number, route: DrumRoute): Scheduled {
     if (!this.running || !this.ctx) return NOTHING;
     const spec = DRUM_SPECS[voice];
     const v = clamp01(gain);
@@ -2576,13 +2655,13 @@ export class AudioEngine {
     const pannerNode = ctx.createStereoPanner();
     pannerNode.pan.value = clamp(spec.pan, -1, 1);
     out.connect(pannerNode);
-    pannerNode.connect(this.musicBus);
+    pannerNode.connect(route.dry);
     const rev = ctx.createGain();
     rev.gain.value = spec.reverb;
-    pannerNode.connect(rev).connect(this.hallSend);
+    pannerNode.connect(rev).connect(route.hall);
     const box = ctx.createGain();
     box.gain.value = 0.18;
-    pannerNode.connect(box).connect(this.cabSend);
+    pannerNode.connect(box).connect(route.cab);
     const handle: Scheduled = { cancel: () => cutShort(out, ctx.currentTime) };
 
     if (spec.noiseFreq > 0) {

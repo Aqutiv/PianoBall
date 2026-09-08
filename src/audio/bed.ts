@@ -355,7 +355,7 @@ export class ChordBed {
     this.pending.length = 0;
     // Dropping the queue only stops what has not been written yet. A chord
     // already handed to the engine rings for its whole length — nearly four
-    // seconds of Drift's swell — so the pads themselves have to be faded, or
+    // seconds of a slow swell — so the pads themselves have to be faded, or
     // the harmony plays on over the screen the run just left for.
     this.engine.setBedAudible(false);
   }

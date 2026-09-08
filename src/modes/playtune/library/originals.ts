@@ -1,3 +1,4 @@
+import { HOPSCOTCH } from './hopscotch';
 import type { Tune } from '../chart';
 import { melodyPerformance } from './performanceNotation';
 import { line, progression, merge, shift } from './notation';
@@ -59,6 +60,8 @@ export const FIRST_LIGHT: Tune = {
 };
 
 /**
+ * Historical arrangement retained for source regression; Hopscotch replaces it
+ * in both published courses and ORIGINALS.
  * Long notes on a five-note scale, where the only difficulty is patience.
  *
  * Everything before this rewards hitting; this one rewards holding, so the
@@ -185,4 +188,4 @@ export const TWO_HANDS: Tune = {
   backingNotes: HANDS_BACKING,
 };
 
-export const ORIGINALS: Tune[] = [FIRST_LIGHT, DRIFT, TWO_HANDS];
+export const ORIGINALS: Tune[] = [FIRST_LIGHT, HOPSCOTCH, TWO_HANDS];

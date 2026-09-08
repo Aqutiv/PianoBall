@@ -5,9 +5,9 @@ import {
   ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
   FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY,
 } from './classics';
-import { DRIFT } from './originals';
+import { HOPSCOTCH } from './hopscotch';
 import { CHORD_GROUND, CHORD_MARCH } from './studies';
-import { figure, harmonicBass, heldHarmony } from './backingNotation';
+import { figure, harmonicBass } from './backingNotation';
 import { ELISE_TARGETS, GYMNO_TARGETS, MINUET_TARGETS, danubeTargets, jesuTargets } from './playableClassics';
 
 export interface ChordEntry { tune: Tune; role: ChordRole }
@@ -31,8 +31,8 @@ export const CHORD_CURVE: ChordEntry[] = [
     figure(TWINKLE, [[0, 'bass', 0.9], [1, 'dyad', 0.9], [2, 'bass', 0.9], [3, 'dyad', 0.9]], { cadence: close(TWINKLE) })),
   entry(CHORD_MARCH, 2, 'Bass on one and three; chord answers on two and four.',
     figure(CHORD_MARCH, [[0, 'bass', 0.8], [1, 'dyad', 0.8], [2, 'bass', 0.8], [3, 'dyad', 0.8]], { cadence: close(CHORD_MARCH) })),
-  entry(DRIFT, 2, 'Hold the harmony: triads and seventh shells with a bass foundation.',
-    heldHarmony(DRIFT), 'glass-pad', true),
+  entry(HOPSCOTCH, 2, 'Bass on one, a held chord on three: bounce through Dorian harmony.',
+    HOPSCOTCH.backingNotes!, 'bed-electric-piano'),
   entry(DRUNKEN_SAILOR, 2, 'Keep the bass-and-chord march through D minor and C major.',
     figure(DRUNKEN_SAILOR, [[0, 'bass', 0.85], [1, 'dyad', 0.8], [2, 'bass', 0.85], [3, 'dyad', 0.8]], { cadence: close(DRUNKEN_SAILOR) }), 'nylon-guitar'),
   entry(CANON_IN_D, 3, 'Learn the repeating bass ground, with broken-chord answers.',

@@ -58,7 +58,7 @@ async function save(name, body, type) {
 
 export async function render(entry, stem, { sampleRate = 48000, label = 'current', written = true, nameSuffix = '' } = {}) {
   const beatSeconds = 60/entry.bpm;
-  const last = Math.max(0,...entry.playerNotes.map(n=>n.beat+n.len),...entry.backingEvents.map(n=>n.beat+n.len));
+  const last = Math.max(0,...entry.playerNotes.map(n=>n.beat+n.len),...entry.backingEvents.map(n=>n.beat+n.len),...(entry.drumEvents??[]).map(hit=>hit.beat));
   const contentEnd = LEAD_IN + last*beatSeconds;
   const context = new OfflineAudioContext(2,Math.ceil((contentEnd+TAIL)*sampleRate),sampleRate);
   const engine = new AudioEngine();
@@ -78,6 +78,13 @@ export async function render(entry, stem, { sampleRate = 48000, label = 'current
   engine.setTempo(entry.bpm);
   if(stem!=='player')entry.backingEvents.forEach((event,i)=>fixed(base ^ hash('auto:'+i),()=>
     engine.pad(event.notes,event.len*beatSeconds,event.gain,LEAD_IN+event.beat*beatSeconds,event.attack*beatSeconds,written)));
+  // Drums belong to the automatic side in both roles. Use the production
+  // owned route so its dedicated room returns match normal PlayTune playback.
+  if(stem!=='player'&&entry.drumEvents?.length){
+    const drums=fixed(base ^ hash('drum-track'),()=>engine.createDrumTrack());
+    entry.drumEvents.forEach((event,i)=>fixed(base ^ hash('drum:'+i),()=>
+      drums.drum(event.voice,event.gain,LEAD_IN+event.beat*beatSeconds)));
+  }
   const jobs=[];
   let maxInputQuantizationMs=0;
   if(stem!=='automatic') {
@@ -107,7 +114,7 @@ export async function render(entry, stem, { sampleRate = 48000, label = 'current
   const name=[label,entry.role,entry.id,stem].join('_')+(nameSuffix?'_'+nameSuffix:'')+'.wav';
   const output=await save(name,wav(buffer),'audio/wav');
   return {id:entry.id,role:entry.role,title:entry.title,bpm:entry.bpm,stem,label,written,playerVelocity:.62,
-    register:'authored',keyboardShiftSemitones:0,maxInputQuantizationMs,...measured,...output};
+    register:'authored',keyboardShiftSemitones:0,drumEventCount:stem==='player'?0:(entry.drumEvents?.length??0),maxInputQuantizationMs,...measured,...output};
 }
 
 export async function run(options = {}) {
@@ -127,7 +134,7 @@ export async function run(options = {}) {
   const snapshot=await save(label+'_catalog_'+provenance.sourceDigest.slice(0,12)+'.json',JSON.stringify(catalog,null,2)+'\n','application/json');
   const manifest={...provenance,catalogSnapshot:snapshot.file,register:'authored',keyboardShiftSemitones:0,label,sampleRate:options.sampleRate??48000,engine:'production AudioEngine at review working tree',
     baselineNote:label==='baseline'?'Baseline catalog data rendered by current engine; not an old-engine recording':undefined,
-    defaults:'Default mix; high audio quality; player velocity .62; 0.25s lead-in; 5s tail; no live player pedal',
+    defaults:'Default mix; high audio quality; player velocity .62; 0.25s lead-in; 5s tail; no live player pedal; authored drums included in automatic/combined stems',
     browser:navigator.userAgent,entries:results,determinism:prior?.determinism,expectedArrangements:catalog.entries.length,
     priorSnapshots:partial?[...(prior?.priorSnapshots??[]),...(prior?[{sourceDigest:prior.sourceDigest,capturedAt:prior.capturedAt}]:[])]:[]};
   for(const entry of entries) {
@@ -163,7 +170,7 @@ export async function run(options = {}) {
 }
 
 /** Real browser clock, production mode/input/transport, isolated by the runner profile. */
-export async function smoke() {
+export async function smoke({label='current'} = {}) {
   const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const waitFor=async(test,label,limit=20000)=>{const start=performance.now();while(!test()){if(performance.now()-start>limit)throw Error('Timed out: '+label);await delay(30);}};
   const check=(condition,message)=>{if(!condition)throw Error(message);};
@@ -184,7 +191,7 @@ export async function smoke() {
     mode.setRole(role);
     for(const count of [49,25]) {
       api.input.mapping.settings={baseNote:36,count,autoLatch:false};mode.remap();
-      check(mode.start('fur-elise'),'Für Elise does not fit '+role+' '+count+' keys');
+      check(mode.start('fur-elise'),'FÃ¼r Elise does not fit '+role+' '+count+' keys');
       const source=mode.role.chart(mode.tune), targets=mode.judge.targets;
       check(targets.every(n=>n.note>=36&&n.note<36+count),'Player target outside keyboard');
       check(targets.every(n=>source.some(s=>s.beat===n.beat&&s.len===n.len&&s.note+mode.shift===n.note)),'Unexpected player note transform');
@@ -195,7 +202,7 @@ export async function smoke() {
     }
   }
   mode.setRole('melody');api.input.mapping.settings={baseNote:36,count:49,autoLatch:false};mode.remap();
-  calls.length=0;check(mode.start('fur-elise'),'Cannot start live Für Elise');
+  calls.length=0;check(mode.start('fur-elise'),'Cannot start live FÃ¼r Elise');
   const started=engine.now;
   await waitFor(()=>engine.scheduledPianoCount>0&&mode.phase==='playing','first real automatic attack');
   check(engine.now>started+1,'Clock did not advance normally');
@@ -226,16 +233,18 @@ export async function smoke() {
   check(!mode.transport.running&&!api.bed.running&&!engine.bedAudible&&engine.voices.size===0,'Stop retained transport or audible note ownership');
   result.checks.push({test:'restart/pause/resume/stop',restartHasFreshCountIn:true,automaticRestarts:true,stopMutesAutomatic:true,stopReleasesPlayer:true});
   mode.setRole('chords');calls.length=0;
-  check(mode.start('drift'),'Cannot start live Drift');
-  await waitFor(()=>mode.phase==='playing'&&calls.some(call=>call.written),'Drift automatic swell');
-  const driftGeneration=engine.padGen;
-  check(engine.bedVoice==='glass-pad','Drift did not select the authored glass automatic voice');
+  check(mode.start('hopscotch'),'Cannot start live Hopscotch');
+  await waitFor(()=>mode.phase==='playing'&&calls.some(call=>call.written)&&mode.drums.track,'Hopscotch automatic notes and drums');
+  const hopscotchGeneration=engine.padGen,hopscotchDrumTrack=mode.drums.track;
+  check(engine.bedVoice==='bed-electric-piano','Hopscotch did not select its automatic electric piano');
   mode.pause();await delay(200);
-  check(!engine.bedAudible&&!api.bed.running,'Drift pause left the swell audible');
+  check(!engine.bedAudible&&!api.bed.running&&!mode.drums.track&&engine.drumTracks.size===0,'Hopscotch pause retained notes or drum room');
   mode.resume();
-  check(engine.padGen!==driftGeneration&&mode.phase==='countin','Drift resume resurrected the prior swell generation');
+  check(engine.padGen!==hopscotchGeneration&&mode.phase==='countin','Hopscotch resume reused the prior accompaniment generation');
+  await waitFor(()=>mode.drums.track,'Hopscotch fresh drum route');
+  check(mode.drums.track!==hopscotchDrumTrack,'Hopscotch resumed the prior drum route');
   mode.stopRun();
-  result.checks.push({test:'Drift swell stop/restart',role:'chords',automaticVoice:'glass-pad',pauseMutesSwell:true,resumeUsesFreshGeneration:true});
+  result.checks.push({test:'Hopscotch notes/drums stop/restart',role:'chords',automaticVoice:'bed-electric-piano',pauseMutesNotesAndDrumRooms:true,resumeUsesFreshGenerations:true});
   mode.setRole('melody');
   // Let a complete short excerpt finish on the unmodified real clock.
   check(mode.start('first-light'),'Cannot start ending smoke');
@@ -247,7 +256,7 @@ export async function smoke() {
   check(!mode.transport.running&&!api.bed.running,'Completed song kept scheduling');
   result.checks.push({test:'natural ending',id:'first-light',logicalEnd,audibleEnd,expectedFinish,observedFinish:engine.now,formRestSeconds:expectedFinish-logicalEnd,resultsScreen:api.overlay.screen,stingScheduled:mode.sting!==null});
   result.pass=true;result.finishedAt=new Date().toISOString();result.audioQuality=engine.lite?'lite':'full';
-  await save('current_browser-smoke.json',JSON.stringify(result,null,2)+'\n','application/json');
+  await save(label+'_browser-smoke.json',JSON.stringify(result,null,2)+'\n','application/json');
   return result;
 }
 

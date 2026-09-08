@@ -1,4 +1,5 @@
 import { SCALES } from '../audio/music';
+import { DRUM_SPECS, type DrumVoice } from '../audio/drums';
 import { BED_VOICES, LEAD_VOICES } from '../audio/voices';
 import type { RoleId } from '../modes/playtune/role';
 
@@ -33,6 +34,12 @@ export interface BackingEventV1 {
   /** Original chord-relative offset; beat is already absolute. */
   offset?: number;
 }
+export interface DrumEventV1 {
+  /** Absolute tune beat, using the same clock as the player and backing. */
+  beat: number;
+  voice: DrumVoice;
+  gain: number;
+}
 export interface CourseEntryV1 {
   id: string;
   role: RoleId;
@@ -49,6 +56,8 @@ export interface CourseEntryV1 {
   voices: { keyVoicing: 'lead' | 'bed'; keys: string; backing: string };
   playerNotes: PlayerNoteV1[];
   backingEvents: BackingEventV1[];
+  /** Additive v1 field; absent for tunes without an authored drum arrangement. */
+  drumEvents?: DrumEventV1[];
 }
 export interface CatalogV1 extends Provenance {
   schemaVersion: 1;
@@ -134,6 +143,18 @@ export function validateCourse(value: unknown, path: string): asserts value is C
     requireValue(['chord', 'bass', 'wash', 'melody'].includes(event.part as string), `${at}.part`, 'unknown backing part');
     array(event.notes, `${at}.notes`, 1, 16).forEach((pitch, i) => number(pitch, `${at}.notes[${i}]`, 0, 127, true));
   });
+  if (Object.hasOwn(entry, 'drumEvents')) {
+    let previousDrumBeat = -1;
+    array(entry.drumEvents, `${path}.drumEvents`, 0, 20_000).forEach((raw, index) => {
+      const at = `${path}.drumEvents[${index}]`, event = record(raw, at);
+      number(event.beat, `${at}.beat`, 0, 65_536);
+      requireValue(event.beat >= previousDrumBeat, `${at}.beat`, 'must be in nondecreasing order');
+      previousDrumBeat = event.beat;
+      requireValue(typeof event.voice === 'string' && Object.hasOwn(DRUM_SPECS, event.voice),
+        `${at}.voice`, 'unknown drum voice');
+      number(event.gain, `${at}.gain`, 0, 1);
+    });
+  }
 }
 
 export function validateCatalog(value: unknown): asserts value is CatalogV1 {
@@ -156,7 +177,8 @@ export function validateCatalog(value: unknown): asserts value is CatalogV1 {
     const roleIndex = ROLE_ORDER.indexOf(entry.role);
     requireValue(roleIndex >= previousRole, `${path}.role`, 'publish melody before chords');
     previousRole = roleIndex;
-    expanded += entry.playerNotes.length + entry.backingEvents.reduce((sum, event) => sum + event.notes.length, 0);
+    expanded += entry.playerNotes.length + entry.backingEvents.reduce((sum, event) => sum + event.notes.length, 0)
+      + (entry.drumEvents?.length ?? 0);
     requireValue(expanded <= MAX_EXPANDED_NOTES, path, `expanded note count exceeds ${MAX_EXPANDED_NOTES}`);
   });
 }
