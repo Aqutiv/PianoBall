@@ -13,7 +13,7 @@ const additions = ['yankee-doodle', 'la-bamba', 'irish-washerwoman'];
 const ids = ['frere-jacques', 'drunken-sailor', 'can-can', 'blue-danube', 'the-entertainer'];
 const end = (notes: readonly { beat: number; len: number }[]) => Math.max(...notes.map(n => n.beat + n.len));
 const phrase = (notes: ChartNote[], start: number, len: number) => notes
-  .filter(n => n.beat >= start && n.beat < start + len).map(n => ({ ...n, beat: n.beat - start }));
+  .filter(n => n.beat >= start && n.beat < start + len).map(n => ({ note: n.note, len: n.len, beat: n.beat - start }));
 
 describe('five familiar additions', () => {
   it('retains all familiar additions, with the backing course ordered independently', () => {
@@ -82,10 +82,10 @@ describe('five familiar additions', () => {
     expect(CAN_CAN.melody.slice(8, 12).map(n => n.note)).toEqual([77, 81, 84, 81]);
     expect(BLUE_DANUBE.melody.filter(n => n.beat < 6).map(n => n.beat)).toEqual([0, 1, 2, 3, 5]);
     expect(THE_ENTERTAINER.pickup).toBe(1);
-    expect(THE_ENTERTAINER.melody.slice(0, 3)).toEqual([
+    expect(THE_ENTERTAINER.melody.slice(0, 3).map(({ note, beat, len }) => ({ note, beat, len }))).toEqual([
       { note: 62, beat: 0, len: 0.5 }, { note: 63, beat: 0.5, len: 0.5 }, { note: 64, beat: 1, len: 0.5 },
     ]);
-    expect(THE_ENTERTAINER.melody.find(n => n.beat === 4.5)).toEqual({ note: 72, beat: 4.5, len: 3 });
+    expect(THE_ENTERTAINER.melody.find(n => n.beat === 4.5)).toMatchObject({ note: 72, beat: 4.5, len: 3 });
     expect(THE_ENTERTAINER.melody.some(n => n.beat === 5)).toBe(false);
     expect(phrase(THE_ENTERTAINER.melody, 1, 60)).toEqual(phrase(THE_ENTERTAINER.melody, 65, 60));
   });

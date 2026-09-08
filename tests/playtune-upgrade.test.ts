@@ -37,7 +37,7 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
     localStorage.setItem(`pianoball.${legacyKey}`, JSON.stringify({ unlocked, best, epoch: 7 }));
     const p = loadProgress(role.storageKey, role.order);
     expect(p.epoch).toBe(7);
-    expect(p.best).toEqual(Object.fromEntries(Object.entries(best).filter(([id]) => id !== 'drift')));
+    expect({ ...p.previousBest, ...p.best }).toEqual(Object.fromEntries(Object.entries(best).filter(([id]) => id !== 'drift')));
     expect(p.retiredPasses).toEqual(best.drift ? ['drift'] : undefined);
     for (const id of unlocked) expect(p.unlocked).toContain(currentId(id));
     for (const id of role.order.filter(id => !old.includes(id))) {
@@ -57,7 +57,7 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
       if (id === 'drift') {
         expect(p.retiredPasses).toEqual(['drift']);
         expect(p.best.hopscotch).toBeUndefined();
-      } else expect(p.best[id], id).toEqual(record);
+      } else expect(p.best[id] ?? p.previousBest?.[id], id).toEqual(record);
       expect(p.unlocked).toContain(currentId(next));
     }
   });
@@ -74,8 +74,8 @@ for (const role of [ROLES.melody]) describe(`${role.id} course expansion`, () =>
         expect(p.best.drift).toBeUndefined();
         expect(p.best.hopscotch).toBeUndefined();
       } else {
-        expect(p.best[id].passed, id).toBe(true);
-        expect(p.best[id].score).toBe(12345);
+        expect((p.best[id] ?? p.previousBest?.[id])?.passed, id).toBe(true);
+        expect((p.best[id] ?? p.previousBest?.[id])?.score).toBe(12345);
       }
       expect(p.unlocked).toContain(currentId(id));
     }

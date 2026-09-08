@@ -45,7 +45,7 @@ export const TUNE_ORDER: string[] = LIBRARY.map((t) => t.id);
 /**
  * Every tune the app can start.
  *
- * `LIBRARY` is the melody chain and stays exactly that, so the three chord
+ * `LIBRARY` is the melody chain and stays exactly that, so the two active chord
  * studies never appear in the melody song list. They are still tunes, though,
  * and `findTune` has to be able to reach them — the chord curve starts on one.
  */

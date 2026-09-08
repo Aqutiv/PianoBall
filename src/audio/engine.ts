@@ -538,6 +538,9 @@ export class AudioEngine {
   /** Manual chords own sources that cannot be left running on an old pad generation. */
   private heldPads = new Set<HeldPadHandle>();
 
+  private scheduledPianos = new Set<{ sources: Pitched[]; amp: GainNode }>();
+  get scheduledPianoCount(): number { return this.scheduledPianos.size; }
+
   get heldPadCount(): number { return this.heldPads.size; }
   /**
    * Where a key voice reaches the rest of the graph, on the instrument's fader.
@@ -1129,6 +1132,12 @@ export class AudioEngine {
     for (const pad of [...this.heldPads]) pad.release(fade);
     if (!this.ready || !this.ctx) return;
     const t = this.ctx.currentTime;
+    for (const voice of this.scheduledPianos) {
+      for (const source of voice.sources) {
+        try { source.stop(t + fade + 0.02); } catch { /* already ended */ }
+      }
+    }
+    this.scheduledPianos.clear();
     const old = this.padGen;
     holdAtTime(old.gain, t);
     old.gain.linearRampToValueAtTime(0.0001, t + fade);
@@ -2922,6 +2931,63 @@ export class AudioEngine {
   }
 
   /**
+   * Written Felt Piano notes use the struck-piano partials and hammer, on the
+   * automatic bus. Every attack owns its sources; player pedals, retriggers,
+   * polyphony culling and expression never reach this independent performance.
+   */
+  private scheduledPiano(notes: readonly number[], seconds: number, gain: number, at: number, attack: number): void {
+    if (!this.running || !this.ctx || !this.settings.bed || gain <= 0 || seconds <= 0) return;
+    const ctx = this.ctx;
+    const start = Math.max(ctx.currentTime, at || ctx.currentTime);
+    const duration = Math.max(0.005, seconds);
+    // pad() selects this path for bed-felt-piano, independently of the player.
+    const spec = findLeadVoice('felt-piano').spec;
+    const velocity = clamp01(0.15 + Math.sqrt(gain / Math.max(1, notes.length)) * 2);
+    for (const note of notes) {
+      const freq = noteToFreq(note);
+      const k = keyFactors(spec.keyTrack, note);
+      const h = humanize(() => 0.5, 0);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      const amp = ctx.createGain();
+      amp.gain.value = 0.0001;
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = clamp((note - 60) / 48, -0.65, 0.65);
+      filter.connect(amp).connect(panner).connect(this.padGen);
+      const chain: Chain = { filter, amp, panner, trem: null };
+      const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+      const sources = spec.layers.flatMap(layer => this.addLayer(filter, layer, freq, velocity, start,
+        k, h, registerOf(note), detunes, stretchCents(spec.stretch, note)));
+      const release = Math.min(spec.env.release * k.release, duration * 0.25);
+      const releaseAt = start + (duration - release);
+      const rise = Math.min(Math.max(0.001, attack), duration * 0.2);
+      // Decay is measured from the strike, not after the attack. Leave a
+      // millisecond before release to avoid colliding automation endpoints.
+      const performance = { ...spec, attackVel: 0, env: { ...spec.env,
+        attack: rise, decay: Math.min(spec.env.decay, (duration - release - 0.001) / k.decay) } };
+      this.applyEnvelope(chain, performance, freq, velocity, start, k, h,
+        gain / Math.max(1, notes.length) * spec.gain * k.level);
+      amp.gain.setValueAtTime(Math.max(0.0002,
+        gain / Math.max(1, notes.length) * spec.gain * k.level * spec.env.sustain), releaseAt);
+      amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      for (const noise of noises(spec.noise)) this.prepareNoise(filter, noise, freq, velocity, k)(start);
+      const voice = { sources, amp };
+      this.scheduledPianos.add(voice);
+      let remaining = sources.length;
+      for (const source of sources) {
+        source.addEventListener('ended', () => {
+          source.disconnect();
+          if (--remaining === 0) {
+            filter.disconnect(); amp.disconnect(); panner.disconnect();
+            this.scheduledPianos.delete(voice);
+          }
+        }, { once: true });
+        source.stop(start + duration + 0.02);
+      }
+    }
+  }
+
+  /**
    * A chord from the backing bed. `at` is an audio-clock time, so a scheduler
    * with a lookahead can place one on a downbeat that has not arrived yet.
    *
@@ -2936,7 +3002,12 @@ export class AudioEngine {
    * used to carry one each, all identical — and a sum of identical linear
    * filters is the same signal through a single one, at a third of the cost.
    */
-  pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0, attack = seconds * 0.35): void {
+  pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0, attack = seconds * 0.35, written = false): void {
+    if (gain <= 0 || seconds <= 0 || notes.length === 0) return;
+    if (written && this.bedId === 'bed-felt-piano') {
+      this.scheduledPiano(notes, seconds, gain, at, attack);
+      return;
+    }
     if (!this.running || !this.ctx || !this.settings.bed) return;
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);

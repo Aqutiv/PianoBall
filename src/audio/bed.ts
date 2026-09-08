@@ -55,6 +55,9 @@ export interface TrackNote {
   beat: number;
   len: number;
   note: number;
+  gain?: number;
+  attack?: number;
+  soundingLen?: number;
 }
 
 /** What a track needs from a clock: where a beat falls, on the audio clock. */
@@ -187,7 +190,7 @@ export class ChordBed {
    * a hundred-odd nodes, which the audio thread absorbs but the frame it lands
    * on does not.
    */
-  private pending: { at: number; ev: CompEvent }[] = [];
+  private pending: { at: number; ev: CompEvent; written?: boolean }[] = [];
 
   constructor(engine: AudioEngine, music: MusicState) {
     this.engine = engine;
@@ -623,7 +626,7 @@ export class ChordBed {
       this.noteCursor++;
       // A note whose moment has passed is dropped, not piled onto the present.
       if (at < now - LATE) continue;
-      this.pending.push({ at, ev: writtenNoteEvent(n) });
+      this.pending.push({ at, ev: writtenNoteEvent(n), written: true });
     }
   }
 
@@ -638,7 +641,8 @@ export class ChordBed {
       // generic wash beside it would launch the same rendered string again at
       // the same pitch and moment, producing a loud, phase-locked transient.
       if (!soundsWithVoice(p.ev, spec)) continue;
-      this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
+      if (p.written) this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat, true);
+      else this.engine.pad(p.ev.notes, p.ev.len * beat, p.ev.gain, p.at, p.ev.attack * beat);
     }
     this.pending.length = keep;
   }

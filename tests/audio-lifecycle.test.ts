@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { cancelFrom, holdAtTime } from '../src/audio/automation';
 import { AudioEngine } from '../src/audio/engine';
-import { findBedVoice } from '../src/audio/voices';
+import { findBedVoice, findLeadVoice } from '../src/audio/voices';
 import { HALL, HALL_LITE } from '../src/audio/rooms';
 
 interface FakeParam {
@@ -1007,5 +1007,100 @@ describe('polyphony on the lead bus', () => {
     h.engine.noteOn(64, 0.5);
     h.engine.noteOff(64);
     expect(busLevel(h)).toBeCloseTo(one, 6);
+  });
+});
+
+
+describe('independent written piano', () => {
+  function pianoHarness(lead = 'felt-piano') {
+    const h = graphHarness(1, { lead, bed: 'bed-felt-piano' });
+    const sources: (FakeSource & FakeNode)[] = [];
+    h.state.addLayer = vi.fn(() => {
+      const s = Object.assign(source(), { connect: vi.fn(), disconnect: vi.fn() });
+      sources.push(s);
+      return [s];
+    });
+    h.state.prepareNoise = vi.fn(() => vi.fn());
+    Object.assign(h.state.padGen, { gain: param(1) });
+    Object.assign(h.state, { bodyWet: { gain: param() } });
+    h.state.bendSource = connector();
+    h.state.lfoVibrato = connector();
+    return { ...h, sources };
+  }
+
+  it.each(['grand', 'felt-piano', 'music-box'])('keeps authored Felt Piano independent of the player %s voice', lead => {
+    const { engine, state } = pianoHarness(lead);
+    engine.pad([60], 2, .04, 2, .01, true);
+    expect(engine.leadVoice).toBe(lead);
+    expect(engine.bedVoice).toBe('bed-felt-piano');
+    const felt = findLeadVoice('felt-piano').spec;
+    expect(state.addLayer.mock.calls.map(call => call[1])).toEqual(felt.layers);
+    expect(state.prepareNoise).toHaveBeenCalledWith(expect.anything(), felt.noise, expect.any(Number), expect.any(Number), expect.anything());
+  });
+
+  it('uses the struck-piano spectrum and independent sources for overlapping attacks of the same pitch', () => {
+    const { engine, state, sources, gains } = pianoHarness();
+    engine.pad([60], 2, .04, 2, .01, true);
+    engine.pad([60], .5, .08, 2.5, .02, true);
+    expect(state.addLayer.mock.calls[0]![1]).toMatchObject({ type: 'spectrum', spectrum: { gen: 'piano' } });
+    expect(engine.scheduledPianoCount).toBe(2);
+    expect(state.voices.size).toBe(0);
+    expect(state.active).toHaveLength(0);
+    expect(state.bendSource.connect).not.toHaveBeenCalled();
+    expect(state.lfoVibrato.connect).not.toHaveBeenCalled();
+    expect(state.leadOut.dry.connect).not.toHaveBeenCalled();
+    const stops = sources.map(s => s.stop.mock.calls.length);
+    engine.setSustain(1); engine.noteOff(60); engine.setSustain(0);
+    expect(sources.map(s => s.stop.mock.calls.length)).toEqual(stops);
+    expect(gains[0]!.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(.0001, 4);
+    expect(gains[1]!.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(.0001, 3);
+    sources.forEach(s => s.emitEnded());
+    expect(engine.scheduledPianoCount).toBe(0);
+    expect(sources.every(s => s.disconnect.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('stops scheduled and sounding piano sources on the old automatic bus without killing the next generation', () => {
+    const { engine, state, sources } = pianoHarness();
+    engine.pad([48], 4, .04, 2, .01, true);
+    const oldSources = [...sources];
+    engine.stopPads(.05);
+    expect(engine.scheduledPianoCount).toBe(0);
+    expect(oldSources.every(s => s.stop.mock.calls.at(-1)?.[0] === 1.07)).toBe(true);
+    engine.pad([55], 1, .04, 3, .01, true);
+    expect(engine.scheduledPianoCount).toBe(1);
+    expect(sources.at(-1)!.stop).toHaveBeenLastCalledWith(4.02);
+    expect(state.voices.size).toBe(0);
+    oldSources.forEach(s => s.emitEnded());
+    expect(engine.scheduledPianoCount).toBe(1);
+  });
+
+  it.each([.005, .04, .12, 2])('finishes piano decay before release for a %s-second note', seconds => {
+    const { engine, gains } = pianoHarness();
+    engine.pad([60], seconds, .035, 2, 1, true);
+    const envelope = gains[0]!.gain;
+    const decayEnd = envelope.exponentialRampToValueAtTime.mock.calls[1]![1] as number;
+    const releaseStart = envelope.setValueAtTime.mock.calls.at(-1)![1] as number;
+    expect(decayEnd).toBeLessThanOrEqual(releaseStart);
+    expect(envelope.exponentialRampToValueAtTime.mock.calls.every(call => (call[1] as number) <= 2 + seconds)).toBe(true);
+  });
+
+  it('keeps quiet and strong written piano attacks distinct in level and timbre', () => {
+    const { engine, state, filters } = pianoHarness();
+    engine.pad([60], 1, .025, 2, .01, true);
+    const firstCount = state.addLayer.mock.calls.length;
+    engine.pad([60], 1, .045, 4, .01, true);
+    const quiet = state.addLayer.mock.calls[0]![3] as number;
+    const strong = state.addLayer.mock.calls[firstCount]![3] as number;
+    expect(quiet).toBeGreaterThan(0);
+    expect(strong).toBeGreaterThan(quiet);
+    expect(strong).toBeLessThan(1);
+    expect(filters[1]!.frequency.setValueAtTime.mock.calls[0]![0]).toBeGreaterThan(filters[0]!.frequency.setValueAtTime.mock.calls[0]![0]);
+  });
+
+  it('leaves Freestyle pad piano synthesis unchanged', () => {
+    const { engine, state } = pianoHarness();
+    engine.pad([60], 1, .04, 2, .01);
+    expect(state.addLayer.mock.calls[0]![1]).toMatchObject({ type: 'triangle' });
+    expect(engine.scheduledPianoCount).toBe(0);
   });
 });

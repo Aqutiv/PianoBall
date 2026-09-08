@@ -8,7 +8,7 @@ import {
 
 const phrase = (notes: readonly ChartNote[], from: number, len: number) => notes
   .filter(n => n.beat >= from && n.beat < from + len)
-  .map(n => ({ ...n, beat: n.beat - from }));
+  .map(({ beat, len, note }) => ({ beat: beat - from, len, note }));
 const end = (notes: readonly { beat: number; len: number }[]) => Math.max(...notes.map(n => n.beat + n.len));
 
 // These checks follow the inspected historical scores, not generated snapshots.
@@ -16,7 +16,7 @@ const end = (notes: readonly { beat: number; len: number }[]) => Math.max(...not
 describe('the historical march and jig', () => {
   it('keeps Stewart’s pickup, three statements, and dotted chorus figures', () => {
     // Compare the source in quarter units; playback uses equivalent eighths.
-    const sourceNotes = YANKEE_DOODLE.melody.map(n => ({ ...n, beat: n.beat / 2, len: n.len / 2 }));
+    const sourceNotes = YANKEE_DOODLE.melody.map(({ beat, len, note }) => ({ beat: beat / 2, len: len / 2, note }));
     expect(YANKEE_DOODLE.bpm).toBe(132);
     expect(YANKEE_DOODLE.beatsPerBar).toBe(4);
     expect(YANKEE_DOODLE.pickup).toBe(1);
@@ -41,17 +41,18 @@ describe('the historical march and jig', () => {
   });
 
   it('keeps O’Neill’s complete AABB, pickups, and five-eighth closing bars', () => {
+    const sourceNotes = IRISH_WASHERWOMAN.melody.map(({ beat, len, note }) => ({ beat, len, note }));
     expect(IRISH_WASHERWOMAN.bpm).toBe(132);
     expect(IRISH_WASHERWOMAN.beatsPerBar).toBe(6);
     expect(IRISH_WASHERWOMAN.pickup).toBe(1);
     expect(lastBeat(IRISH_WASHERWOMAN)).toBe(192);
-    expect(IRISH_WASHERWOMAN.melody.slice(0, 3)).toEqual([
+    expect(sourceNotes.slice(0, 3)).toEqual([
       { beat: 0, len: .5, note: 74 }, { beat: .5, len: .5, note: 72 },
       { beat: 1, len: 1, note: 71 },
     ]);
     expect(phrase(IRISH_WASHERWOMAN.melody, 0, 48)).toEqual(phrase(IRISH_WASHERWOMAN.melody, 48, 48));
     expect(phrase(IRISH_WASHERWOMAN.melody, 96, 48)).toEqual(phrase(IRISH_WASHERWOMAN.melody, 144, 48));
-    expect(IRISH_WASHERWOMAN.melody.find(n => n.beat === 96)).toEqual({ beat: 96, len: 1, note: 79 });
+    expect(sourceNotes.find(n => n.beat === 96)).toEqual({ beat: 96, len: 1, note: 79 });
     for (const from of [43, 91, 139, 187]) {
       expect(phrase(IRISH_WASHERWOMAN.melody, from, 5)).toEqual([
         { beat: 0, len: 1, note: 71 }, { beat: 1, len: 1, note: 67 },

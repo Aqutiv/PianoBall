@@ -1,5 +1,6 @@
 import type { ChartNote, Tune } from '../chart';
 import { line, progression, R } from './notation';
+import { melodyPerformance } from './performanceNotation';
 
 const D = 62, E = 64, F = 65, G = 67, A = 69, B = 71, C = 72;
 
@@ -23,7 +24,7 @@ export const HOPSCOTCH: Tune = {
   voiceId: 'electric-piano',
   bedVoiceId: 'bed-felt-piano',
   pass: 0.6,
-  melody: line([
+  melody: melodyPerformance(line([
     // A: the D-F-A call; B natural opens the minor colour into Dorian.
     [D, 2], [F, 1], [A, 1],
     [F, 2], [R, 1], [E, 1],
@@ -44,7 +45,7 @@ export const HOPSCOTCH: Tune = {
     [B, 3], [A, 1],
     [G, 2], [E, 2],
     [D, 4],
-  ]),
+  ]), [[0, .78], [8, .84], [16, .8], [28, .65], [32, .9], [44, .76], [48, .82], [60, .64]]),
   chords: progression([
     [0, 'min7', 4], [0, 'min7', 4], [3, 'dom7', 4], [6, 'maj', 4],
     [0, 'min7', 4], [2, 'maj', 4], [3, 'dom7', 4], [0, 'min7', 4],
@@ -83,7 +84,7 @@ const VOICINGS: readonly (readonly [bass: number, answer: readonly number[]])[] 
   [50, [53, 57, 60]], [55, [55, 59, 62]], [48, [52, 55, 60]], [50, [50, 53, 60]],
 ];
 
-HOPSCOTCH.backingNotes = VOICINGS.flatMap(([bass, answer], bar): ChartNote[] => {
+HOPSCOTCH.backingNotes = melodyPerformance(VOICINGS.flatMap(([bass, answer], bar): ChartNote[] => {
   const beat = bar * 4;
   // Let the drummer answer at the halfway breath, then land the last chord
   // together with the melody. Neither cadence asks for a late extra attack.
@@ -95,4 +96,4 @@ HOPSCOTCH.backingNotes = VOICINGS.flatMap(([bass, answer], bar): ChartNote[] => 
     { beat, len: 1.75, note: bass },
     ...answer.map(note => ({ beat: beat + (delayed ? 3 : 2), len: delayed ? 0.85 : 1.75, note })),
   ];
-});
+}), [[0, .44], [16, .48], [28, .4], [32, .52], [48, .46], [60, .4]], .9);

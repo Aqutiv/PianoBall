@@ -3,7 +3,7 @@ import type { Shell } from '../app/shell';
 import type { GameModeId } from '../app/mode';
 import { scoreboard, type Frames } from './board';
 import { REVEAL_SECONDS, type ModeResult } from './scoreboard';
-import { passesNeeded } from '../modes/playtune/progress';
+import { hasPassed, passesNeeded } from '../modes/playtune/progress';
 import type { RoleId } from '../modes/playtune/role';
 import { SettingsNavigation } from './settingsNavigation';
 import { SettingsPanel } from './settingsPanel';
@@ -423,6 +423,7 @@ export class Overlay {
     const cards = mode.tunes.map((tune) => {
       const unlocked = progress.unlocked.includes(tune.id);
       const best = progress.best[tune.id];
+      const previous = progress.previousBest?.[tune.id];
       const fits = mode.fitFor(tune) !== null;
       // The card describes the part being played, not the piece: Canon in D is
       // five pips of melody and three of chords, and says so.
@@ -443,7 +444,12 @@ export class Overlay {
             // mark sits at or below C, and a dash there reads as "nothing
             // recorded" on a tune the player has actually cleared.
             ? `<span class="song-best">${best.grade ?? (best.passed ? 'passed' : '—')} · ${Math.round(best.accuracy * 100)}%</span>`
-            : '<span class="song-best song-new">new</span>';
+            : previous
+              ? '<span class="song-best song-new">Updated arrangement · no result yet</span>'
+              : '<span class="song-best song-new">new</span>';
+      const history = previous
+        ? `<span class="song-by">Previous arrangement: ${previous.grade ?? (previous.passed ? 'passed' : '—')} · ${Math.round(previous.accuracy * 100)}%</span>`
+        : '';
 
       return `
         <button class="song-card${unlocked && fits ? '' : ' locked'}" data-tune="${tune.id}"
@@ -453,12 +459,13 @@ export class Overlay {
           <span class="song-by">${tune.composer} <i>${this.voiceLine(tune, mode)}</i></span>
           <span class="song-teaches">${card.teaches}</span>
           ${state}
+          ${history}
         </button>`;
     }).join('');
 
     // The record's own flag, not a letter: the pass marks all sit at or below
     // C, so counting graded tunes under-reports what has actually been passed.
-    const done = mode.tunes.filter((t) => progress.best[t.id]?.passed).length;
+    const done = mode.tunes.filter((t) => hasPassed(progress, t.id)).length;
     const tab = (id: RoleId, label: string) =>
       `<button class="role${role.id === id ? ' on' : ''}" data-role="${id}">${label}</button>`;
     this.body.innerHTML = `

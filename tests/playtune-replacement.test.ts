@@ -47,7 +47,7 @@ for (const [key, source, order] of [
     expect(p.unlocked).not.toContain('drift');
     expect(p.best.drift).toBeUndefined();
     expect(p.best.hopscotch).toBeUndefined();
-    expect(p.best[order[0]]).toEqual(record);
+    expect(p.best[order[0]] ?? p.previousBest?.[order[0]]).toEqual(record);
     expect(p.retiredPasses).toEqual(['drift']);
     expect(p.epoch).toBe(2);
     expect(read(source)).toEqual(original);
@@ -151,7 +151,7 @@ describe('historical melody pass evidence around the replaced slot', () => {
       },
     });
     const p = loadProgress(MELODY_STORE, TUNE_ORDER);
-    expect(p.best['scarborough-fair'].passed).toBe(true);
+    expect(p.previousBest?.['scarborough-fair'].passed).toBe(true);
     expect(p.best.drift).toBeUndefined();
     expect(p.best.hopscotch).toBeUndefined();
     expect(p.retiredPasses).toEqual(['drift']);

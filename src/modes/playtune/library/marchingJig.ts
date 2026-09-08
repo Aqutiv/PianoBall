@@ -2,6 +2,7 @@ import type { ChartNote, Tune } from '../chart';
 import { figure } from './backingNotation';
 import { line, progression, R, type ChordStep, type Step } from './notation';
 import { repeatRhythm } from './rhythmNotation';
+import { melodyPerformance } from './performanceNotation';
 
 const E3 = 52, F3 = 53, G3 = 55, A3 = 57, B3 = 59;
 const C4 = 60, D4 = 62, E4 = 64, F4 = 65, Fs4 = 66, G4 = 67, A4 = 69, B4 = 71;
@@ -153,3 +154,13 @@ export const IRISH_WASHERWOMAN_BACKING: ChartNote[] = figure(IRISH_WASHERWOMAN, 
 export const MARCHING_JIG_TUNES: Tune[] = [YANKEE_DOODLE, IRISH_WASHERWOMAN];
 
 
+
+// Phrase expression changes only the performance, never source notes or rhythm.
+YANKEE_DOODLE.melody = melodyPerformance(YANKEE_DOODLE.melody,
+  [[0, .76], [9, .86], [25, .8], [33, .72], [49, .84], [61, .72], [65, .8], [81, .88], [93, .66]]);
+YANKEE_DOODLE.backingNotes = melodyPerformance(YANKEE_DOODLE.backingNotes!,
+  [[0, .42], [17, .48], [29, .4], [33, .44], [61, .4], [65, .46], [93, .38]], .9);
+IRISH_WASHERWOMAN.melody = melodyPerformance(IRISH_WASHERWOMAN.melody,
+  [[0, .76], [19, .84], [43, .68], [49, .78], [91, .7], [97, .86], [139, .72], [145, .88], [187, .65]]);
+IRISH_WASHERWOMAN.backingNotes = melodyPerformance(IRISH_WASHERWOMAN.backingNotes!,
+  [[0, .4], [25, .46], [43, .36], [49, .42], [91, .36], [97, .46], [139, .38], [145, .46], [187, .35]], .92);

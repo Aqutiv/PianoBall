@@ -81,14 +81,23 @@ describe('authored musical phrases', () => {
     expect(notes('chord-ground').slice(0, 2)).toEqual([{ beat: 0, len: 2, note: 48 }, { beat: 2, len: 2, note: 55 }]);
     expect(notes('ode-to-joy').map(n => n.beat)).toEqual(findTune('ode-to-joy')!.chords.map(c => c.beat));
   });
+  it('lands on Frère Jacques’s final tonic after the dominant', () => {
+    for (const beat of [30, 62]) expect(on('frere-jacques', beat)).toEqual([{ beat, len: 2, note: 48 }]);
+  });
+  it('retains the waltz bass inversions instead of changing the chord identity', () => {
+    expect(on('blue-danube', 0)).toEqual([]);
+    expect(on('blue-danube', 51)[0].note).toBe(54); // D/F#
+    expect(on('blue-danube', 75)[0].note).toBe(52); // A7/E
+    expect(findTune('blue-danube')!.chords.find(c => c.beat === 51)).toMatchObject({ degree: 0, quality: 'maj' });
+  });
   it('alternates bass and chord answers in a march', () => {
     expect([0,1,2,3].map(b => on('chord-march', b).length)).toEqual([1,2,1,2]);
     expect(on('chord-march', 0)[0].note).toBe(48);
     expect(on('chord-march', 1).map(n => n.note)).toEqual([64,67]);
   });
-  it('holds Gymnopedie’s seventh shell through beat three', () => {
+  it('holds Gymnopedie’s written upper chord through beat three', () => {
     expect(on('gymnopedie', 0)).toEqual([{ beat: 0, len: .9, note: 55 }]);
-    expect(on('gymnopedie', 1).map(n => n.note)).toEqual([66,67,71]);
+    expect(on('gymnopedie', 1).map(n => n.note)).toEqual([59,62,66]);
     expect(on('gymnopedie', 1).every(n => n.len === 2)).toBe(true);
     expect(on('gymnopedie', 2)).toEqual([]);
   });
@@ -98,8 +107,8 @@ describe('authored musical phrases', () => {
     expect([1,2,3,4,5,6].map(b => on('greensleeves', b).length)).toEqual([1,1,1,1,1,1]);
   });
   it('leaves phrase rests in Fur Elise and breathing room in Londonderry Air', () => {
-    expect(notes('fur-elise').filter(n => n.beat < 8 || (n.beat >= 23 && n.beat < 32))).toEqual([]);
-    expect(on('fur-elise', 8).length).toBe(1);
+    expect(notes('fur-elise').filter(n => n.beat < 4 || (n.beat >= 13 && n.beat < 16))).toEqual([]);
+    expect(on('fur-elise', 4).length).toBe(1);
     const cadence = findTune('londonderry-air')!.chords.at(-1)!.beat;
     expect(notes('londonderry-air').filter(n => n.beat >= cadence - 1 && n.beat < cadence)).toEqual([]);
   });
@@ -108,9 +117,16 @@ describe('authored musical phrases', () => {
     expect(on('the-entertainer', 1)[0].note).toBe(48);
     expect(on('the-entertainer', 3)[0].note).toBe(55);
   });
+  it('keeps Bach’s tonic arpeggiation and the source D under Em7', () => {
+    expect(on('jesu-joy', 51)[0].note).toBe(50);
+    expect(findTune('jesu-joy')!.chords.find(c => c.beat === 51)).toMatchObject({ degree: 5, quality: 'min7' });
+    for (const beat of [63, 66, 69]) expect(findTune('jesu-joy')!.chords.find(c => c.beat === beat)).toMatchObject({ degree: 0, quality: 'maj' });
+    expect(notes('jesu-joy').filter(n => n.beat >= 63).every(n => [7, 11, 2].includes(n.note % 12))).toBe(true);
+  });
   it('retains seventh color and a bass foundation in Hopscotch', () => {
     const seventh = findTune('hopscotch')!.chords.find(c => c.quality === 'min7')!;
     expect(on('hopscotch', seventh.beat).map(n => n.note)).toEqual([50]);
+
   });
 });
 
@@ -136,7 +152,8 @@ describe('performance and ownership', () => {
     expect(CHORDS_ROLE.voices(tune).keys).toBe('felt-piano');
     expect(CHORDS_ROLE.voices(tune).backing).toBe(findChordEntry(tune.id)!.role.melodyVoiceId);
     expect(MELODY_ROLE.chart(tune)).toEqual(tune.melody);
-    expect(MELODY_ROLE.backing(tune).parts).toEqual(tune.backingNotes ? [] : ['chord','bass','wash']);
+    expect(MELODY_ROLE.backing(tune)).toEqual({ chords: [], pattern: 'sustain', parts: [], notes: tune.backingNotes });
+
   });
   it('keeps the wire identity while presenting the musical role', () => {
     expect(CHORDS_ROLE.id).toBe('chords');

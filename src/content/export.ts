@@ -2,7 +2,7 @@ import { ALL_PARTS, COMP_PATTERNS, compEvents } from '../audio/comp';
 import { SCALES, chordNotes, degreeToNote, voiceLead } from '../audio/music';
 import { BED_VOICES, DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../audio/voices';
 import { soundsWithVoice, writtenNoteEvent } from '../audio/written';
-import { harmonyProblems, validate, type ChartChord, type Tune } from '../modes/playtune/chart';
+import { harmonyProblems, performanceProblems, validate, type ChartChord, type Tune } from '../modes/playtune/chart';
 import { chordProblems } from '../modes/playtune/chords';
 import { ALL_TUNES } from '../modes/playtune/library';
 import { CHORD_CURVE } from '../modes/playtune/library/chordcurve';
@@ -132,6 +132,8 @@ export function compileCatalog(
       if (backing.notes !== null) {
         array(backing.notes, `${path}.backing.notes`, 0, 20_000);
         if (backing.notes.length) validatePlayerNotes(backing.notes, `${path}.backing.notes`);
+        const performanceErrors = performanceProblems(backing.notes, `${path}.backing.notes`);
+        requireValue(performanceErrors.length === 0, path, performanceErrors.join('; '));
         for (const note of backing.notes) {
           const event = writtenNoteEvent(note);
           events.push({

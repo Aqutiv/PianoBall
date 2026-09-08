@@ -4,7 +4,7 @@ import { fitToRange, harmonyProblems, lastBeat, validate, type ChartNote } from 
 import { LA_BAMBA, LA_BAMBA_BACKING } from '../src/modes/playtune/library/laBamba';
 import { rhythmEvents } from '../src/modes/playtune/rhythm';
 
-const inQuarters = (notes: ChartNote[]) => notes.map(n => ({ ...n, beat: n.beat / 2, len: n.len / 2 }));
+const inQuarters = (notes: ChartNote[]) => notes.map(({ beat, len, note }) => ({ beat: beat / 2, len: len / 2, note }));
 
 describe('La Bamba traditional vocal excerpt', () => {
   it('keeps the printed pickup, tied syncopation, triplets, and response cadence', () => {

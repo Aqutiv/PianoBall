@@ -5,6 +5,7 @@ import { CHORD_CURVE } from '../src/modes/playtune/library/chordcurve';
 import { CLASSICS } from '../src/modes/playtune/library/classics';
 import { loadProgress, recordRun, resetProgress, saveProgress, type Progress } from '../src/modes/playtune/progress';
 import { ROLES } from '../src/modes/playtune/role';
+import { REVISED_BACKING_IDS, REVISED_MELODY_IDS } from '../src/modes/playtune/chartRevisions';
 import { resetPlayTuneSettings, setPlayTuneSettings } from '../src/modes/playtune/settings';
 import { CA92_MELODY_ORDER, CA92_BACKING_ORDER } from './fixtures/course-orders-ca92';
 
@@ -96,12 +97,19 @@ describe('traditional course expansion', () => {
 
 for (const role of Object.values(ROLES)) describe(role.id + ' progress through added traditional courses', () => {
   const oldOrder = baseline[role.id];
-  it.each([0, 6, 19])('preserves a current save with %i passed courses and keeps every new record unplayed', passedCount => {
+  const revised = role.id === 'melody' ? REVISED_MELODY_IDS : REVISED_BACKING_IDS;
+  it.each([0, 6, 19].flatMap(count => [false, true].map(history => [count, history] as const)))(
+    'preserves a current save with %i passed courses (history=%s) and leaves inserted records unplayed', (passedCount, history) => {
     const credit = role.id === 'chords' && passedCount > 0 ? 2 : 0;
     const retired = passedCount > 0 ? ['drift'] : undefined;
     const initial: Progress = {
       unlocked: oldOrder.slice(0, Math.min(oldOrder.length, 3 + passedCount + credit + (retired?.length ?? 0))),
-      best: Object.fromEntries(oldOrder.slice(0, passedCount).map(id => [id, { ...oldRecord }])),
+      best: Object.fromEntries(oldOrder.slice(0, passedCount)
+        .filter(id => !history || !revised.includes(id)).map(id => [id, { ...oldRecord }])),
+      ...(history && oldOrder.slice(0, passedCount).some(id => revised.includes(id)) ? {
+        previousBest: Object.fromEntries(oldOrder.slice(0, passedCount)
+          .filter(id => revised.includes(id)).map(id => [id, { ...oldRecord }])),
+      } : {}),
       epoch: 7,
       ...(role.id === 'chords' ? { unlockCredit: credit } : {}),
       ...(retired ? { retiredPasses: retired } : {}),
@@ -109,11 +117,15 @@ for (const role of Object.values(ROLES)) describe(role.id + ' progress through a
     saveProgress(role.storageKey, initial);
     const progress = loadProgress(role.storageKey, role.order);
     expect(progress.best).toEqual(initial.best);
+    expect(progress.previousBest).toEqual(initial.previousBest);
     expect(progress.epoch).toBe(initial.epoch);
     expect(progress.unlockCredit).toBe(initial.unlockCredit);
     expect(progress.retiredPasses).toEqual(initial.retiredPasses);
     for (const id of initial.unlocked) expect(progress.unlocked).toContain(id);
-    for (const id of additions) expect(progress.best[id]).toBeUndefined();
+    for (const id of additions) {
+      expect(progress.best[id]).toBeUndefined();
+      expect(progress.previousBest?.[id]).toBeUndefined();
+    }
     if (passedCount === oldOrder.length) expect(new Set(progress.unlocked)).toEqual(new Set(role.order));
 
     // Complete available material, including inserted songs, without granting
@@ -131,8 +143,10 @@ for (const role of Object.values(ROLES)) describe(role.id + ' progress through a
     expect(recordRun(role.storageKey, progress, first, role.order, passing).unlocked).toBeNull();
   });
 
-  it('retains the Drift replacement import without carrying a score into Hopscotch or the new songs', () => {
-    const source = role.id === 'melody' ? 'playtune.v2' : 'playbacking.v1';
+  it.each([false, true])('imports the Drift course (already corrected=%s) without scores for replacement or inserted songs', corrected => {
+    const source = corrected
+      ? role.id === 'melody' ? 'playtune.musicality.v1' : 'playbacking.musicality.v1'
+      : role.id === 'melody' ? 'playtune.v2' : 'playbacking.v1';
     const oldIds = oldOrder.map(id => id === 'hopscotch' ? 'drift' : id);
     const oldSave: Progress = {
       unlocked: [...oldIds],
@@ -145,10 +159,48 @@ for (const role of Object.values(ROLES)) describe(role.id + ' progress through a
     expect(progress.retiredPasses).toEqual(['drift']);
     expect(progress.best.drift).toBeUndefined();
     expect(progress.best.hopscotch).toBeUndefined();
-    for (const id of additions) expect(progress.best[id]).toBeUndefined();
-    for (const id of oldOrder.filter(id => id !== 'hopscotch')) expect(progress.best[id]).toEqual(oldRecord);
+    for (const id of additions) {
+      expect(progress.best[id]).toBeUndefined();
+      expect(progress.previousBest?.[id]).toBeUndefined();
+    }
+    for (const id of oldOrder.filter(id => id !== 'hopscotch')) {
+      if (!corrected && revised.includes(id)) {
+        expect(progress.best[id]).toBeUndefined();
+        expect(progress.previousBest?.[id]).toEqual(oldRecord);
+      } else expect(progress.best[id]).toEqual(oldRecord);
+    }
     expect(new Set(progress.unlocked)).toEqual(new Set(role.order));
     expect(JSON.parse(localStorage.getItem('pianoball.' + source)!)).toEqual(oldSave);
+    expect(loadProgress(role.storageKey, role.order)).toEqual(progress);
+  });
+
+  it('preserves new-song performances from the expanded upstream course while archiving revised old charts', () => {
+    const source = role.id === 'melody' ? 'playtune.v3' : 'playbacking.v2';
+    const best = Object.fromEntries(role.order.map(id => [id, { ...oldRecord }]));
+    const initial: Progress = { unlocked: [...role.order], best, epoch: 8,
+      retiredPasses: ['drift'], ...(role.id === 'chords' ? { unlockCredit: 2 } : {}) };
+    localStorage.setItem('pianoball.' + source, JSON.stringify(initial));
+    const progress = loadProgress(role.storageKey, role.order);
+    expect(progress.unlocked).toEqual(role.order);
+    expect(progress.retiredPasses).toEqual(['drift']);
+    expect(progress.unlockCredit).toBe(initial.unlockCredit);
+    for (const id of role.order) {
+      if (revised.includes(id)) {
+        expect(progress.best[id]).toBeUndefined();
+        expect(progress.previousBest?.[id]).toEqual(oldRecord);
+      } else {
+        expect(progress.best[id]).toEqual(oldRecord);
+        expect(progress.previousBest?.[id]).toBeUndefined();
+      }
+    }
+    for (const id of additions) {
+      const result = recordRun(role.storageKey, progress, id, role.order, passing);
+      expect(result.previous).toEqual(oldRecord);
+      expect(result.best.plays).toBe(5);
+      expect(result.unlocked).toBeNull();
+    }
+    expect(JSON.parse(localStorage.getItem('pianoball.' + source)!)).toEqual(initial);
+    localStorage.setItem('pianoball.' + source, JSON.stringify({ unlocked: [], best: {}, epoch: 99 }));
     expect(loadProgress(role.storageKey, role.order)).toEqual(progress);
   });
 

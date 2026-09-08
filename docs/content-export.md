@@ -258,7 +258,11 @@ Player charts are authored in `library/chordcurve.ts` with shared notation
 helpers. Validation checks finite timing, pitch, repeated-pitch overlap,
 three-note polyphony including holds, octave hand span, passage bounds and the
 standard 25-key fit. Backing keys use the lead bank's Felt Piano. Hopscotch
-replaces Drift in both roles at level 2. The three new traditional tracks have new stable IDs; all older entries keep their relative order and pitched content.
+replaces Drift in both roles at level 2. The musicality revision corrects the
+retained arrangements and gives every Melody entry explicit authored accompaniment.
+Automatic gain, attack and sounding duration compile into the existing backing
+event fields; graded player durations remain separate.
+
 
 Rhythmic entries include optional `drumEvents`: sorted `{ beat, voice, gain }`
 objects expanded from the same Freestyle patterns, authored fills and explicit chart-beat hits as browser
@@ -266,7 +270,7 @@ playback. Beats use the course clock; gains are 0–1 and voices name the drum
 bank. The field is absent on existing pieces without percussion. Schema v1 is
 retained as an additive extension; older native clients may ignore drums until
 they implement this field. Pitched `backingEvents` remain separate. In Melody,
-Hopscotch's authored accompaniment events are labeled `chord`; in Backing,
-the automatic melody remains labeled `melody`. The three new traditional tracks also use explicit automatic accompaniment.
+authored accompaniment events are labeled `chord`; in Backing,
+the automatic melody remains labeled `melody`.
 
 The browser’s persisted `PlayTuneSettings.rhythmEnabled` preference controls only live percussion. Authored `drumEvents` are exported regardless of that setting. Twelve of the 44 entries carry percussion: six original role entries and six new traditional role entries. The existing 32 classical/traditional role entries have no added drums. `repeatRhythm` writes explicit hits in the tune’s chart beats, so The Irish Washerwoman’s six eighth-note beats never pass through a quarter-note rhythm-picker conversion.

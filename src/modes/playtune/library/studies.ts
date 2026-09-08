@@ -1,5 +1,6 @@
 import type { Tune } from '../chart';
-import { line, progression } from './notation';
+import { line, progression, type Step } from './notation';
+import { GROUND_BACKING, OFFBEAT_BACKING } from './originalBacking';
 import { repeatRhythm } from './rhythmNotation';
 
 /**
@@ -8,12 +9,17 @@ import { repeatRhythm } from './rhythmNotation';
  * harmony. Three Ways Home is archived below and is not an active course entry.
  */
 
-// Written in C so every shape is white keys. There is no plain major scale in
-// the app, so it is mixolydian with the leading note declared — the same thing
-// every major-key tune in the library does.
+// Written in C major so every shape is white keys.
 const B3 = 59;
 const C4 = 60, D4 = 62, E4 = 64, F4 = 65, G4 = 67, A4 = 69;
-const LEADING = [11];
+// These annotations shape the automatic tune in Backing mode, while the
+// player's target onsets and hold lengths remain the authored line.
+function studyMelody(steps: readonly Step[]) {
+  return line(steps).map(n => ({ ...n,
+    gain: n.beat >= 28 ? 0.036 : n.beat >= 16 ? 0.045 : 0.04,
+    soundingLen: n.len * (n.beat >= 28 ? 1 : 0.92),
+  }));
+}
 
 /** Two chords, one to a bar, and that is the whole of it. */
 export const CHORD_GROUND: Tune = {
@@ -26,7 +32,7 @@ export const CHORD_GROUND: Tune = {
   bpm: 72,
   beatsPerBar: 4,
   root: C4,
-  scaleId: 'mixolydian',
+  scaleId: 'ionian',
   accompaniment: 'march',
   // Two soft bass-drum anchors support the player's root and fifth; the hat
   // leaves a quiet quarter-note reference between those attacks.
@@ -41,9 +47,8 @@ export const CHORD_GROUND: Tune = {
       { beat: 3, voice: 'hat', gain: 0.055 },
     ],
   }),
-  borrows: LEADING,
   pass: 0.55,
-  melody: line([
+  melody: studyMelody([
     [E4, 2], [G4, 2],
     [G4, 4],
     [D4, 2], [B3, 2],
@@ -53,16 +58,15 @@ export const CHORD_GROUND: Tune = {
     [B3, 2], [D4, 2],
     [C4, 4],
   ]),
-  // Six bars of strict alternation and then two of home. Nothing here repeats
-  // a chord from one bar into the next except that ending, because
-  // `mergedChords` would run the two together and the tune would stop being
-  // one chord to a bar in the one place it says it is.
+  // A clear tonic/dominant sentence follows the tune. Repeated harmony is
+  // allowed: the authored Backing chart still supplies each bar's bass attacks.
   chords: progression([
-    [0, 'maj', 4], [4, 'maj', 4],
-    [0, 'maj', 4], [4, 'maj', 4],
-    [0, 'maj', 4], [4, 'maj', 4],
     [0, 'maj', 4], [0, 'maj', 4],
+    [4, 'dom7', 4], [4, 'dom7', 4],
+    [0, 'maj', 4], [4, 'dom7', 4],
+    [4, 'dom7', 4], [0, 'maj', 4],
   ]),
+  backingNotes: GROUND_BACKING,
 };
 
 /** A third shape, and the first time the harmony moves inside a bar. */
@@ -76,9 +80,8 @@ export const CHORD_THREE: Tune = {
   bpm: 80,
   beatsPerBar: 4,
   root: C4,
-  scaleId: 'mixolydian',
+  scaleId: 'ionian',
   accompaniment: 'march',
-  borrows: LEADING,
   pass: 0.57,
   melody: line([
     [G4, 2], [E4, 2],
@@ -123,7 +126,7 @@ export const CHORD_MARCH: Tune = {
   bpm: 80,
   beatsPerBar: 4,
   root: C4,
-  scaleId: 'mixolydian',
+  scaleId: 'ionian',
   accompaniment: 'march',
   rhythm: repeatRhythm({
     beatsPerBar: 4, endBeat: 32,
@@ -137,9 +140,8 @@ export const CHORD_MARCH: Tune = {
       })),
     ],
   }),
-  borrows: LEADING,
   pass: 0.57,
-  melody: line([
+  melody: studyMelody([
     [C4, 2], [E4, 2],
     [F4, 2], [A4, 2],
     [G4, 2], [D4, 2],
@@ -152,9 +154,10 @@ export const CHORD_MARCH: Tune = {
   chords: progression([
     [0, 'maj', 4], [3, 'maj', 4],
     [4, 'maj', 4], [0, 'maj', 4],
-    [3, 'maj', 4], [0, 'maj', 4],
+    [0, 'maj', 4], [3, 'maj', 4],
     [4, 'maj', 4], [0, 'maj', 4],
   ]),
+  backingNotes: OFFBEAT_BACKING,
 };
 
 export const STUDIES: Tune[] = [CHORD_GROUND, CHORD_MARCH];

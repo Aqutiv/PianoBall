@@ -1,15 +1,17 @@
 import { HOPSCOTCH } from './hopscotch';
 import type { Tune } from '../chart';
-import { line, progression, merge, harmonise, shift } from './notation';
+import { melodyPerformance } from './performanceNotation';
+import { line, progression, merge, shift } from './notation';
+import { LIGHT_BACKING, DRIFT_BACKING, HANDS_BACKING } from './originalBacking';
 import { repeatRhythm } from './rhythmNotation';
 
 // Middle C is 60. These are written where they read best; `fitToRange` moves
 // each chart by whole octaves onto whatever keyboard is actually plugged in.
 const D4 = 62, E4 = 64, F4 = 65, G4 = 67, A4 = 69, Bb4 = 70, C5 = 72;
-const D5 = 74;
+const D5 = 74, E5 = 76, F5 = 77, A5 = 81;
 
 /**
- * Three notes, four square bars, nothing syncopated.
+ * A small three-note opening, answered by held notes across eight bars.
  *
  * The first tune has one job: teach that the aura lands on the beat and the key
  * goes down when it arrives. A quiet rim follows the same quarter-note pulse
@@ -21,12 +23,14 @@ export const FIRST_LIGHT: Tune = {
   composer: 'PianoBall',
   origin: 'original',
   difficulty: 1,
-  teaches: 'Three notes, one to a beat.',
+  teaches: 'A small phrase, then a long held answer.',
   bpm: 76,
   beatsPerBar: 4,
   root: D4,
   scaleId: 'minorPentatonic',
   accompaniment: 'pulse',
+  voiceId: 'grand',
+  bedVoiceId: 'bed-felt-piano',
   rhythm: repeatRhythm({
     beatsPerBar: 4, endBeat: 32,
     hits: [
@@ -50,18 +54,75 @@ export const FIRST_LIGHT: Tune = {
     [F4, 1], [A4, 1], [F4, 1], [D4, 1],
     [D4, 4],
   ]),
-  // Every held note is where the harmony moves, so the long bars are the ones
-  // that pull the tune into its next phrase rather than the ones where it waits.
+  // D and A can carry the move to F major. Keep F major through the held F;
+  // the following A-minor phrase starts when that melody note has finished.
   chords: progression([
     [0, 'min', 4],
     [0, 'min', 2], [1, 'maj', 2],
     [1, 'maj', 4],
-    [1, 'maj', 2], [3, 'min', 2],
+    [1, 'maj', 4],
     [3, 'min', 4],
     [3, 'min', 2], [1, 'maj', 2],
     [0, 'min', 4],
     [0, 'min', 4],
   ]),
+  backingNotes: LIGHT_BACKING,
+};
+
+/**
+ * Historical arrangement retained for source regression; Hopscotch replaces it
+ * in both published courses and ORIGINALS.
+ * Long notes on a five-note scale, where the only difficulty is patience.
+ *
+ * Everything before this rewards hitting; this one rewards holding, so the
+ * sustain tail has somewhere to be learned before a tune depends on it. The bed
+ * is the one place in the library that stays a slow swell: a chord comping
+ * along in time would be counting the note for the player.
+ *
+ * Glass is chosen because it still rings while the key is down. A mallet voice would decay
+ * to nothing inside the first bar and the tune would be teaching a hold the
+ * player cannot hear themselves holding.
+ */
+export const DRIFT: Tune = {
+  id: 'drift',
+  title: 'Drift',
+  composer: 'PianoBall',
+  origin: 'original',
+  difficulty: 2,
+  teaches: 'Hold the key for the whole tail.',
+  bpm: 64,
+  beatsPerBar: 4,
+  root: D4,
+  scaleId: 'kumoi',
+  accompaniment: 'sustain',
+  voiceId: 'glass',
+  bedVoiceId: 'glass-pad',
+  // Kumoi is D E F A B: no C at all. The harmony wants one — it is what makes
+  // an F major an F major and a D minor seventh a seventh — and nothing else
+  // from outside the scale is allowed in.
+  borrows: [10],
+  pass: 0.6,
+  melody: melodyPerformance(line([
+    [A4, 4], [E4, 4],
+    [D5, 8],
+    [F5, 4], [E5, 4],
+    [D5, 8],
+    [A5, 4], [F5, 4],
+    [E5, 8],
+    [D5, 4], [A4, 4],
+    [D4, 8],
+  ]), [[0, .72], [8, .84], [16, .9], [24, .78], [32, .94], [40, .82], [48, .74], [56, .66]], 1, .25),
+  chords: progression([
+    [0, 'min', 4], [0, 'min', 4],
+    [2, 'maj', 4], [2, 'maj', 4],
+    [1, 'sus4', 4], [1, 'sus4', 4],
+    [0, 'min7', 4], [0, 'min7', 4],
+    [3, 'min', 4], [2, 'maj', 4],
+    [1, 'sus4', 4], [1, 'sus4', 4],
+    [0, 'min', 4], [3, 'min', 4],
+    [0, 'min', 4], [0, 'min', 4],
+  ]),
+  backingNotes: DRIFT_BACKING,
 };
 
 const TUNE_A = line([
@@ -78,7 +139,7 @@ const TUNE_B = line([
   [E4, 2], [D4, 2],
 ], 16);
 
-/** Eight bars of harmony, played twice: once alone, once in thirds. */
+/** Eight bars of harmony, played twice: once alone, then with a second voice. */
 const TWO_HANDS_CHORDS = progression([
   [0, 'min', 4],
   [3, 'min', 2], [6, 'maj', 2],
@@ -90,11 +151,27 @@ const TWO_HANDS_CHORDS = progression([
   [4, 'min', 2], [0, 'min', 2],
 ]);
 
+// A written lower voice follows the harmony, using thirds, fourths and sixths.
+// Fixed semitone offsets would introduce B natural/C#/F# and Db/Eb/Ab into
+// this D-Aeolian sentence. Every pitch here is intentional and in the mode.
+const LOWER_A = line([
+  [57, 1], [60, 1], [62, 2],
+  [58, 1], [62, 1], [60, 2],
+  [58, 1], [62, 1], [65, 2],
+  [62, 2], [62, 2],
+], 32);
+const LOWER_B = line([
+  [65, 1], [67, 1], [65, 2],
+  [70, 1], [65, 1], [67, 2],
+  [64, 1], [64, 1], [60, 2],
+  [60, 2], [57, 2],
+], 48);
+
 /**
- * The same eight bars twice: once alone, once in thirds.
+ * The same eight bars twice: once alone, then with a composed lower voice.
  *
  * This is where two auras start arriving together. Splitting it this way means
- * the player already knows the tune by the time they have to play two of it.
+ * the player already knows the tune when the second voice arrives.
  */
 export const TWO_HANDS: Tune = {
   id: 'two-hands',
@@ -108,6 +185,8 @@ export const TWO_HANDS: Tune = {
   root: D4,
   scaleId: 'aeolian',
   accompaniment: 'arpeggio',
+  voiceId: 'grand',
+  bedVoiceId: 'bed-felt-piano',
   rhythm: repeatRhythm({
     beatsPerBar: 4, endBeat: 64,
     hits: [
@@ -124,13 +203,11 @@ export const TWO_HANDS: Tune = {
   melody: merge(
     TUNE_A,
     TUNE_B,
-    // Third time through, a third below rides along with it.
-    shift(TUNE_A, 32),
-    harmonise(shift(TUNE_A, 32), -3),
-    shift(TUNE_B, 32),
-    harmonise(shift(TUNE_B, 32), -4),
+    shift(TUNE_A, 32), LOWER_A,
+    shift(TUNE_B, 32), LOWER_B,
   ),
   chords: [...TWO_HANDS_CHORDS, ...shift(TWO_HANDS_CHORDS, 32)],
+  backingNotes: HANDS_BACKING,
 };
 
 export const ORIGINALS: Tune[] = [FIRST_LIGHT, HOPSCOTCH, TWO_HANDS];

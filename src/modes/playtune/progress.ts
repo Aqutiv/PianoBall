@@ -1,6 +1,7 @@
 import { LEGACY_ORDERS } from './legacyOrder';
 import { load, save, stored } from '../../core/storage';
 import type { Grade } from './judge';
+import { REVISED_BACKING_IDS, REVISED_MELODY_IDS } from './chartRevisions';
 
 /**
  * Where a role's progress is kept.
@@ -9,16 +10,16 @@ import type { Grade } from './judge';
  * the chord chain are separate courses, they are reset separately, and a player
  * who has never touched one should not carry an empty half of it around.
  */
-export const MELODY_STORE = 'playtune.v3';
+export const MELODY_STORE = 'playtune.musicality.v2';
 export const CHORD_STORE = 'playchords.v2';
-export const BACKING_STORE = 'playbacking.v2';
+export const BACKING_STORE = 'playbacking.musicality.v2';
 
 // Course generations have separate writers. Old bundles cannot safely merge
 // unfamiliar IDs or communicate reset lineage, so import each old store once.
 const LEGACY_STORES: Readonly<Record<string, readonly string[]>> = {
-  [MELODY_STORE]: ['playtune.v2', 'playtune'],
+  [MELODY_STORE]: ['playtune.musicality.v1', 'playtune.v3', 'playtune.v2', 'playtune'],
+  [BACKING_STORE]: ['playbacking.musicality.v1', 'playbacking.v2', 'playbacking.v1'],
   [CHORD_STORE]: ['playchords'],
-  [BACKING_STORE]: ['playbacking.v1'],
 };
 
 /** Preserve access when a composition is replaced, never its performance. */
@@ -51,6 +52,8 @@ export interface Progress {
   retiredPasses?: string[];
   unlocked: string[];
   best: Record<string, TuneRecord>;
+  /** Historical performances of the previous playable arrangement. */
+  previousBest?: Record<string, TuneRecord>;
   /**
    * How many times this chain has been deliberately wiped.
    *
@@ -96,9 +99,13 @@ export interface RunOutcome {
 }
 
 /** How many of the curve are open, given how many of it have been passed. */
+export function hasPassed(progress: Progress, id: string): boolean {
+  return !!(progress.best[id]?.passed || progress.previousBest?.[id]?.passed);
+}
+
 function frontier(progress: Progress, order: readonly string[]): number {
   let passed = 0;
-  for (const id of order) if (progress.best[id]?.passed) passed++;
+  for (const id of order) if (hasPassed(progress, id)) passed++;
   return Math.min(order.length, OPENING_TUNES + (progress.unlockCredit ?? 0)
     + (progress.retiredPasses?.length ?? 0) + passed);
 }
@@ -141,8 +148,8 @@ function openEarned(progress: Progress, order: readonly string[]): void {
 export function loadProgress(key: string, order: readonly string[]): Progress {
   const sources = Object.hasOwn(LEGACY_STORES, key) ? LEGACY_STORES[key] : undefined;
   const migrating = sources !== undefined && !stored(key);
-  // An empty or corrupt newer generation still outranks older progress: it
-  // may represent a deliberate reset, so never fall through to another save.
+  // An empty or corrupt newer generation still outranks older saves: it may
+  // represent a deliberate reset, so never fall through to an older source.
   const source = migrating ? sources.find(stored) ?? sources[0] : key;
   if (key === BACKING_STORE && migrating && !stored(source)) return importBacking(order);
   const raw = load<Progress>(source, { unlocked: [], best: {}, epoch: 0 });
@@ -159,31 +166,49 @@ export function loadProgress(key: string, order: readonly string[]): Progress {
   const retiredPasses = new Set(Array.isArray(raw.retiredPasses)
     ? raw.retiredPasses.filter(id => replacement(id) !== id) : []);
   const best: Record<string, TuneRecord> = {};
-  for (const [id, rec] of Object.entries(raw.best ?? {})) {
-    if (!known.has(replacement(id)) || !rec || typeof rec !== 'object') continue;
-    const grade = (rec.grade ?? null) as Grade;
-    // Records predating the pass flag used a one-at-a-time unlock chain. Its
-    // successor (or a letter grade) is evidence, using that frozen old order.
-    const legacy = LEGACY_ORDERS[key === MELODY_STORE ? 'playtune'
-      : key === CHORD_STORE ? 'playchords' : key];
-    const evidenceOrder = legacy?.includes(id) ? legacy : order;
-    const evidenceId = evidenceOrder.includes(id) ? id : replacement(id);
-    const next = evidenceOrder[evidenceOrder.indexOf(evidenceId) + 1];
-    const passed = typeof rec.passed === 'boolean'
-      ? rec.passed : (next ? open.has(next) || unlocked.includes(next) : false) || grade !== null;
-    if (replacement(id) !== id) {
-      if (passed) retiredPasses.add(id);
-      continue;
+  const previousBest: Record<string, TuneRecord> = {};
+  const revised = new Set(key === MELODY_STORE ? REVISED_MELODY_IDS
+    : key === BACKING_STORE ? REVISED_BACKING_IDS : []);
+  // The first musicality generation already used these corrected charts.
+  // Replacement-only migration must not archive their current bests again.
+  const correctedSource = source === 'playtune.musicality.v1'
+    || source === 'playbacking.musicality.v1';
+  const readRecords = (records: Record<string, TuneRecord> | undefined, historical: boolean) => {
+    for (const [id, rec] of Object.entries(records ?? {})) {
+      if (!known.has(replacement(id)) || !rec || typeof rec !== 'object') continue;
+      const grade = (rec.grade ?? null) as Grade;
+      // Records written before the flag existed have to be read for it, and they
+      // all come from the build that opened one tune per pass: the tune after
+      // this one being open is the strong evidence, because passing was the only
+      // thing that ever opened it. A letter is the fallback for the last tune in
+      // the chain, which has no next to have opened.
+      // Infer old records using the order that produced them, before insertions.
+      const legacy = LEGACY_ORDERS[source] ?? LEGACY_ORDERS[key === MELODY_STORE
+        ? 'playtune' : key === CHORD_STORE ? 'playchords' : key];
+      const evidenceOrder = legacy?.includes(id) ? legacy : order;
+      const evidenceId = evidenceOrder.includes(id) ? id : replacement(id);
+      const next = evidenceOrder[evidenceOrder.indexOf(evidenceId) + 1];
+      const normalized: TuneRecord = {
+        accuracy: Number(rec.accuracy) || 0,
+        score: Number(rec.score) || 0,
+        grade,
+        plays: Number(rec.plays) || 0,
+        passed: typeof rec.passed === 'boolean'
+          ? rec.passed
+          : (next ? open.has(next) || unlocked.includes(next) : false) || grade !== null,
+      };
+      if (replacement(id) !== id) {
+        if (normalized.passed) retiredPasses.add(id);
+        continue;
+      }
+      const target = historical || (migrating && !correctedSource && revised.has(id)) ? previousBest : best;
+      target[id] = bestOf(target[id], normalized)!;
     }
-    best[id] = {
-      accuracy: Number(rec.accuracy) || 0,
-      score: Number(rec.score) || 0,
-      grade,
-      plays: Number(rec.plays) || 0,
-      passed,
-    };
-  }
+  };
+  readRecords(raw.previousBest, true);
+  readRecords(raw.best, false);
   const progress: Progress = { unlocked, best, epoch: Number(raw.epoch) || 0 };
+  if (Object.keys(previousBest).length) progress.previousBest = previousBest;
   if (retiredPasses.size) progress.retiredPasses = [...retiredPasses];
   if (key === BACKING_STORE) {
     progress.unlockCredit = Math.max(0, Math.min(order.length - OPENING_TUNES,
@@ -261,6 +286,10 @@ function absorbProgress(progress: Progress, other: Progress): Progress {
     const merged = bestOf(progress.best[id], rec);
     if (merged) progress.best[id] = merged;
   }
+  for (const [id, rec] of Object.entries(other.previousBest ?? {})) {
+    progress.previousBest ??= {};
+    progress.previousBest[id] = bestOf(progress.previousBest[id], rec)!;
+  }
   if (other.unlockCredit !== undefined || progress.unlockCredit !== undefined) {
     progress.unlockCredit = Math.max(progress.unlockCredit ?? 0, other.unlockCredit ?? 0);
   }
@@ -276,6 +305,8 @@ function adoptProgress(progress: Progress, other: Progress): Progress {
   progress.unlocked.splice(0, progress.unlocked.length, ...other.unlocked);
   for (const id of Object.keys(progress.best)) delete progress.best[id];
   Object.assign(progress.best, other.best);
+  if (other.previousBest) progress.previousBest = { ...other.previousBest };
+  else delete progress.previousBest;
   if (other.unlockCredit === undefined) delete progress.unlockCredit;
   else progress.unlockCredit = other.unlockCredit;
   if (other.retiredPasses === undefined) delete progress.retiredPasses;
