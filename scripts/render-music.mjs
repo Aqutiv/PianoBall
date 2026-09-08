@@ -2,6 +2,7 @@
 import { AudioEngine, DEFAULT_AUDIO } from '../src/audio/engine.ts';
 import { compilePublishedCatalog } from '../src/content/export.ts';
 import { ROLES } from '../src/modes/playtune/role.ts';
+import { validateReviewSampleRate, retainRepeatCheck } from './music-review-manifest.ts';
 
 const LEAD_IN = .25;
 const TAIL = 5;
@@ -126,6 +127,7 @@ export async function run(options = {}) {
   if(missingIds.length)throw Error('Unknown IDs for the selected roles: '+missingIds.join(', '));
   const partial=Boolean(options.ids?.length||options.roles?.length);
   const prior=partial?await (await fetch('/__music_manifest?label='+label)).json():null;
+  validateReviewSampleRate(prior,options.sampleRate??48000);
   const results=prior?.entries?.filter(e=>catalog.entries.some(current=>current.role===e.role&&current.id===e.id)&&!entries.some(next=>next.role===e.role&&next.id===e.id)).map(e=>({...e,sourceDigest:e.sourceDigest??prior.sourceDigest}))??[];
   let completedThisRun=0;
   const provenance=await (await fetch('/__music_provenance')).json();
@@ -135,7 +137,7 @@ export async function run(options = {}) {
   const manifest={...provenance,catalogSnapshot:snapshot.file,register:'authored',keyboardShiftSemitones:0,label,sampleRate:options.sampleRate??48000,engine:'production AudioEngine at review working tree',
     baselineNote:label==='baseline'?'Baseline catalog data rendered by current engine; not an old-engine recording':undefined,
     defaults:'Default mix; high audio quality; player velocity .62; 0.25s lead-in; 5s tail; no live player pedal; authored drums included in automatic/combined stems',
-    browser:navigator.userAgent,entries:results,determinism:prior?.determinism,expectedArrangements:catalog.entries.length,selectedRoleKeys:entries.map(entry=>entry.role+':'+entry.id),
+    browser:navigator.userAgent,entries:results,determinism:retainRepeatCheck(prior?.determinism,results),expectedArrangements:catalog.entries.length,selectedRoleKeys:entries.map(entry=>entry.role+':'+entry.id),
     priorSnapshots:partial?[...(prior?.priorSnapshots??[]),...(prior?[{sourceDigest:prior.sourceDigest,capturedAt:prior.capturedAt}]:[])]:[]};
   for(const entry of entries) {
     const source=ROLES[entry.role].tunes.find(t=>t.id===entry.id);

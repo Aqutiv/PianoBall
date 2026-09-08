@@ -28,7 +28,7 @@ async function provenance() {
   const digest=createHash('sha256');
   for(const file of files){digest.update(file.replaceAll('\\','/')+'\0');digest.update(await readFile(path.join(root,'src',file)));}
   const adapter=createHash('sha256');
-  for(const file of ['scripts/render-music.mjs','scripts/music-review-server.mjs']){adapter.update(file+'\0');adapter.update(await readFile(path.join(root,file)));}
+  for(const file of ['scripts/render-music.mjs','scripts/music-review-server.mjs','scripts/music-review-manifest.ts']){adapter.update(file+'\0');adapter.update(await readFile(path.join(root,file)));}
   let commit=null;try{commit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8',windowsHide:true}).trim();}catch{}
   return {commit,sourceDigest:digest.digest('hex'),sourceFiles:files.length,rendererDigest:adapter.digest('hex'),rendererDigestBasis:'captured from the executing adapter files',capturedAt:new Date().toISOString()};
 }

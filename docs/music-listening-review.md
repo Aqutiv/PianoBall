@@ -21,7 +21,7 @@ To rerender affected entries while preserving the others:
 node scripts/music-review-server.mjs --run --label=review --ids=fur-elise,hopscotch --roles=melody --sample-rate=48000
 ```
 
-Filtered runs merge with the prior manifest. Entries retain the source digest of their own render; a mixed manifest lists prior source snapshots. An unfiltered run replaces the manifest with a complete new pass. Avoid simultaneous runs that write the same manifest or WAV names.
+Filtered runs merge with the prior manifest. Entries retain the source digest of their own render; a mixed manifest lists prior source snapshots. An unfiltered run replaces the manifest with a complete new pass. Avoid simultaneous runs that write the same manifest or WAV names. Filtered runs reject a prior manifest with a different sample rate, including mixed-rate stems, before writing output. To change sample rate, choose a different supported label or run an unfiltered full render. A prior repeat check is retained only while its role entry is untouched; rerendering that entry clears the old check unless a fresh repeat is verified.
 
 `node scripts/music-review-data.mjs --baseline` captures the catalog data at `9840971`; `--label=baseline` renders that snapshot with the **current** engine. Such a file compares arrangements, not old versus new synthesis.
 
@@ -53,7 +53,7 @@ Prioritize Für Elise's bass/arpeggio answers, Bach's independent lines, Canon's
 
 ## Integrated main review - 8 September 2026
 
-The final implementation includes merged PR #50, including its active playing-screen rhythm switch. **1,132 tests across 58 files**, production typecheck/build and the **44-entry schema-v1 export** pass.
+The final implementation includes merged PR #50, including its active playing-screen rhythm switch. **1,140 tests across 59 files**, production typecheck/build and the **44-entry schema-v1 export** pass.
 
 All **44 arrangements / 132 stems** have verified score fingerprints and WAV hashes, with no signal or broad balance-screening failures. The 12 arrangements with authored percussion were rendered again through the current production piano and owned-drum paths. The 32 remaining arrangements match their earlier full-entry fingerprints exactly; their pitched synthesis paths are unchanged. Historical files remain intact. The combined peak ceiling is -11.99 dBFS, and the loudest final tail is -117.26 dBFS.
 
