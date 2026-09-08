@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { cancelFrom, holdAtTime } from '../src/audio/automation';
 import { AudioEngine } from '../src/audio/engine';
-import { findBedVoice } from '../src/audio/voices';
+import { findBedVoice, findLeadVoice } from '../src/audio/voices';
 import { HALL, HALL_LITE } from '../src/audio/rooms';
 
 interface FakeParam {
@@ -1012,8 +1012,8 @@ describe('polyphony on the lead bus', () => {
 
 
 describe('independent written piano', () => {
-  function pianoHarness() {
-    const h = graphHarness(1, { lead: 'felt-piano', bed: 'bed-felt-piano' });
+  function pianoHarness(lead = 'felt-piano') {
+    const h = graphHarness(1, { lead, bed: 'bed-felt-piano' });
     const sources: (FakeSource & FakeNode)[] = [];
     h.state.addLayer = vi.fn(() => {
       const s = Object.assign(source(), { connect: vi.fn(), disconnect: vi.fn() });
@@ -1028,7 +1028,17 @@ describe('independent written piano', () => {
     return { ...h, sources };
   }
 
-  it('uses the played piano spectrum and independent sources for overlapping attacks of the same pitch', () => {
+  it.each(['grand', 'felt-piano', 'music-box'])('keeps authored Felt Piano independent of the player %s voice', lead => {
+    const { engine, state } = pianoHarness(lead);
+    engine.pad([60], 2, .04, 2, .01, true);
+    expect(engine.leadVoice).toBe(lead);
+    expect(engine.bedVoice).toBe('bed-felt-piano');
+    const felt = findLeadVoice('felt-piano').spec;
+    expect(state.addLayer.mock.calls.map(call => call[1])).toEqual(felt.layers);
+    expect(state.prepareNoise).toHaveBeenCalledWith(expect.anything(), felt.noise, expect.any(Number), expect.any(Number), expect.anything());
+  });
+
+  it('uses the struck-piano spectrum and independent sources for overlapping attacks of the same pitch', () => {
     const { engine, state, sources, gains } = pianoHarness();
     engine.pad([60], 2, .04, 2, .01, true);
     engine.pad([60], .5, .08, 2.5, .02, true);

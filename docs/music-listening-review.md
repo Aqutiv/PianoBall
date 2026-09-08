@@ -51,9 +51,23 @@ Human listening is still needed for phrase shape, instrument blend and resemblan
 
 Prioritize Für Elise's bass/arpeggio answers, Bach's independent lines, Canon's layered voices, the waltz accompaniment of Blue Danube and Gymnopédie, The Entertainer's syncopation against its bass/chords, and the mix of sustained Drift versus the plucked/folk voices. Audition small-keyboard runtime octave fits as well as the authored-register reference files.
 
+## Automatic piano selection correction
+
+The PR review found that the automatic Felt Piano could inherit Grand Piano from the player's lead selection. The written-piano path now follows its configured backing voice. First Light, Two Hands and Can-Can keep their Grand Piano player parts and use Felt Piano automatically, matching their cards and exported arrangements.
+
+These three Melody arrangements were rendered again after the correction. All nine stems pass signal and broad balance checks. The other 41 arrangements retain their previous evidence because their configured automatic synthesis paths are unchanged. The [updated 44-arrangement measurements](../.shots/musicality/piano-selection-merged-metrics.json) and [132-WAV verification](../.shots/musicality/piano-selection-verification.json) record this provenance. All 1,143 tests across 59 files, the production build/typecheck and the 44-entry export pass. Human listening remains pending.
+
+These files supersede the corresponding three Melody rows in the earlier tables below.
+
+| Track | Player | Automatic | Ideal performance |
+| --- | --- | --- | --- |
+| First Light | [Player](../.shots/musicality/review_melody_first-light_player.wav) | [Automatic](../.shots/musicality/review_melody_first-light_automatic.wav) | [Combined](../.shots/musicality/review_melody_first-light_combined.wav) |
+| Can-Can | [Player](../.shots/musicality/review_melody_can-can_player.wav) | [Automatic](../.shots/musicality/review_melody_can-can_automatic.wav) | [Combined](../.shots/musicality/review_melody_can-can_combined.wav) |
+| Two Hands | [Player](../.shots/musicality/review_melody_two-hands_player.wav) | [Automatic](../.shots/musicality/review_melody_two-hands_automatic.wav) | [Combined](../.shots/musicality/review_melody_two-hands_combined.wav) |
+
 ## Integrated main review - 8 September 2026
 
-The final implementation includes merged PR #50, including its active playing-screen rhythm switch. **1,140 tests across 59 files**, production typecheck/build and the **44-entry schema-v1 export** pass.
+The final implementation includes merged PR #50, including its active playing-screen rhythm switch. **1,143 tests across 59 files**, production typecheck/build and the **44-entry schema-v1 export** pass.
 
 All **44 arrangements / 132 stems** have verified score fingerprints and WAV hashes, with no signal or broad balance-screening failures. The 12 arrangements with authored percussion were rendered again through the current production piano and owned-drum paths. The 32 remaining arrangements match their earlier full-entry fingerprints exactly; their pitched synthesis paths are unchanged. Historical files remain intact. The combined peak ceiling is -11.99 dBFS, and the loudest final tail is -117.26 dBFS.
 

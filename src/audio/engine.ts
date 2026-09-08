@@ -2931,7 +2931,7 @@ export class AudioEngine {
   }
 
   /**
-   * Written piano notes use the played piano's partials and hammer, on the
+   * Written Felt Piano notes use the struck-piano partials and hammer, on the
    * automatic bus. Every attack owns its sources; player pedals, retriggers,
    * polyphony culling and expression never reach this independent performance.
    */
@@ -2940,7 +2940,8 @@ export class AudioEngine {
     const ctx = this.ctx;
     const start = Math.max(ctx.currentTime, at || ctx.currentTime);
     const duration = Math.max(0.005, seconds);
-    const spec = findLeadVoice(this.leadId === 'grand' ? 'grand' : 'felt-piano').spec;
+    // pad() selects this path for bed-felt-piano, independently of the player.
+    const spec = findLeadVoice('felt-piano').spec;
     const velocity = clamp01(0.15 + Math.sqrt(gain / Math.max(1, notes.length)) * 2);
     for (const note of notes) {
       const freq = noteToFreq(note);
