@@ -96,7 +96,7 @@ describe('settings persistence', () => {
     setPlayTuneSettings({ offsetMs: 45, leadBeats: 6, assist: false, noteNames: false });
 
     expect(playTuneSettings()).toEqual({
-      role: 'melody', offsetMs: 45, leadBeats: 6, assist: false, noteNames: false,
+      role: 'melody', rhythmEnabled: true, offsetMs: 45, leadBeats: 6, assist: false, noteNames: false,
     });
   });
 

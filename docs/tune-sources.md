@@ -1,7 +1,8 @@
-# Source and arrangement ledger: all 21 tracks
+# Source and arrangement ledger: all 24 current tracks
 
 Reviewed 8 September 2026 against the musicality revision of baseline
-`9840971`. This ledger covers every currently listed track, including Hopscotch and the two
+`9840971`, integrated with the Hopscotch release and PR #50. The final catalog
+contains 24 unique tracks / 44 role entries, including Hopscotch and the two
 Backing-only studies. Hopscotch replaced Drift on main after the original audit;
 that replacement and its rhythm playback are preserved. The former Drift
 arrangement remains documented as historical material. Detailed score readings are in
@@ -9,6 +10,7 @@ arrangement remains documented as historical material. Detailed score readings a
 [familiar-original-arrangements.md](familiar-original-arrangements.md).
 The earlier five additions' bibliographic evidence remains in
 [familiar-source-history.md](familiar-source-history.md).
+
 
 The game contains authored note data and synthesized sound. Reference scores,
 recordings, lyrics and downloaded MIDI are not shipped. These are short teaching
@@ -38,6 +40,9 @@ identified as arrangement choices.
 | the-entertainer / The Entertainer | Joplin1902, first strain; [Mutopia notation](https://www.mutopiaproject.org/ftp/JoplinS/entertainer/entertainer.ly). | Original bars5–20 twice, pickup/ties preserved, octave doublings omitted. Written bass motion/inversions and straight ragtime pulse; final held C. | Eighth, four per 2/4 bar |
 | chord-ground / Ground | PianoBall original; I–I–V7–V7–I–V7–V7–I sentence. | Eight bars in C. Root/fifth Backing practice and unchanged tune; dominant seventh supports F and closes to C. | Quarter |
 | chord-march / Off the Beat | PianoBall original; eight-bar C/F/G sentence. | Keep bass on one/three and chord answers on two/four. Bars five/six are C/F to support the existing melody. | Quarter |
+| yankee-doodle / Yankee Doodle | Stewart Theme; [source and exact reading](traditional-marching-jig.md). | Complete Theme before Variation 1, with source pickup and no invented repeats. Preserve PR #50's pitched parts and authored percussion; add automatic phrase expression. | Eighth |
+| la-bamba / La Bamba | Traditional lead line, official SEP/ConArte songbook; [source reading](traditional-la-bamba.md). | Complete copla and response twice, with documented editorial breaths. Preserve the source melody, independent backing reduction and rhythm from PR #50. | Eighth |
+| irish-washerwoman / The Irish Washerwoman | O'Neill no.317; [source and exact reading](traditional-marching-jig.md). | Complete AABB, pickups and shortened repeat bars. Preserve PR #50's pitched parts and authored percussion; add automatic phrase expression. | Eighth, six per bar |
 
 ## Performance and playable parts
 
@@ -80,3 +85,19 @@ Targeted source regressions live in `tests/musical-classics.test.ts` and
 playability suites. See [music-listening-review.md](music-listening-review.md)
 for reproducible production-synth renders, objective checks and the explicitly
 recorded scope of listening acceptance.
+
+## September rhythm and traditional additions
+
+The complete source readings are recorded in [Yankee Doodle and The Irish Washerwoman](traditional-marching-jig.md) and [La Bamba](traditional-la-bamba.md). These notes identify the exact passages, source-to-chart pitches, pickups, repeated forms, beat units, reductions and synthetic percussion choices. La Bamba uses the traditional lead line from the official SEP/ConArte songbook; this is a documented substitution for the planned 1939 recording transcription, which was not audibly verified in this environment. No recording or modern second voice/accompaniment is included.
+
+| Track | Melody / Backing level | Chart beat / BPM | Form / chart beats | Melody: player / automatic accompaniment | Backing: player / automatic melody | Pass marks |
+|---|---|---|---|---|---|---|
+| Yankee Doodle | 2 / 2 | Eighth / 132 (quarter 66) | Complete Stewart Theme, before Variation 1 / 97 | Felt Piano / Felt Piano | Felt Piano / Felt Piano | .63 / .60 |
+| La Bamba | 3 / 3 | Eighth / 120 (quarter 60) | First complete sourced copla and response, twice / 144 including editorial breaths | Felt Piano / Nylon Guitar | Felt Piano / Felt Piano | .65 / .63 |
+| The Irish Washerwoman | 4 / 4 | Eighth / 132 | O’Neill no. 317 AABB / 192 | Felt Piano / Harp | Felt Piano / Felt Piano | .67 / .67 |
+
+Yankee Doodle and La Bamba are slower than the initial proposal so their source sixteenths remain at least 220 ms apart; the written rhythm is preserved. Yankee Doodle’s selected printed Theme has no repeat signs. Yankee Doodle and La Bamba use eighth-note chart units to keep the visible approach readable; La Bamba’s additional practice slowdown keeps its densest passage within the existing eight-onset limit. The Irish Washerwoman retains its initial two-sixteenth pickup, later pickups and shortened repeat bars.
+
+First Light adds a soft quarter-note rim pulse with a slightly stronger downbeat. Two Hands adds quiet kick on one/three, rim on two/four and eighth-note hi-hat. Ground adds soft kick on one/three and quarter-note hi-hat. Off the Beat adds kick on one/three, rim on two/four and quarter-note hi-hat. Hopscotch’s authored parts, phrase changes and ending remain unchanged. The percussion additions leave graded notes untouched; the separate pitched corrections are documented above. None of the 32 existing classical/traditional role entries gains percussion.
+
+The three new pieces use restrained synthetic marching or dance accents as editorial arrangements. They do not claim a historically performed drum part. Every new playable part uses piano; percussion remains an optional live layer shared across both roles, while the exported score always retains its authored drum events.

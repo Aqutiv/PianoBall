@@ -2,6 +2,8 @@ import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } 
 import type { Tune } from '../chart';
 import { progression, merge, shift } from './notation';
 import { scorePart as part, phraseDynamics as dynamics, pedalBars } from './classicalNotation';
+import { YANKEE_DOODLE, IRISH_WASHERWOMAN } from './marchingJig';
+import { LA_BAMBA } from './laBamba';
 
 /** Source boundaries, units and editorial decisions: docs/classical-arrangements.md.
  * Automatic accompaniments are independently authored score parts. `chords` is
@@ -346,8 +348,8 @@ export const JESU_JOY: Tune = {
 
 export const CLASSICS: Tune[] = [
   ODE_TO_JOY, TWINKLE, FRERE_JACQUES,
-  AMAZING_GRACE, SCARBOROUGH_FAIR, DRUNKEN_SAILOR,
-  GREENSLEEVES, FUR_ELISE, LONDONDERRY_AIR, CAN_CAN,
-  MINUET_IN_G, GYMNOPEDIE, BLUE_DANUBE,
+  AMAZING_GRACE, SCARBOROUGH_FAIR, YANKEE_DOODLE, DRUNKEN_SAILOR,
+  GREENSLEEVES, FUR_ELISE, LONDONDERRY_AIR, LA_BAMBA, CAN_CAN,
+  MINUET_IN_G, GYMNOPEDIE, IRISH_WASHERWOMAN, BLUE_DANUBE,
   CANON_IN_D, JESU_JOY, THE_ENTERTAINER,
 ];

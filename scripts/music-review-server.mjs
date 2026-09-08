@@ -16,7 +16,7 @@ const port=Number(args.get('port')??5174);
 const options={label:args.get('label')??'current',sampleRate:Number(args.get('sample-rate')??48000),autorun:args.has('run'),verifyRepeat:args.has('verify-repeat'),smoke:args.has('smoke')};
 if(args.has('ids'))options.ids=String(args.get('ids')).split(',');
 if(args.has('roles'))options.roles=String(args.get('roles')).split(',');
-if(!['current','baseline','post-merge'].includes(options.label)||![24000,44100,48000].includes(options.sampleRate))throw Error('Expected label=current|baseline|post-merge and sample-rate=24000|44100|48000');
+if(!['current','baseline','post-merge','pr50-musicality'].includes(options.label)||![24000,44100,48000].includes(options.sampleRate))throw Error('Expected label=current|baseline|post-merge|pr50-musicality and sample-rate=24000|44100|48000');
 await mkdir(output,{recursive:true});
 const vite=await createViteServer({root,server:{middlewareMode:true,host:'127.0.0.1',watch:{ignored:['**/.shots/**']},hmr:false,ws:false},appType:'custom'});
 let done;
@@ -41,7 +41,7 @@ const server=createServer(async(req,res)=>{
     }
     if(url.pathname==='/__music_provenance'){res.setHeader('content-type','application/json');res.end(JSON.stringify(await provenance()));return;}
     if(url.pathname==='/__music_manifest'){
-      const label=url.searchParams.get('label');if(!['current','baseline','post-merge'].includes(label))throw Error('Invalid manifest label');
+      const label=url.searchParams.get('label');if(!['current','baseline','post-merge','pr50-musicality'].includes(label))throw Error('Invalid manifest label');
       let prior=null;try{prior=JSON.parse(await readFile(path.join(output,label+'_render-metrics.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
       res.setHeader('content-type','application/json');res.end(JSON.stringify(prior));return;
     }

@@ -198,7 +198,7 @@ bursts into light, late or early it still counts for less, and one you never
 reach **shatters**. There is no failing — a tune always plays to its last bar,
 because the point is to have played it.
 
-Nineteen melody tracks and nineteen backing tracks, each in its own course.
+Twenty-two melody tracks and twenty-two backing tracks, each in its own course.
 The melody tracks arrive in order, from three notes on the beat to Bach in
 continuous quavers. **Three are open at the start** — pass any of them and the
 next one joins the list, so a step you cannot take yet is walked around rather
@@ -213,22 +213,25 @@ than stared at:
 | 5 | Amazing Grace | Counting in three, starting before the bar |
 | 6 | Scarborough Fair | A minor mode that is not quite minor |
 | 7 | Hopscotch | A playful Dorian hook, held answers, and a drum groove |
-| 8 | Drunken Sailor | Repeated notes, minor melody, and an answering chorus |
-| 9 | Greensleeves | A lilting six, and a note from outside the key |
-| 10 | Für Elise | Alternating semitones at speed |
-| 11 | Londonderry Air | A phrase spanning more than an octave |
-| 12 | Can-Can | Repeated notes, leaps, and the dance refrain |
-| 13 | Minuet in G | Running quavers between the beats |
-| 14 | Gymnopédie No. 1 | Waiting, and coming in exactly on time |
-| 15 | Two Hands | Two notes at once, on a tune you already know |
-| 16 | The Blue Danube | Waltz rests and wide arpeggios |
-| 17 | Canon in D | Holding a long form as it doubles in speed |
-| 18 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
-| 19 | The Entertainer | Chromatic pickups and tied syncopation |
+| 8 | Yankee Doodle | A marching theme with dotted rhythms |
+| 9 | Drunken Sailor | Repeated notes, minor melody, and an answering chorus |
+| 10 | Greensleeves | A lilting six, and a note from outside the key |
+| 11 | Für Elise | Alternating semitones at speed |
+| 12 | Londonderry Air | A phrase spanning more than an octave |
+| 13 | La Bamba | Short pickups and triplets over a duple pulse |
+| 14 | Can-Can | Repeated notes, leaps, and the dance refrain |
+| 15 | Minuet in G | Running quavers between the beats |
+| 16 | Gymnopédie No. 1 | Waiting, and coming in exactly on time |
+| 17 | Two Hands | Two notes at once, on a tune you already know |
+| 18 | The Irish Washerwoman | Jig pickups and two groups of three |
+| 19 | The Blue Danube | Waltz rests and wide arpeggios |
+| 20 | Canon in D | Holding a long form as it doubles in speed |
+| 21 | Jesu, Joy of Man's Desiring | A line that never stops, with a voice under it |
+| 22 | The Entertainer | Chromatic pickups and tied syncopation |
 
 **Play Backing** puts you on the accompaniment while the game plays the melody.
 Bass notes, chord answers, broken chords and phrase rests follow a separate
-19-track course. Frère Jacques, Ode to Joy and Ground are open first; each first
+22-track course. Frère Jacques, Ode to Joy and Ground are open first; each first
 pass opens one more. Ground introduces root-and-fifth bass movement, Off the
 Beat teaches bass-and-chord alternation, and Hopscotch adds held and delayed chord answers over a drum groove.
 Three Ways Home is retired; First Light and Two Hands remain in Melody.
@@ -239,12 +242,16 @@ the melody between broken-chord gestures, and The Entertainer keeps a ragtime
 bass and chord pattern under the syncopation. Every backing chart fits the
 standard 25-key C-to-C mapping, with at most three notes held together within
 an octave. Backing parts use Felt Piano. The game supplies the melody and,
-for Hopscotch, drums; your bass and harmony complete the arrangement.
+where arranged, drums; your bass and harmony complete the arrangement.
 Hopscotch replaces Drift at level 2 in both courses, with 35 whole-beat melody
 attacks over 16 bars at 84 BPM. Its D Dorian hook, Freestyle pop/offbeat patterns,
 phrase fill, and exact authored backing are shared between the two roles.
 Existing Drift access and earned unlocks carry over; Hopscotch starts with fresh scores.
-Levels 1–5 require 55%, 60%, 63%, 67% and 70% accuracy respectively.
+Levels 1–5 normally require 55%, 60%, 63%, 67% and 70% accuracy respectively; individual teaching charts can set their own pass mark.
+
+First Light, Two Hands, Ground and Off the Beat have quiet authored percussion; Hopscotch retains its phrase-shaped groove. Yankee Doodle, traditional La Bamba and The Irish Washerwoman add three dance and song arrangements with separate playable backing reductions. The existing classical and traditional arrangements gain no percussion; their score and piano corrections are documented in the source ledger. **Settings → Game modes → PlayTune → Tune rhythm** switches percussion for both roles, defaults on, and remembers your choice. Changing it during a run keeps notes and scoring on the same timeline.
+
+The new source readings retain their short notes at practice tempos: Yankee Doodle uses quarter-note 66 BPM, La Bamba quarter-note 60 BPM, and The Irish Washerwoman eighth-note 132 BPM. Their historical notation, transpositions, pickups, repeats and editorial accompaniment are documented in the source ledger.
 
 Historical editions, selected passages, beat units, instrument choices and the
 public-domain basis for the US, UK, EU and Israel are in the
@@ -260,30 +267,26 @@ import access into Backing with fresh performance scores. Retired tracks still c
 access. The first new pass opens the earliest locked song; repeats do not earn
 another unlock. Old chord saves remain separate and untouched. Resetting
 Backing returns to three open songs without importing the old save again.
-The schema v1 exporter supplies **38 course entries** (19 melody + 19 backing)
+The schema v1 exporter supplies **44 course entries** (22 melody + 22 backing)
 to the Windows game, retaining the compatible internal role ID `chords`.
 
 The classics are public-domain melodies; the three originals sit where a new
 mechanic has to be introduced on something you have no expectations about.
-Charts are written around middle C and **transposed by whole octaves onto
-whatever keyboard is plugged in** — a tune too wide for your controller says so
-on its card rather than failing when you press play.
+Player charts are **transposed by whole octaves onto the connected keyboard**.
+A tune too wide for the controller says so on its card. Automatic parts retain
+their authored register.
 
-**Each tune brings its own instruments**, and the song card names them before
-you start. Für Elise is a felt piano playing both hands, Twinkle is a music box
-over a harp, Amazing Grace is a pipe organ with a choir under it, and the Minuet
-gets the clavinet because it is the nearest thing in the bank to a harpsichord.
-The rule is that a tune sounds like something else only when the piece itself
-names an instrument — which is why First Light and Two Hands, PianoBall's own
-tunes with no tradition to answer to, still sound exactly like PianoBall. Where
-two tunes are the same instrument they say so: Für Elise and the Gymnopédie are
-both solo piano, and inventing a difference between them would be dressing them
-up rather than playing them.
+**Each tune brings its own instruments**, and its card names them. The classical
+arrangements use matching struck-piano sounds for both hands, with written
+bass lines, rests and phrase dynamics. Frère Jacques keeps Music Box and Harp;
+Drunken Sailor keeps Choir and Nylon Guitar; Hopscotch keeps Electric Piano.
+First Light and Two Hands use Grand Piano with Felt Piano accompaniment.
 
-The *rhythm* was already theirs. Each chart says how the bed plays its chords —
-a waltz in three, the lilting six of Greensleeves, Bach's nine, the broken left
-hand Für Elise and the Minuet run on — and none of it is a drum machine. There
-are no drums in PlayTune, because a kick under a Gymnopédie is a costume.
+Automatic accompaniment and playable Backing reductions are authored separately.
+Für Elise keeps its hand exchanges and silences, Gymnopédie sustains its bass
+below the beat-two chords, and Bach retains independent voices. Percussion is
+authored for the originals and the three new traditional arrangements and can
+be switched off with Tune rhythm.
 
 Passing a tune (accuracy above its own mark) opens one more and records your
 best. Only the first pass of a tune pays — replaying one you have cleared is for

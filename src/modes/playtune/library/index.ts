@@ -4,6 +4,8 @@ import { ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
   FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY } from './classics';
 import { FIRST_LIGHT, TWO_HANDS } from './originals';
 import { HOPSCOTCH } from './hopscotch';
+import { YANKEE_DOODLE, IRISH_WASHERWOMAN } from './marchingJig';
+import { LA_BAMBA } from './laBamba';
 import { STUDIES } from './studies';
 
 /**
@@ -21,14 +23,17 @@ export const LIBRARY: Tune[] = [
   AMAZING_GRACE,
   SCARBOROUGH_FAIR,
   HOPSCOTCH,
+  YANKEE_DOODLE,
   DRUNKEN_SAILOR,
   GREENSLEEVES,
   FUR_ELISE,
   LONDONDERRY_AIR,
+  LA_BAMBA,
   CAN_CAN,
   MINUET_IN_G,
   GYMNOPEDIE,
   TWO_HANDS,
+  IRISH_WASHERWOMAN,
   BLUE_DANUBE,
   CANON_IN_D,
   JESU_JOY,

@@ -2,6 +2,7 @@
 import { AudioEngine, DEFAULT_AUDIO } from '../src/audio/engine.ts';
 import { compilePublishedCatalog } from '../src/content/export.ts';
 import { ROLES } from '../src/modes/playtune/role.ts';
+import { setPlayTuneSettings } from '../src/modes/playtune/settings.ts';
 
 const LEAD_IN = .25;
 const TAIL = 5;
@@ -135,7 +136,7 @@ export async function run(options = {}) {
   const manifest={...provenance,catalogSnapshot:snapshot.file,register:'authored',keyboardShiftSemitones:0,label,sampleRate:options.sampleRate??48000,engine:'production AudioEngine at review working tree',
     baselineNote:label==='baseline'?'Baseline catalog data rendered by current engine; not an old-engine recording':undefined,
     defaults:'Default mix; high audio quality; player velocity .62; 0.25s lead-in; 5s tail; no live player pedal; authored drums included in automatic/combined stems',
-    browser:navigator.userAgent,entries:results,determinism:prior?.determinism,expectedArrangements:catalog.entries.length,
+    browser:navigator.userAgent,entries:results,determinism:prior?.determinism,expectedArrangements:catalog.entries.length,selectedRoleKeys:entries.map(entry=>entry.role+':'+entry.id),
     priorSnapshots:partial?[...(prior?.priorSnapshots??[]),...(prior?[{sourceDigest:prior.sourceDigest,capturedAt:prior.capturedAt}]:[])]:[]};
   for(const entry of entries) {
     const source=ROLES[entry.role].tunes.find(t=>t.id===entry.id);
@@ -161,6 +162,7 @@ export async function run(options = {}) {
       renderChecksPass:stems.every(s=>s.nonfiniteSamples===0&&s.clippedSamples===0&&s.nearClipSamples===0&&s.endingRmsDbFS < -65),stems});
     completedThisRun++;
     manifest.renderedArrangementsThisRun=completedThisRun;
+    manifest.selectionComplete=entries.every(entry=>results.filter(result=>result.role===entry.role&&result.id===entry.id).length===1);
     manifest.complete=results.length===catalog.entries.length&&catalog.entries.every(entry=>results.filter(result=>result.role===entry.role&&result.id===entry.id).length===1);
     results.sort((a,b)=>catalog.entries.findIndex(e=>e.role===a.role&&e.id===a.id)-catalog.entries.findIndex(e=>e.role===b.role&&e.id===b.id));
     await save(label+'_render-metrics.json',JSON.stringify(manifest,null,2)+'\n','application/json');
@@ -235,7 +237,24 @@ export async function smoke({label='current'} = {}) {
   mode.setRole('chords');calls.length=0;
   check(mode.start('hopscotch'),'Cannot start live Hopscotch');
   await waitFor(()=>mode.phase==='playing'&&calls.some(call=>call.written)&&mode.drums.track,'Hopscotch automatic notes and drums');
-  const hopscotchGeneration=engine.padGen,hopscotchDrumTrack=mode.drums.track;
+  const hopscotchGeneration=engine.padGen,initialDrumTrack=mode.drums.track;
+  const toggleJudge=mode.judge,toggleEndsAt=mode.endsAt,toggleZero=mode.transport.timeOf(0);
+  const togglePitch=mode.judge.targets[0].note;
+  api.noteOn(togglePitch,90);await delay(50);
+  const togglePlayerVoice=engine.voices.get(togglePitch);
+  check(togglePlayerVoice,'Toggle check did not create a player voice');
+  setPlayTuneSettings({rhythmEnabled:false});mode.applySettings();await delay(100);
+  check(!mode.drums.track&&engine.drumTracks.size===0,'Rhythm off retained drum sources or room');
+  check(engine.bedAudible&&api.bed.running&&engine.padGen===hopscotchGeneration,'Rhythm off interrupted automatic notes');
+  check(engine.voices.get(togglePitch)===togglePlayerVoice,'Rhythm off interrupted the player note');
+  check(mode.judge===toggleJudge&&mode.endsAt===toggleEndsAt&&mode.transport.timeOf(0)===toggleZero,'Rhythm off changed the chart or ending clock');
+  setPlayTuneSettings({rhythmEnabled:true});mode.applySettings();
+  await waitFor(()=>mode.drums.track,'Re-enabled rhythm on the existing clock');
+  check(mode.drums.track!==initialDrumTrack,'Rhythm on reused the cancelled drum room');
+  check(mode.judge===toggleJudge&&mode.endsAt===toggleEndsAt&&mode.transport.timeOf(0)===toggleZero,'Rhythm on restarted the note chart or changed its tail');
+  api.noteOff(togglePitch);
+  result.checks.push({test:'rhythm toggle',drumsAndRoomCancelled:true,playerAndAutomaticNotesContinue:true,chartAndEndingClockUnchanged:true,newDrumRouteOnEnable:true});
+  const hopscotchDrumTrack=mode.drums.track;
   check(engine.bedVoice==='bed-electric-piano','Hopscotch did not select its automatic electric piano');
   mode.pause();await delay(200);
   check(!engine.bedAudible&&!api.bed.running&&!mode.drums.track&&engine.drumTracks.size===0,'Hopscotch pause retained notes or drum room');

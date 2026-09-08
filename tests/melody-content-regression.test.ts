@@ -8,6 +8,9 @@ import type { CourseEntryV1 } from '../src/content/schema';
 import { REVISED_BACKING_IDS, REVISED_MELODY_IDS } from '../src/modes/playtune/chartRevisions';
 import previous from './fixtures/playable-signatures-9840971.json';
 
+const inserted = ['yankee-doodle', 'la-bamba', 'irish-washerwoman'];
+const newIds = ['hopscotch', ...inserted];
+
 // Freeze the OLD playable contract only. The new score checks live in the
 // musical-*.test.ts files; expression and orchestration never invalidate bests.
 function signature(e: CourseEntryV1) {
@@ -15,29 +18,29 @@ function signature(e: CourseEntryV1) {
     pickup: e.pickup, pass: e.pass, notes: e.playerNotes.map(({ beat, len, note }) => ({ beat, len, note })) })).digest('hex');
 }
 
-it('replaces retired Drift with new Hopscotch at the same course positions', () => {
+it('replaces retired Drift and inserts the three new traditional songs without reordering retained courses', () => {
   const entries = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null }).entries;
   const expectedPositions = previous.entries.map(({ id, role }) => ({ id: id === 'drift' ? 'hopscotch' : id, role }));
-  expect(entries.map(({ id, role }) => ({ id, role }))).toEqual(expectedPositions);
+  expect(entries.filter(e => !inserted.includes(e.id)).map(({ id, role }) => ({ id, role }))).toEqual(expectedPositions);
   expect(entries.filter(e => !previous.entries.some(p => p.id === e.id && p.role === e.role))
-    .map(({ id, role }) => ({ id, role }))).toEqual([
-      { id: 'hopscotch', role: 'melody' }, { id: 'hopscotch', role: 'chords' },
-    ]);
+    .map(({ id, role }) => role + ':' + id).sort()).toEqual(
+      ['melody', 'chords'].flatMap(role => newIds.map(id => role + ':' + id)).sort(),
+    );
   expect(previous.entries.filter(p => !entries.some(e => p.id === e.id && p.role === e.role))
     .map(({ id, role }) => ({ id, role }))).toEqual([
       { id: 'drift', role: 'melody' }, { id: 'drift', role: 'chords' },
     ]);
-  expect(new Set(entries.map(e => e.id)).size).toBe(21);
+  expect(new Set(entries.map(e => e.id)).size).toBe(24);
 });
 
-it('archives changed retained roles without inventing an old Hopscotch signature', () => {
+it('archives changed retained roles without inventing old signatures for new repertoire', () => {
   const entries = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null }).entries;
   for (const role of ['melody', 'chords'] as const) {
     const changed = entries.filter(e => e.role === role).flatMap(e => {
       const old = previous.entries.find(p => p.id === e.id && p.role === role);
       // New repertoire has no old performance to invalidate. Replacement access
       // and retired Drift records are covered by the separate migration tests.
-      if (!old) { expect(e.id).toBe('hopscotch'); return []; }
+      if (!old) { expect(newIds).toContain(e.id); return []; }
       return signature(e) === old.signature ? [] : [e.id];
     }).sort();
     expect([...(role === 'melody' ? REVISED_MELODY_IDS : REVISED_BACKING_IDS)].sort(), role).toEqual(changed);

@@ -1,6 +1,7 @@
 import type { Tune } from '../chart';
 import { line, progression, type Step } from './notation';
 import { GROUND_BACKING, OFFBEAT_BACKING } from './originalBacking';
+import { repeatRhythm } from './rhythmNotation';
 
 /**
  * Ground and Off the Beat remain accompaniment studies. Their backing note
@@ -32,9 +33,20 @@ export const CHORD_GROUND: Tune = {
   beatsPerBar: 4,
   root: C4,
   scaleId: 'ionian',
-  // What the game plays underneath while the player takes the chords: a bass
-  // note on the strong beats, and nothing else.
   accompaniment: 'march',
+  // Two soft bass-drum anchors support the player's root and fifth; the hat
+  // leaves a quiet quarter-note reference between those attacks.
+  rhythm: repeatRhythm({
+    beatsPerBar: 4, endBeat: 32,
+    hits: [
+      { beat: 0, voice: 'kick', gain: 0.21 },
+      { beat: 2, voice: 'kick', gain: 0.17 },
+      { beat: 0, voice: 'hat', gain: 0.07 },
+      { beat: 1, voice: 'hat', gain: 0.055 },
+      { beat: 2, voice: 'hat', gain: 0.065 },
+      { beat: 3, voice: 'hat', gain: 0.055 },
+    ],
+  }),
   pass: 0.55,
   melody: studyMelody([
     [E4, 2], [G4, 2],
@@ -116,6 +128,18 @@ export const CHORD_MARCH: Tune = {
   root: C4,
   scaleId: 'ionian',
   accompaniment: 'march',
+  rhythm: repeatRhythm({
+    beatsPerBar: 4, endBeat: 32,
+    hits: [
+      { beat: 0, voice: 'kick', gain: 0.23 },
+      { beat: 2, voice: 'kick', gain: 0.19 },
+      { beat: 1, voice: 'rim', gain: 0.17 },
+      { beat: 3, voice: 'rim', gain: 0.19 },
+      ...Array.from({ length: 4 }, (_, beat) => ({
+        beat, voice: 'hat' as const, gain: 0.065,
+      })),
+    ],
+  }),
   pass: 0.57,
   melody: studyMelody([
     [C4, 2], [E4, 2],

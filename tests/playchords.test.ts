@@ -31,11 +31,11 @@ function perform(id: string, options: { late?: number; release?: number; omit?: 
 }
 
 describe('Play Backing course', () => {
-  it('contains the planned 19 tracks and retains all classics', () => {
-    expect(CHORD_ORDER).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march', 'hopscotch',
-      'drunken-sailor', 'canon-in-d', 'amazing-grace', 'scarborough-fair', 'gymnopedie', 'londonderry-air',
-      'greensleeves', 'can-can', 'blue-danube', 'fur-elise', 'minuet-in-g', 'jesu-joy', 'the-entertainer']);
-    expect(LIBRARY).toHaveLength(19);
+  it('contains the planned 22 tracks and retains all classics', () => {
+    expect(CHORD_ORDER).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march', 'yankee-doodle', 'hopscotch',
+      'drunken-sailor', 'canon-in-d', 'amazing-grace', 'scarborough-fair', 'la-bamba', 'gymnopedie', 'londonderry-air',
+      'greensleeves', 'irish-washerwoman', 'can-can', 'blue-danube', 'fur-elise', 'minuet-in-g', 'jesu-joy', 'the-entertainer']);
+    expect(LIBRARY).toHaveLength(22);
     for (const t of LIBRARY.filter(t => t.origin === 'classic')) expect(CHORD_ORDER).toContain(t.id);
     expect(LIBRARY.map(t => t.id)).toEqual(expect.arrayContaining(['first-light', 'two-hands', 'hopscotch']));
     expect(ALL_TUNES.map(t => t.id)).not.toContain('chord-three');

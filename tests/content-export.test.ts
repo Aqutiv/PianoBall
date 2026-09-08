@@ -12,7 +12,7 @@ const published = compilePublishedCatalog(provenance);
 const minimal = (): CatalogV1 => ({
   ...provenance, schemaVersion: 1,
   entries: [{
-    ...structuredClone(published.entries[0]), playerNotes: [{ beat: 0, len: 4, note: 60 }],
+    ...structuredClone(published.entries[0]), drumEvents: [], playerNotes: [{ beat: 0, len: 4, note: 60 }],
     backingEvents: [{ beat: 0, len: 4.2, notes: [48, 52, 55], gain: 0.055, attack: 0.02, part: 'chord' }],
   }],
 });

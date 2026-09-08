@@ -6,6 +6,8 @@ import {
   FUR_ELISE, LONDONDERRY_AIR, MINUET_IN_G, GYMNOPEDIE, CANON_IN_D, JESU_JOY,
 } from './classics';
 import { HOPSCOTCH } from './hopscotch';
+import { YANKEE_DOODLE, YANKEE_DOODLE_BACKING, IRISH_WASHERWOMAN, IRISH_WASHERWOMAN_BACKING } from './marchingJig';
+import { LA_BAMBA, LA_BAMBA_BACKING } from './laBamba';
 import { CHORD_GROUND, CHORD_MARCH } from './studies';
 import { figure, harmonicBass } from './backingNotation';
 import { ELISE_TARGETS, GYMNO_TARGETS, MINUET_TARGETS, danubeTargets, jesuTargets } from './playableClassics';
@@ -31,6 +33,8 @@ export const CHORD_CURVE: ChordEntry[] = [
     figure(TWINKLE, [[0, 'bass', 0.9], [1, 'dyad', 0.9], [2, 'bass', 0.9], [3, 'dyad', 0.9]], { cadence: close(TWINKLE) })),
   entry(CHORD_MARCH, 2, 'Bass on one and three; chord answers on two and four.',
     figure(CHORD_MARCH, [[0, 'bass', 0.8], [1, 'dyad', 0.8], [2, 'bass', 0.8], [3, 'dyad', 0.8]], { cadence: close(CHORD_MARCH) })),
+  entry(YANKEE_DOODLE, 2, 'Alternate marching bass notes, then settle into the final chord.',
+    YANKEE_DOODLE_BACKING),
   entry(HOPSCOTCH, 2, 'Bass on one, a held chord on three: bounce through Dorian harmony.',
     HOPSCOTCH.backingNotes!, 'bed-electric-piano'),
   entry(DRUNKEN_SAILOR, 2, 'Keep the bass-and-chord march through D minor and C major.',
@@ -42,6 +46,8 @@ export const CHORD_CURVE: ChordEntry[] = [
     figure(AMAZING_GRACE, [[0, 'bass', 0.9], [1, 'dyad', 0.9], [2, 'dyad', 0.9]], { cadence: close(AMAZING_GRACE) })),
   entry(SCARBOROUGH_FAIR, 3, 'A flowing three-note figure following the changing harmony.',
     figure(SCARBOROUGH_FAIR, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9]], { cadence: close(SCARBOROUGH_FAIR) })),
+  entry(LA_BAMBA, 3, 'Keep the plucked bass and chord answers steady beneath La Bamba’s short pickups.',
+    LA_BAMBA_BACKING),
   entry(GYMNOPEDIE, 3, 'Bass on one; the written upper chord on two, held through three.',
     GYMNO_TARGETS),
   entry(LONDONDERRY_AIR, 4, 'Flowing broken chords with breathing space at the cadence.',
@@ -49,6 +55,8 @@ export const CHORD_CURVE: ChordEntry[] = [
       { rests: [[close(LONDONDERRY_AIR) - 1, close(LONDONDERRY_AIR)]], cadence: close(LONDONDERRY_AIR) })),
   entry(GREENSLEEVES, 4, 'Two groups of three: let the bass anchor each lilting group.',
     figure(GREENSLEEVES, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9], [3, 'bass', 0.9], [4, 'third', 0.9], [5, 'top', 0.9]], { cadence: close(GREENSLEEVES) })),
+  entry(IRISH_WASHERWOMAN, 4, 'Keep two pulses in each jig bar, with picked notes and small chord answers.',
+    IRISH_WASHERWOMAN_BACKING),
   entry(CAN_CAN, 4, 'Short bass-and-chord answers keep the dance moving.',
     figure(CAN_CAN, [[0, 'bass', 0.65], [1, 'dyad', 0.55], [2, 'fifth', 0.65], [3, 'dyad', 0.55]], { cadence: close(CAN_CAN) })),
   entry(BLUE_DANUBE, 4, 'Bass, chord, chord: a waltz with compact inversions and sevenths.',

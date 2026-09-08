@@ -3,6 +3,7 @@ import type { Tune } from '../chart';
 import { melodyPerformance } from './performanceNotation';
 import { line, progression, merge, shift } from './notation';
 import { LIGHT_BACKING, DRIFT_BACKING, HANDS_BACKING } from './originalBacking';
+import { repeatRhythm } from './rhythmNotation';
 
 // Middle C is 60. These are written where they read best; `fitToRange` moves
 // each chart by whole octaves onto whatever keyboard is actually plugged in.
@@ -13,8 +14,8 @@ const D5 = 74, E5 = 76, F5 = 77, A5 = 81;
  * A small three-note opening, answered by held notes across eight bars.
  *
  * The first tune has one job: teach that the aura lands on the beat and the key
- * goes down when it arrives. Everything else is deliberately absent — which is
- * also why the bed plays a chord on every single beat here and nowhere else.
+ * goes down when it arrives. A quiet rim follows the same quarter-note pulse
+ * as the bed, giving the held bars a clear beat without adding subdivisions.
  */
 export const FIRST_LIGHT: Tune = {
   id: 'first-light',
@@ -30,6 +31,15 @@ export const FIRST_LIGHT: Tune = {
   accompaniment: 'pulse',
   voiceId: 'grand',
   bedVoiceId: 'bed-felt-piano',
+  rhythm: repeatRhythm({
+    beatsPerBar: 4, endBeat: 32,
+    hits: [
+      { beat: 0, voice: 'rim', gain: 0.19 },
+      { beat: 1, voice: 'rim', gain: 0.14 },
+      { beat: 2, voice: 'rim', gain: 0.16 },
+      { beat: 3, voice: 'rim', gain: 0.14 },
+    ],
+  }),
   // The second degree. A pentatonic melody leaves it out; the harmony under it
   // cannot, because the A minor chord that answers the F major needs it.
   borrows: [2],
@@ -177,6 +187,18 @@ export const TWO_HANDS: Tune = {
   accompaniment: 'arpeggio',
   voiceId: 'grand',
   bedVoiceId: 'bed-felt-piano',
+  rhythm: repeatRhythm({
+    beatsPerBar: 4, endBeat: 64,
+    hits: [
+      { beat: 0, voice: 'kick', gain: 0.24 },
+      { beat: 2, voice: 'kick', gain: 0.20 },
+      { beat: 1, voice: 'rim', gain: 0.16 },
+      { beat: 3, voice: 'rim', gain: 0.18 },
+      ...Array.from({ length: 8 }, (_, step) => ({
+        beat: step / 2, voice: 'hat' as const, gain: step % 2 ? 0.055 : 0.09,
+      })),
+    ],
+  }),
   pass: 0.65,
   melody: merge(
     TUNE_A,

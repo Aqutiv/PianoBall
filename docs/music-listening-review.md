@@ -2,13 +2,15 @@
 
 This review renders every published role arrangement through the production `AudioEngine`. It checks signal correctness and gives reviewers isolated stems for judging the music. It does **not** claim that automated measurements replace listening, or that a synthesized, compact excerpt recreates a concert performance.
 
+The final PR is integrated with Hopscotch and the three songs/rhythm switch in PR #50: **24 unique tracks / 44 role arrangements**. The table at the end of this document preserves the earlier 21-track audit, including retired Drift. Its 114 renders are historical evidence; updated percussion arrangements and newly added tracks are verified separately below. Human musical listening remains pending.
+
 ## Reproduce
 
 From the repository root with dependencies installed and a Chromium browser available:
 
 ```powershell
-node scripts/music-review-server.mjs --run --sample-rate=48000 --verify-repeat
-node scripts/music-review-server.mjs --run --smoke
+node scripts/music-review-server.mjs --run --label=review --sample-rate=48000 --verify-repeat
+node scripts/music-review-server.mjs --run --label=review --smoke
 ```
 
 The runner starts a Vite server bound only to `127.0.0.1`, launches a hidden Chromium instance with a separate profile, and writes ignored artifacts under `.shots/musicality`. It leaves the user's browser profile, preferences and saved scores alone. Set `CHROME_PATH` if the browser executable is not in a detected location. `--port=5175` chooses another local port.
@@ -16,7 +18,7 @@ The runner starts a Vite server bound only to `127.0.0.1`, launches a hidden Chr
 To rerender affected entries while preserving the others:
 
 ```powershell
-node scripts/music-review-server.mjs --run --ids=fur-elise,drift --roles=melody --sample-rate=48000
+node scripts/music-review-server.mjs --run --label=review --ids=fur-elise,hopscotch --roles=melody --sample-rate=48000
 ```
 
 Filtered runs merge with the prior manifest. Entries retain the source digest of their own render; a mixed manifest lists prior source snapshots. An unfiltered run replaces the manifest with a complete new pass. Avoid simultaneous runs that write the same manifest or WAV names.
@@ -25,9 +27,9 @@ Filtered runs merge with the prior manifest. Entries retain the source digest of
 
 ## What is rendered
 
-For each of 38 arrangements, the harness writes `current_ROLE_ID_player.wav`, `current_ROLE_ID_automatic.wav` and `current_ROLE_ID_combined.wav`: 48 kHz stereo PCM16, without loudness normalization. The manifest is `current_render-metrics.json`.
+For each selected arrangement, the harness writes `LABEL_ROLE_ID_player.wav`, `LABEL_ROLE_ID_automatic.wav` and `LABEL_ROLE_ID_combined.wav`: 48 kHz stereo PCM16, without loudness normalization. The manifest is `LABEL_render-metrics.json`. The integrated catalog has 44 arrangements; the historical pre-integration pass below contains 38.
 
-The automatic stem uses exported authored pitch, gain, attack and audible duration; authored notes enter the production written-note piano path. The player stem goes through actual `noteOn`/`noteOff` with fixed velocity 0.62 and the chart's graded hold length. All default effects and instrument voicings remain active, with full audio quality. The automatic bus and player's input/pedal ownership remain independent. No player pedal is added to these reference performances.
+The automatic stem uses exported authored pitch, gain, attack and audible duration; authored notes enter the production written-note piano path. The player stem goes through actual `noteOn`/`noteOff` with fixed velocity 0.62 and the chart's graded hold length. All default effects and instrument voicings remain active, with full audio quality. Authored drum events use the production owned-drum path in the automatic and combined stems; the player stem contains no drums. The automatic bus and player's input/pedal ownership remain independent. No player pedal is added to these reference performances.
 
 Player stems use the **authored chart register**, without applying a keyboard fit. Runtime player targets can move by octaves to fit the connected keyboard; automatic notes retain their authored register. The real-browser smoke separately checks both roles on 49- and 25-key windows, including a nonzero player shift. These are technical range/ownership checks, not listening judgments of the fitted mixes. Octave fitting can put the player below or through the fixed accompaniment: in the tested 25-key Für Elise Melody setup, the player spans C2–E3 while automatic notes span E2–A3. The agreed fit policy is unchanged; these compact-keyboard mixes need human audition.
 
@@ -41,7 +43,7 @@ Metrics are computed on floating-point samples before PCM conversion: finite sam
 
 Automatic-versus-player RMS is a **listening prompt**, with a broad review range of −20 to +6 dB. Sustained voices, short piano/guitar decays, texture density and role ownership make a universal loudness target inappropriate. A balance flag is reviewed separately from signal failures.
 
-The real-clock smoke runs the actual app and normal `AudioContext`/animation loop with only the final speaker feed muted. It checks player-only octave fitting; same-pitch automatic/player overlap and player sustain; restart, pause, resume and stop, including Drift’s glass swell; and one complete First Light ending with its form rest and result cue. It uses a separate browser profile and records `current_browser-smoke.json`.
+The real-clock smoke runs the actual app and normal `AudioContext`/animation loop with only the final speaker feed muted. It checks player-only octave fitting; same-pitch automatic/player overlap and player sustain; restart, pause, resume and stop, including Hopscotch’s owned notes and drum rooms; and one complete First Light ending with its form rest and result cue. It uses a separate browser profile and records `LABEL_browser-smoke.json`. The historical `current_browser-smoke.json` predates Hopscotch integration and checks Drift’s glass swell instead.
 
 ## Listening handoff
 
@@ -49,19 +51,19 @@ Human listening is still needed for phrase shape, instrument blend and resemblan
 
 Prioritize Für Elise's bass/arpeggio answers, Bach's independent lines, Canon's layered voices, the waltz accompaniment of Blue Danube and Gymnopédie, The Entertainer's syncopation against its bass/chords, and the mix of sustained Drift versus the plucked/folk voices. Audition small-keyboard runtime octave fits as well as the authored-register reference files.
 
-## Completed review — 8 September 2026
+## Pre-integration review — 8 September 2026
 
-The final repository verification also passed: **968 tests across 49 files**, the production build/typecheck, and the schema-v1 catalog export.
+The pre-integration repository verification also passed: **968 tests across 49 files**, the production build/typecheck, and the schema-v1 catalog export.
 
-All **38 arrangements / 114 stems** pass signal checks, with no non-finite, clipped or near-clipping samples. The highest peak is -11.94 dBFS; the loudest final tail is -112.84 dBFS. No arrangement remains outside the broad balance-screening range. These are measured passes; human musical listening remains pending.
+The historical pre-integration **38 arrangements / 114 stems** pass signal checks, with no non-finite, clipped or near-clipping samples. The highest peak is -11.94 dBFS; the loudest final tail is -112.84 dBFS. No arrangement remains outside the broad balance-screening range. These are measured passes; human musical listening remains pending.
 
-[Open the offline listening playlist](../.shots/musicality/index.html). It contains all 114 audio controls and download links. [Full measurements](../.shots/musicality/current_render-metrics.json), [real-browser smoke](../.shots/musicality/current_browser-smoke.json), and [final catalog/WAV verification](../.shots/musicality/final-verification.json) are also available locally. The ignored outputs are generated artifacts, so repository clones must rerun the review to create them.
+[Open the offline listening playlist](../.shots/musicality/index.html). It contains all 114 audio controls and download links. [Full measurements](../.shots/musicality/current_render-metrics.json), [real-browser smoke](../.shots/musicality/current_browser-smoke.json), and [historical catalog/WAV verification](../.shots/musicality/final-verification.json) are also available locally. The ignored outputs are generated artifacts, so repository clones must rerun the review to create them.
 
-The seeded First Light repeat differs by at most one PCM16 unit, about 69.5 dB below the program in RMS; both original hashes and the sample-level comparison are retained. All 114 delivered WAV hashes match the manifest.
+The seeded First Light repeat differs by at most one PCM16 unit, about 69.5 dB below the program in RMS; both original hashes and the sample-level comparison are retained. All 114 historical WAV hashes match their manifest.
 
 The first pass exposed excessive authored gain; strengths were normalized to the production linear-gain scale before catalog acceptance. Later balance checks led to tune-local nylon gain corrections in Drunken Sailor and a consistent glass automatic voice for Backing Drift. No global Freestyle mix change was required.
 
-Full-entry fingerprints compare all 38 role/ID pairs against the final compiled catalog. The contemporaneous snapshot has 29 unchanged entries and precisely the nine subsequently revised/rerendered entries. Earlier entry hashes are explicitly labelled **retrospective**, based on that snapshot and the tracked revisions; the final Drunken Sailor render captures its entry and adapter hashes directly. Earlier passes recorded the global `src/**/*.ts` digest but did not capture adapter hashes, and do not claim otherwise. New runs capture both source and adapter SHA-256 digests. Generated reports must read and write text explicitly as UTF-8; Windows default code pages can corrupt accented titles even while audio and hashes remain correct. [Fingerprint comparison](../.shots/musicality/catalog-fingerprint-verification.json).
+Full-entry fingerprints compare all 38 role/ID pairs against the pre-integration compiled catalog. The contemporaneous snapshot has 29 unchanged entries and precisely the nine subsequently revised/rerendered entries. Earlier entry hashes are explicitly labelled **retrospective**, based on that snapshot and the tracked revisions; the final Drunken Sailor render captures its entry and adapter hashes directly. Earlier passes recorded the global `src/**/*.ts` digest but did not capture adapter hashes, and do not claim otherwise. New runs capture both source and adapter SHA-256 digests. Generated reports must read and write text explicitly as UTF-8; Windows default code pages can corrupt accented titles even while audio and hashes remain correct. [Fingerprint comparison](../.shots/musicality/catalog-fingerprint-verification.json).
 
 “Pass” below means finite, unclipped, settled audio and no remaining broad balance flag. Peak is the combined stem; balance is automatic minus player RMS over the musical window. Listen at a comfortable consistent volume with normalization disabled when comparing levels.
 

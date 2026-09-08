@@ -9,6 +9,7 @@ import { FAMILIAR_TUNES, FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, TH
 import { LEGACY_ORDERS } from '../src/modes/playtune/legacyOrder';
 import { ROLES } from '../src/modes/playtune/role';
 
+const additions = ['yankee-doodle', 'la-bamba', 'irish-washerwoman'];
 const ids = ['frere-jacques', 'drunken-sailor', 'can-can', 'blue-danube', 'the-entertainer'];
 const end = (notes: readonly { beat: number; len: number }[]) => Math.max(...notes.map(n => n.beat + n.len));
 const phrase = (notes: ChartNote[], start: number, len: number) => notes
@@ -17,19 +18,19 @@ const phrase = (notes: ChartNote[], start: number, len: number) => notes
 describe('five familiar additions', () => {
   it('retains all familiar additions, with the backing course ordered independently', () => {
     expect(FAMILIAR_TUNES.map(t => t.id)).toEqual(ids);
-    expect(LIBRARY).toHaveLength(19);
-    expect(CHORD_CURVE).toHaveLength(19);
+    expect(LIBRARY).toHaveLength(22);
+    expect(CHORD_CURVE).toHaveLength(22);
     expect(CHORD_ORDER.slice(0, 3)).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground']);
     for (const role of Object.values(ROLES)) {
       expect(new Set(role.order).size).toBe(role.order.length);
-      if (role.id === 'melody') expect(role.order.filter(id => !ids.includes(id))).toEqual(LEGACY_ORDERS.playtune.map(id => id === 'drift' ? 'hopscotch' : id));
+      if (role.id === 'melody') expect(role.order.filter(id => !ids.includes(id) && !additions.includes(id))).toEqual(LEGACY_ORDERS.playtune.map(id => id === 'drift' ? 'hopscotch' : id));
       for (const [i, id] of ids.entries()) {
         const tune = findTune(id)!;
         expect(tune.origin).toBe('classic');
         expect(CLASSICS).toContain(tune);
         expect(role.order.filter(x => x === id)).toHaveLength(1);
         expect(role.card(tune).difficulty).toBe(role.id === 'melody' ? i + 1 : [1,2,4,4,5][i]);
-        const peers = role.tunes.filter(t => !ids.includes(t.id) && role.card(t).difficulty === i + 1);
+        const peers = role.tunes.filter(t => !ids.includes(t.id) && !additions.includes(t.id) && role.card(t).difficulty === i + 1);
         for (const peer of role.id === 'melody' ? peers : []) expect(role.order.indexOf(peer.id)).toBeLessThan(role.order.indexOf(id));
         expect(findChordEntry(id)?.tune).toBe(tune);
       }
@@ -40,7 +41,7 @@ describe('five familiar additions', () => {
   it('publishes all ten role entries in schema v1 with their own teaching and pass marks', () => {
     const catalog = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null });
     expect(catalog.schemaVersion).toBe(1);
-    expect(catalog.entries).toHaveLength(38);
+    expect(catalog.entries).toHaveLength(44);
     expect(catalog.entries.filter(e => ids.includes(e.id))).toHaveLength(10);
     for (const [i, id] of ids.entries()) {
       const melody = catalog.entries.find(e => e.id === id && e.role === 'melody')!;

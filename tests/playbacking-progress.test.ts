@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { BACKING_STORE, CHORD_STORE, MELODY_STORE, loadProgress, recordRun, resetProgress, passesNeeded } from '../src/modes/playtune/progress';
 import { CHORD_ORDER } from '../src/modes/playtune/library/chordcurve';
+import { CA92_BACKING_ORDER } from './fixtures/course-orders-ca92';
 import { LEGACY_ORDERS } from '../src/modes/playtune/legacyOrder';
 
 const pass = { accuracy: .9, score: 1234, grade: 'A' as const, passed: true };
@@ -59,11 +60,11 @@ describe('Backing access migration', () => {
     expect(recordRun(BACKING_STORE,p,'hopscotch',CHORD_ORDER,pass).unlocked).toBe(next);
     expect(p.unlocked).toHaveLength(before+1);
   });
-  it('caps fully unlocked old access at nineteen without fabricating achievements', () => {
-    write(CHORD_STORE, { unlocked: [...CHORD_ORDER.map(id => id === 'hopscotch' ? 'drift' : id),'chord-three','first-light','two-hands'], best: {} });
+  it('caps fully unlocked old access at the expanded course without fabricating achievements', () => {
+    write(CHORD_STORE, { unlocked: [...CA92_BACKING_ORDER.map(id => id === 'hopscotch' ? 'drift' : id),'chord-three','first-light','two-hands'], best: {} });
     const p = load();
-    expect(p.unlocked).toEqual(CHORD_ORDER);
-    expect(p.unlockCredit).toBe(16);
+    expect(new Set(p.unlocked)).toEqual(new Set(CHORD_ORDER));
+    expect(p.unlockCredit).toBe(19);
     expect(p.best).toEqual({});
   });
   it('recognizes legacy pass evidence when restoring earned access', () => {
