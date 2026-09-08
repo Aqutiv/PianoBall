@@ -2,7 +2,7 @@
 
 This review renders every published role arrangement through the production `AudioEngine`. It checks signal correctness and gives reviewers isolated stems for judging the music. It does **not** claim that automated measurements replace listening, or that a synthesized, compact excerpt recreates a concert performance.
 
-The final PR is integrated with Hopscotch and the three songs/rhythm switch in PR #50: **24 unique tracks / 44 role arrangements**. The table at the end of this document preserves the earlier 21-track audit, including retired Drift. Its 114 renders are historical evidence; updated percussion arrangements and newly added tracks are verified separately below. Human musical listening remains pending.
+The final PR is integrated with Hopscotch and the three songs/rhythm switch in PR #50: **24 unique tracks / 44 role arrangements**. The historical table below preserves the earlier 21-track audit, including retired Drift. Its 114 renders are historical evidence; updated percussion arrangements and newly added tracks are verified separately below. Human musical listening remains pending.
 
 ## Reproduce
 
@@ -50,6 +50,65 @@ The real-clock smoke runs the actual app and normal `AudioContext`/animation loo
 Human listening is still needed for phrase shape, instrument blend and resemblance to each cited score. Listen to each combined file first, then isolate the automatic stem wherever the accompaniment feels wrong. Check beginnings/pickups, bass inversions, melody/harmony collisions, repeated-note articulation, phrase endings, and whether the automatic line remains clear when playing Backing. For piano pieces, compare the cited excerpt in the arrangement/source notes; for folk tunes and originals, judge the declared arrangement rather than a nonexistent single canonical accompaniment.
 
 Prioritize Für Elise's bass/arpeggio answers, Bach's independent lines, Canon's layered voices, the waltz accompaniment of Blue Danube and Gymnopédie, The Entertainer's syncopation against its bass/chords, and the mix of sustained Drift versus the plucked/folk voices. Audition small-keyboard runtime octave fits as well as the authored-register reference files.
+
+## Integrated main review - 8 September 2026
+
+The final implementation includes merged PR #50, including its active playing-screen rhythm switch. **1,132 tests across 58 files**, production typecheck/build and the **44-entry schema-v1 export** pass.
+
+All **44 arrangements / 132 stems** have verified score fingerprints and WAV hashes, with no signal or broad balance-screening failures. The 12 arrangements with authored percussion were rendered again through the current production piano and owned-drum paths. The 32 remaining arrangements match their earlier full-entry fingerprints exactly; their pitched synthesis paths are unchanged. Historical files remain intact. The combined peak ceiling is -11.99 dBFS, and the loudest final tail is -117.26 dBFS.
+
+La Bamba's nylon automatic accompaniment needed a tune-local 2x gain correction to clear the balance screen. Its playable notes, automatic pitches/timing, harmony and drums remain the source data from PR #50. Hopscotch and the three inserted tunes retain their original playable pitch/timing contracts; only performance expression differs.
+
+The isolated real-clock browser check passes direct clicks on the active HUD Rhythm switch, accessible On/Off state, continued player/automatic notes, unchanged chart and ending timing, fresh drum rooms, restart/stop, and natural First Light completion. An earlier run timed out during the ending wait while heavy offline rendering ran concurrently; it was not counted as a pass and the isolated rerun completed.
+
+[Current listening playlist](../.shots/musicality/pr50-index.html) contains all 132 stems. [Combined measurements](../.shots/musicality/pr50-merged-metrics.json), [catalog/WAV verification](../.shots/musicality/pr50-final-verification.json), and [latest live smoke](../.shots/musicality/pr50-musicality_browser-smoke.json) preserve the detailed evidence. Human musical listening and octave-fitted mix approval remain pending.
+
+| Track | Role | Measured verdict | Evidence | Ideal performance |
+| --- | --- | --- | --- | --- |
+| First Light | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_first-light_combined.wav) |
+| Ode to Joy | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_ode-to-joy_combined.wav) |
+| Twinkle, Twinkle | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_twinkle_combined.wav) |
+| Frère Jacques | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_frere-jacques_combined.wav) |
+| Amazing Grace | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_amazing-grace_combined.wav) |
+| Scarborough Fair | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_scarborough-fair_combined.wav) |
+| Hopscotch | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_hopscotch_combined.wav) |
+| Yankee Doodle | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_yankee-doodle_combined.wav) |
+| Drunken Sailor | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_drunken-sailor_combined.wav) |
+| Greensleeves | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_greensleeves_combined.wav) |
+| Für Elise | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_fur-elise_combined.wav) |
+| Londonderry Air | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_londonderry-air_combined.wav) |
+| La Bamba | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_la-bamba_combined.wav) |
+| Can-Can | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_can-can_combined.wav) |
+| Minuet in G | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_minuet-in-g_combined.wav) |
+| Gymnopédie No. 1 | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_gymnopedie_combined.wav) |
+| Two Hands | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_two-hands_combined.wav) |
+| The Irish Washerwoman | Melody | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_melody_irish-washerwoman_combined.wav) |
+| The Blue Danube | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_blue-danube_combined.wav) |
+| Canon in D | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_canon-in-d_combined.wav) |
+| Jesu, Joy of Man’s Desiring | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_jesu-joy_combined.wav) |
+| The Entertainer | Melody | Pass | Unchanged score | [Combined](../.shots/musicality/current_melody_the-entertainer_combined.wav) |
+| Frère Jacques | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_frere-jacques_combined.wav) |
+| Ode to Joy | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_ode-to-joy_combined.wav) |
+| Ground | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_chord-ground_combined.wav) |
+| Twinkle, Twinkle | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_twinkle_combined.wav) |
+| Off the Beat | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_chord-march_combined.wav) |
+| Yankee Doodle | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_yankee-doodle_combined.wav) |
+| Hopscotch | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_hopscotch_combined.wav) |
+| Drunken Sailor | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_drunken-sailor_combined.wav) |
+| Canon in D | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_canon-in-d_combined.wav) |
+| Amazing Grace | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_amazing-grace_combined.wav) |
+| Scarborough Fair | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_scarborough-fair_combined.wav) |
+| La Bamba | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_la-bamba_combined.wav) |
+| Gymnopédie No. 1 | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_gymnopedie_combined.wav) |
+| Londonderry Air | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_londonderry-air_combined.wav) |
+| Greensleeves | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_greensleeves_combined.wav) |
+| The Irish Washerwoman | Backing | Pass | Fresh render | [Combined](../.shots/musicality/pr50-musicality_chords_irish-washerwoman_combined.wav) |
+| Can-Can | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_can-can_combined.wav) |
+| The Blue Danube | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_blue-danube_combined.wav) |
+| Für Elise | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_fur-elise_combined.wav) |
+| Minuet in G | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_minuet-in-g_combined.wav) |
+| Jesu, Joy of Man’s Desiring | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_jesu-joy_combined.wav) |
+| The Entertainer | Backing | Pass | Unchanged score | [Combined](../.shots/musicality/current_chords_the-entertainer_combined.wav) |
 
 ## Pre-integration review — 8 September 2026
 

@@ -2,7 +2,6 @@
 import { AudioEngine, DEFAULT_AUDIO } from '../src/audio/engine.ts';
 import { compilePublishedCatalog } from '../src/content/export.ts';
 import { ROLES } from '../src/modes/playtune/role.ts';
-import { setPlayTuneSettings } from '../src/modes/playtune/settings.ts';
 
 const LEAD_IN = .25;
 const TAIL = 5;
@@ -174,7 +173,13 @@ export async function run(options = {}) {
 /** Real browser clock, production mode/input/transport, isolated by the runner profile. */
 export async function smoke({label='current'} = {}) {
   const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-  const waitFor=async(test,label,limit=20000)=>{const start=performance.now();while(!test()){if(performance.now()-start>limit)throw Error('Timed out: '+label);await delay(30);}};
+  const waitFor=async(test,label,limit=20000)=>{const start=performance.now();while(!test()){
+    if(performance.now()-start>limit){
+      const api=window.__pianoball,mode=api?.shell.active;
+      throw Error('Timed out: '+label+' '+JSON.stringify({phase:mode?.phase,tune:mode?.tune?.id,audioNow:api?.audio.now,audioState:api?.audio.ctx?.state,endsAt:mode?.endsAt,transport:mode?.transport?.running,suspended:api?.shell.suspended,screen:api?.overlay.screen,visibility:document.visibilityState,fps:api?.loop.stats.fps}));
+    }
+    await delay(30);
+  }};
   const check=(condition,message)=>{if(!condition)throw Error(message);};
   await waitFor(()=>window.__pianoball?.shell.active,'application boot');
   const api=window.__pianoball, engine=api.audio;
@@ -238,22 +243,26 @@ export async function smoke({label='current'} = {}) {
   check(mode.start('hopscotch'),'Cannot start live Hopscotch');
   await waitFor(()=>mode.phase==='playing'&&calls.some(call=>call.written)&&mode.drums.track,'Hopscotch automatic notes and drums');
   const hopscotchGeneration=engine.padGen,initialDrumTrack=mode.drums.track;
+  const rhythmSwitch=document.querySelector('#pt-live-rhythm');
+  check(rhythmSwitch&&!rhythmSwitch.hidden&&rhythmSwitch.getAttribute('aria-checked')==='true','Active rhythm switch is not visible and on');
   const toggleJudge=mode.judge,toggleEndsAt=mode.endsAt,toggleZero=mode.transport.timeOf(0);
   const togglePitch=mode.judge.targets[0].note;
   api.noteOn(togglePitch,90);await delay(50);
   const togglePlayerVoice=engine.voices.get(togglePitch);
   check(togglePlayerVoice,'Toggle check did not create a player voice');
-  setPlayTuneSettings({rhythmEnabled:false});mode.applySettings();await delay(100);
+  rhythmSwitch.click();await delay(100);
+  check(rhythmSwitch.getAttribute('aria-checked')==='false'&&rhythmSwitch.textContent.includes('Off'),'HUD switch did not show rhythm off');
   check(!mode.drums.track&&engine.drumTracks.size===0,'Rhythm off retained drum sources or room');
   check(engine.bedAudible&&api.bed.running&&engine.padGen===hopscotchGeneration,'Rhythm off interrupted automatic notes');
   check(engine.voices.get(togglePitch)===togglePlayerVoice,'Rhythm off interrupted the player note');
   check(mode.judge===toggleJudge&&mode.endsAt===toggleEndsAt&&mode.transport.timeOf(0)===toggleZero,'Rhythm off changed the chart or ending clock');
-  setPlayTuneSettings({rhythmEnabled:true});mode.applySettings();
+  rhythmSwitch.click();
+  check(rhythmSwitch.getAttribute('aria-checked')==='true'&&rhythmSwitch.textContent.includes('On'),'HUD switch did not show rhythm on');
   await waitFor(()=>mode.drums.track,'Re-enabled rhythm on the existing clock');
   check(mode.drums.track!==initialDrumTrack,'Rhythm on reused the cancelled drum room');
   check(mode.judge===toggleJudge&&mode.endsAt===toggleEndsAt&&mode.transport.timeOf(0)===toggleZero,'Rhythm on restarted the note chart or changed its tail');
   api.noteOff(togglePitch);
-  result.checks.push({test:'rhythm toggle',drumsAndRoomCancelled:true,playerAndAutomaticNotesContinue:true,chartAndEndingClockUnchanged:true,newDrumRouteOnEnable:true});
+  result.checks.push({test:'active HUD rhythm toggle',accessibleSwitchStateUpdates:true,drumsAndRoomCancelled:true,playerAndAutomaticNotesContinue:true,chartAndEndingClockUnchanged:true,newDrumRouteOnEnable:true});
   const hopscotchDrumTrack=mode.drums.track;
   check(engine.bedVoice==='bed-electric-piano','Hopscotch did not select its automatic electric piano');
   mode.pause();await delay(200);
@@ -265,6 +274,7 @@ export async function smoke({label='current'} = {}) {
   mode.stopRun();
   result.checks.push({test:'Hopscotch notes/drums stop/restart',role:'chords',automaticVoice:'bed-electric-piano',pauseMutesNotesAndDrumRooms:true,resumeUsesFreshGenerations:true});
   mode.setRole('melody');
+  await save(label+'_browser-smoke-progress.json',JSON.stringify({...result,pending:'natural song completion'},null,2)+'\n','application/json');
   // Let a complete short excerpt finish on the unmodified real clock.
   check(mode.start('first-light'),'Cannot start ending smoke');
   const logicalEnd=mode.transport.timeOf(Math.max(...mode.tune.melody.map(n=>n.beat+n.len),...mode.tune.backingNotes.map(n=>n.beat+n.len),...mode.tune.chords.map(n=>n.beat+n.len)));

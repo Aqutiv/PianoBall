@@ -132,7 +132,8 @@ export const LA_BAMBA: Tune = {
 export const LA_BAMBA_BACKING: ChartNote[] = eighthUnits(pianoReduction);
 
 // Apply expression in the final eighth-note units, after all source times scale.
+// The nylon accompaniment needs a tune-local gain lift to balance the player piano.
 LA_BAMBA.melody = melodyPerformance(LA_BAMBA.melody,
   [[0, .76], [10.5, .86], [34.5, .8], [66.5, .68], [72, .8], [82.5, .88], [106.5, .82], [138.5, .66]]);
 LA_BAMBA.backingNotes = melodyPerformance(LA_BAMBA.backingNotes!,
-  [[0, .4], [26.5, .46], [66.5, .36], [72, .42], [98.5, .48], [138.5, .35]], .9);
+  [[0, .4], [26.5, .46], [66.5, .36], [72, .42], [98.5, .48], [138.5, .35]], .9).map(note => ({ ...note, gain: note.gain! * 2 }));

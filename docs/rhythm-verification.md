@@ -4,7 +4,7 @@ Verified 8 September 2026 in the isolated worktree at D:\Projects\PianoBall\.sho
 
 ## Automated checks
 
-- Full Vitest suite: **54 files, 1,034 tests passed**.
+- Full Vitest suite: **54 files, 1,036 tests passed**.
 - Production TypeScript/Vite build and schema-v1 content export passed: **22 Melody + 22 Backing = 44 entries**.
 - All six original role entries and six new traditional role entries have authored percussion. The 32 existing classical/traditional role entries have none added. Hopscotch’s existing note, rhythm, ending and replacement tests pass.
 - New stable IDs, exact insertions, old relative ordering, no invented scores, saved access, retired passes, reset epochs and Drift-to-Hopscotch migration are covered. Historical fixtures are independent of the expanded live catalog; the old pitched Melody content digest is unchanged.
@@ -42,3 +42,10 @@ The exact source passages and editorial choices are in [Yankee Doodle / Irish Wa
 La Bamba uses the traditional first vocal line from the official SEP/ConArte score, as explicitly documented, rather than claiming an exact transcription of the planned 1939 El Jarocho recording. The modern second voice, introduction, harmonization and recording are excluded.
 
 **Listening verification remains outstanding.** This model environment does not support audio input, so no claim is made to have heard these renders or verified recognizability, feel and balance by ear. The complete mixes and stems are supplied for that review.
+
+
+## Live control review fix
+
+PR #50 finding 3960322941 correctly identified that opening Settings goes through the pause screen and restarts the attempt on resume. A dedicated accessible Rhythm: On/Off switch now appears on the playing HUD for tracks with authored percussion. It updates the same persisted preference and applies it immediately without menu navigation. Pause and Settings retain their existing restart behavior.
+
+Two additional role-specific regression tests activate the HUD callback and verify that the judge and transport origin remain unchanged, owned drums cancel, future hits rejoin, and pointer clicks release keyboard focus. Real Chromium pointer clicks at a 390 × 844 viewport verified off/on in Melody and Backing while phase stayed playing, the shell stayed unsuspended, no overlay opened, and the same judge and transport origin survived. The switch was unobstructed, at least 44 px high, and caused no horizontal overflow. The full 1,036-test suite, production build and 44-entry export pass after this fix.

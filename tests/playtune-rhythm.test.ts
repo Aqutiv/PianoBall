@@ -246,7 +246,20 @@ function modeRig() {
   vi.spyOn(engine, 'running', 'get').mockImplementation(() => sink.running);
   vi.spyOn(engine, 'drum').mockImplementation((voice, gain = 1, at = 0) => sink.drum(voice, gain, at));
   vi.spyOn(engine, 'createDrumTrack').mockImplementation(() => sink.createDrumTrack());
-  const panel = () => ({ innerHTML: '', querySelector: () => ({ textContent: '', innerHTML: '', style: {} }), classList: { toggle: vi.fn() } });
+  const elements = new Map<string, any>();
+  const panel = () => ({ innerHTML: '', querySelector: (selector: string) => {
+    if (!elements.has(selector)) {
+      const attributes: Record<string, string> = {};
+      const listeners: Record<string, (event: { detail: number }) => void> = {};
+      elements.set(selector, { textContent: '', innerHTML: '', style: {}, hidden: true,
+        setAttribute: (name: string, value: string) => { attributes[name] = value; },
+        getAttribute: (name: string) => attributes[name],
+        addEventListener: (name: string, fn: (event: { detail: number }) => void) => { listeners[name] = fn; },
+        click: (detail = 1) => listeners.click?.({ detail }), blur: vi.fn(),
+      });
+    }
+    return elements.get(selector);
+  }, classList: { toggle: vi.fn() } });
   const hud = { left: panel(), right: panel(), banner: vi.fn(), clearPanels: vi.fn() } as unknown as Hud;
   const bed = { clearTracks: vi.fn(), stop: vi.fn(), setTrack: vi.fn(), setNoteTrack: vi.fn(), start: vi.fn() } as unknown as ChordBed;
   const stage = {
@@ -260,7 +273,7 @@ function modeRig() {
   };
   const mode = new PlayTuneMode(ctx);
   mode.enter();
-  return { mode, sink, bed };
+  return { mode, sink, bed, rhythmButton: elements.get('#pt-live-rhythm') };
 }
 
 describe('Hopscotch drum lifecycle in both play roles', () => {
@@ -331,6 +344,39 @@ describe('Hopscotch drum lifecycle in both play roles', () => {
 });
 
 describe('the shared tune rhythm preference', () => {
+  it.each(['melody', 'chords'] as const)('changes rhythm from the live %s HUD without pausing or replacing the judge', role => {
+    const { mode, sink, bed, rhythmButton } = modeRig();
+    mode.setRole(role); mode.start(HOPSCOTCH.id);
+    run(sink, 4); mode.step(0.01);
+    expect(mode.phase).toBe('playing');
+    const judge = (mode as unknown as { judge: unknown }).judge;
+    const clock = (mode as unknown as { transport: Transport }).transport;
+    const zero = clock.timeOf(0);
+    const hits = [...sink.hits];
+    expect(rhythmButton.hidden).toBe(false);
+    rhythmButton.click();
+    expect(rhythmButton.getAttribute('aria-checked')).toBe('false');
+    expect(rhythmButton.blur).toHaveBeenCalledOnce();
+    expect(hits.every(h => h.cancel.mock.calls.length === 1)).toBe(true);
+    expect(sink.tracks[0].cancel).toHaveBeenCalledOnce();
+    run(sink, 1);
+    expect(sink.hits).toHaveLength(hits.length);
+    const enabledAt = sink.now;
+    rhythmButton.click(0);
+    expect(rhythmButton.getAttribute('aria-checked')).toBe('true');
+    expect(rhythmButton.blur).toHaveBeenCalledOnce();
+    expect(mode.phase).toBe('playing');
+    expect((mode as unknown as { judge: unknown }).judge).toBe(judge);
+    expect(clock.timeOf(0)).toBe(zero);
+    expect(bed.start).toHaveBeenCalledOnce();
+    run(sink, 1);
+    expect(sink.hits.length).toBeGreaterThan(hits.length);
+    expect(sink.hits.slice(hits.length).every(h => h.at >= enabledAt)).toBe(true);
+    mode.start('fur-elise');
+    expect(rhythmButton.hidden).toBe(true);
+    mode.exit();
+  });
+
   it.each(['melody', 'chords'] as const)('starts silently with rhythm disabled in %s without muting the other part', role => {
     setPlayTuneSettings({ rhythmEnabled: false });
     const { mode, sink, bed } = modeRig();

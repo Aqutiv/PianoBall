@@ -18,6 +18,7 @@ export class TuneHud {
   private accEl!: HTMLElement;
   private comboEl!: HTMLElement;
   private tallyEl!: HTMLElement;
+  private rhythmEl!: HTMLButtonElement;
   /**
    * Whether the elements below exist yet.
    *
@@ -28,7 +29,7 @@ export class TuneHud {
    */
   private mounted = false;
 
-  constructor(private readonly hud: Hud) {}
+  constructor(private readonly hud: Hud, private readonly onToggleRhythm: () => void) {}
 
   mount(): void {
     // The chord sits under the title rather than beside the accuracy: it is
@@ -44,6 +45,8 @@ export class TuneHud {
         <div class="chord" id="pt-chord">&nbsp;</div>
         <div class="score-sub" id="pt-next"></div>
       </div>
+      <button type="button" class="tune-rhythm" id="pt-live-rhythm" role="switch"
+        aria-label="Tune rhythm" aria-checked="true" hidden>Rhythm: On</button>
     `;
     this.hud.right.innerHTML = `
       <div class="accuracy" id="pt-acc">100%</div>
@@ -59,14 +62,28 @@ export class TuneHud {
     this.accEl = q('#pt-acc');
     this.comboEl = q('#pt-combo');
     this.tallyEl = q('#pt-tally');
+    this.rhythmEl = q('#pt-live-rhythm') as HTMLButtonElement;
+    this.rhythmEl.addEventListener('click', (event) => {
+      this.onToggleRhythm();
+      // Pointer users can return straight to the computer piano; keyboard
+      // activation keeps focus on the accessible switch.
+      if (event.detail > 0) this.rhythmEl.blur();
+    });
     this.mounted = true;
   }
 
   setTune(tune: Tune | null, accompaniment?: string): void {
     if (!this.mounted) return;
     this.titleEl.textContent = tune?.title ?? ' ';
+    this.rhythmEl.hidden = !tune?.rhythm;
     this.hud.left.classList.toggle('playing-backing', Boolean(accompaniment));
     this.subEl.textContent = accompaniment ?? (tune ? `${tune.composer} · ${tune.bpm} bpm` : 'Choose a tune');
+  }
+
+  setRhythm(enabled: boolean): void {
+    if (!this.mounted) return;
+    this.rhythmEl.setAttribute('aria-checked', String(enabled));
+    this.rhythmEl.textContent = `Rhythm: ${enabled ? 'On' : 'Off'}`;
   }
 
   update(judge: Judge | null, progress: number, harmony: Harmony = { now: null, next: null }): void {
