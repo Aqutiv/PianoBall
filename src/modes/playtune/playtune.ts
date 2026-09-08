@@ -147,7 +147,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.ctx = ctx;
     this.drums = new TuneDrums(ctx.audio);
     this.auras = new AuraStage(ctx.stage, this.deck);
-    this.panel = new TuneHud(ctx.hud);
+    this.panel = new TuneHud(ctx.hud, () => {
+      setPlayTuneSettings({ rhythmEnabled: !playTuneSettings().rhythmEnabled });
+      this.applySettings();
+    });
     this.roleId = playTuneSettings().role;
     this.progress = loadProgress(this.role.storageKey, this.role.order);
     this.remap();
@@ -197,6 +200,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   applySettings(): void {
     this.setRole(playTuneSettings().role);
     const enabled = playTuneSettings().rhythmEnabled;
+    this.panel.setRhythm(enabled);
     if (enabled === this.rhythmEnabled) return;
     this.rhythmEnabled = enabled;
     if (!enabled) this.drums.stop();
@@ -343,6 +347,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     );
     this.ctx.bed.start();
     this.rhythmEnabled = settings.rhythmEnabled;
+    this.panel.setRhythm(this.rhythmEnabled);
     if (this.rhythmEnabled) this.drums.start(tune.rhythm, t, tune.pickup ?? 0);
 
     this.panel.setTune(tune, this.roleId === 'chords' ? this.role.card(tune).teaches : undefined);

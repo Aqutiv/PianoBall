@@ -123,7 +123,7 @@ describe('pinball drums', () => {
 
 /** Just enough panel for `TuneHud` to mount into; nothing here is asserted. */
 function fakeHud(): Hud {
-  const node = { textContent: '', innerHTML: '', style: {} };
+  const node = { textContent: '', innerHTML: '', style: {}, addEventListener: vi.fn(), setAttribute: vi.fn() };
   const panel = () => ({ innerHTML: '', querySelector: () => node, classList: { toggle: vi.fn() } });
   return {
     left: panel(), right: panel(),

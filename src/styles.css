@@ -896,6 +896,10 @@ kbd {
 
 /* ------------------------------------------------------- playtune HUD --- */
 
+.tune-rhythm { pointer-events: auto; align-self: flex-start; min-height: 44px; margin-top: 8px; background: var(--floor-deep); color: var(--ink); border-color: var(--stroke); }
+.tune-rhythm[aria-checked="true"] { border-color: var(--neon); }
+.tune-rhythm[hidden] { display: none; }
+
 .tune-title { font-family: var(--font-display); font-size: clamp(18px, 3vh, 30px); font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; }
 .tune-bar { width: 190px; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-top: 7px; overflow: hidden; }
 .tune-bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--neon), var(--neon2)); transition: width 120ms linear; }
