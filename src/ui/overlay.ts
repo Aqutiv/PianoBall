@@ -448,7 +448,7 @@ export class Overlay {
               ? '<span class="song-best song-new">Updated arrangement · no result yet</span>'
               : '<span class="song-best song-new">new</span>';
       const history = previous
-        ? `<span class="song-by">Previous arrangement: ${previous.grade ?? (previous.passed ? 'passed' : '—')} · ${Math.round(previous.accuracy * 100)}%</span>`
+        ? `<span class="song-history">Previous arrangement: ${previous.grade ?? (previous.passed ? 'passed' : '—')} · ${Math.round(previous.accuracy * 100)}%</span>`
         : '';
 
       return `

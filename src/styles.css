@@ -880,6 +880,7 @@ kbd {
 .song-by i { font-style: normal; color: var(--dim); opacity: 0.75; }
 .song-by i::before { content: '·'; margin: 0 5px; opacity: 0.6; }
 .song-teaches { grid-column: 1 / -1; grid-row: 3; font-size: 11.5px; color: #9aa8d0; margin-top: 3px; }
+.song-history { grid-column: 1 / -1; grid-row: 4; font-size: 11px; color: var(--dim); }
 .song-best {
   grid-column: 2; grid-row: 1;
   font-family: var(--mono); font-size: 11px; color: var(--accent); text-align: right;
@@ -1601,6 +1602,7 @@ kbd {
 [data-theme="toybox"] .mode-tag,
 [data-theme="toybox"] .theme-blurb,
 [data-theme="toybox"] .song-by,
+[data-theme="toybox"] .song-history,
 [data-theme="toybox"] .song-teaches {
   /* Dark enough to clear 4.5:1 against the cards' cream, which is a shade
      deeper than the panel's -- the lighter purple passed on one and not the
