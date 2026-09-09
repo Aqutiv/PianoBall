@@ -10,10 +10,10 @@
  */
 import { noteToFreq } from '../midi/notes';
 
-export type SpectrumGen = 'piano' | 'saw' | 'pulse' | 'formant' | 'reed' | 'bowed' | 'drawbar';
+export type SpectrumGen = 'piano' | 'saw' | 'pulse' | 'formant' | 'reed' | 'bowed' | 'drawbar' | 'brass';
 
 export const SPECTRA: readonly SpectrumGen[] =
-  ['piano', 'saw', 'pulse', 'formant', 'reed', 'bowed', 'drawbar'];
+  ['piano', 'saw', 'pulse', 'formant', 'reed', 'bowed', 'drawbar', 'brass'];
 
 /** A generator and, where it takes any, its parameters. Cached by both. */
 export interface SpectrumRef {
@@ -115,6 +115,15 @@ const GENERATORS: Record<SpectrumGen, Generator> = {
   reed: {
     max: () => 32,
     amp: (k) => ((k % 2 ? 1 : 0.35) / k) * (k >= 6 && k <= 10 ? 1.6 : 1),
+  },
+  /** A brass bell reinforces the middle harmonics before its high rolloff. */
+  brass: {
+    max: () => 40,
+    amp: (k, f0, p) => {
+      const f = k * f0;
+      return Math.pow(k, -(p[0] ?? 1)) * (1 + 1.25 * gaussian(f, 1500, 1000))
+        * Math.exp(-Math.max(0, f - 4500) / 2300);
+    },
   },
   /** A bowed string: one over k with the body's resonance near 2 kHz and nothing much above 6. */
   bowed: {

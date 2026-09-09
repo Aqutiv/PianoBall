@@ -68,8 +68,8 @@ worker. These post-build JSON files remain outside the PWA precache.
    desktop release.
 
 The compiler reads each role's `order`, `tunes`, `chart`, `backing`, `card`
-and `voices`. Order and membership must agree. It emits 22 Melody entries followed by
-22 Backing entries (wire role `chords`), retaining each authored progression; it never sorts titles or IDs.
+and `voices`. Order and membership must agree. It emits 24 Melody entries followed by
+24 Backing entries (wire role `chords`), retaining each authored progression; it never sorts titles or IDs.
 All `ALL_TUNES` entries run through `validate` and `harmonyProblems`;
 every `CHORD_CURVE` entry runs through `chordProblems` as well.
 
@@ -186,9 +186,10 @@ V1 is the deterministic written arrangement. RNG, humanization, roll, accent
 variation, wall-clock scheduling and user settings are not materialized, and
 no optional feel metadata is added. Native procedural gain scaling (currently
 `clamp(gain * 4, 0.05, 0.55)`) belongs to the consumer and is not baked in.
-The native parser currently ignores root/scale/voices/attack/part/offset and
-provenance, but the export retains them for a future audio port. This feed does
-not implement native sample banks, effects, feel, audio parity or Pinball.
+The current native parser consumes the voice IDs and keyVoicing; Course::prepare
+resolves the installed programs independently of their historical browser bank.
+The feed transfers instrument identity and event data, not browser synthesis or
+audio assets. The desktop plays its existing corresponding programs.
 
 ## Bytes, provenance and publication safety
 
@@ -233,7 +234,7 @@ Optional sibling-native check (not part of browser CI):
 ```powershell
 $pianoManifest = Get-Content '.\dist\content\v1\manifest.json' -Raw | ConvertFrom-Json
 $pianoCatalogPath = Join-Path (Resolve-Path '.\dist\content\v1') $pianoManifest.url
-& 'D:\Projects\PianoBallDesktop\build\xps\Release\CatalogTests.exe' $pianoCatalogPath
+& 'D:\Projects\PianoBallDesktop\build\desktop\Release\CatalogTests.exe' $pianoCatalogPath
 if ($LASTEXITCODE) { throw 'The native catalogue reader rejected this export.' }
 ```
 
@@ -250,14 +251,15 @@ checks remain pending until this feed is deployed.
 
 The browser labels the second role **Backing**. Its exported ID remains
 `chords`, the schema remains v1, and retained song IDs remain stable. The feed
-contains 44 entries. No Windows UI change or deployment is part of this revision;
+contains 48 entries. No Windows UI change or deployment is part of this revision;
 an older client may continue to label the role Chords and manage scores under
 its existing policy. Browser migration is separate from native save handling.
 
 Player charts are authored in `library/chordcurve.ts` with shared notation
 helpers. Validation checks finite timing, pitch, repeated-pitch overlap,
 three-note polyphony including holds, octave hand span, passage bounds and the
-standard 25-key fit. Backing keys use the lead bank's Felt Piano. Hopscotch
+standard 25-key fit. Every published role has an explicit fixed instrument assignment in
+`src/modes/playtune/fixedPairings.ts` (see the fixed-instrument verification report). Hopscotch
 replaces Drift in both roles at level 2. The musicality revision corrects the
 retained arrangements and gives every Melody entry explicit authored accompaniment.
 Automatic gain, attack and sounding duration compile into the existing backing
@@ -273,4 +275,17 @@ they implement this field. Pitched `backingEvents` remain separate. In Melody,
 authored accompaniment events are labeled `chord`; in Backing,
 the automatic melody remains labeled `melody`.
 
-The browser’s persisted `PlayTuneSettings.rhythmEnabled` preference controls only live percussion. Authored `drumEvents` are exported regardless of that setting. Twelve of the 44 entries carry percussion: six original role entries and six new traditional role entries. The existing 32 classical/traditional role entries have no added drums. `repeatRhythm` writes explicit hits in the tune’s chart beats, so The Irish Washerwoman’s six eighth-note beats never pass through a quarter-note rhythm-picker conversion.
+The browser’s persisted `PlayTuneSettings.rhythmEnabled` preference controls only live percussion. Authored `drumEvents` are exported regardless of that setting. Authored percussion remains unchanged when instrument pairings change. `repeatRhythm` writes explicit hits in the tune’s chart beats, so The Irish Washerwoman’s six eighth-note beats never pass through a quarter-note rhythm-picker conversion.
+
+## Fixed instruments and native practice records
+
+The fixed-pairing registry provides the authored Melody and Backing voice fields.
+Both playback and export still consume role.voices(tune); schemaVersion stays 1.
+The six added identities require a current installed desktop sound bank.
+
+Current native PracticeStore includes voice IDs and keyVoicing in each arrangement
+fingerprint. Changing those fields resets that track’s practice record when it
+is inspected or started, including tempo, loop/section settings, ladder state,
+attempts and practice best. Course scores, passed state and unlock identities
+remain stable; unchanged tracks retain their practice records. Preserving changed
+practice records requires a companion native migration outside this browser work.

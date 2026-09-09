@@ -1,0 +1,49 @@
+{
+  "permission": "Reused at the explicit request of the owner of both projects on 2026-09-09.",
+  "conversion": "Existing artwork resized to fit 400x400 and encoded as JPEG quality 88 using the existing Sharp dependency; no generated replacement art.",
+  "trumpet": "Desktop programArtStem already uses analog-brass.jpg for Trumpet; that card depicts a solo trumpet.",
+  "entries": [
+    {
+      "id": "trumpet",
+      "source": "PianoBallDesktop/assets/instruments/analog-brass.jpg",
+      "sourceSha256": "66d8779039b789ebf10534df75d21a5a32186d08c712521353c727b2e4063907",
+      "output": "public/instruments/trumpet.jpg",
+      "outputSha256": "16ea6ae6e6ce9c4b8bb54addcb45aa7ca6e61b5c05d293a5bc19b2402dccf86d"
+    },
+    {
+      "id": "harmonica",
+      "source": "PianoBallDesktop/assets/instruments/harmonica.png",
+      "sourceSha256": "fc7305a4fcbddd4ec36628822d8da42b435dc296f607ac58e751bb09e801bedb",
+      "output": "public/instruments/harmonica.jpg",
+      "outputSha256": "556c63a995412567ab0d444134678576a65637841c7fb47a1250dcd837804d15"
+    },
+    {
+      "id": "electric-bass",
+      "source": "PianoBallDesktop/assets/instruments/electric-bass.png",
+      "sourceSha256": "53c3aef6cf2f759f3ac02c9be095574f6e573787adf597940936cb2032d3bbb5",
+      "output": "public/instruments/electric-bass.jpg",
+      "outputSha256": "e3f3d9438907328c87200ae735411fcc6225221972dd03c332da2bf46c1529ab"
+    },
+    {
+      "id": "steel-string-guitar",
+      "source": "PianoBallDesktop/assets/instruments/steel-string-guitar.png",
+      "sourceSha256": "99c05d89a90fb30230b55695fc69bfb95b02b1cd386fbca330f883ff57099fb5",
+      "output": "public/instruments/steel-string-guitar.jpg",
+      "outputSha256": "ecf35337dadc0e46214b47b6ceba2d7b2db1c6b89a13cc108d65ab23b20d8238"
+    },
+    {
+      "id": "clean-electric-guitar",
+      "source": "PianoBallDesktop/assets/instruments/clean-electric-guitar.png",
+      "sourceSha256": "6cf41fd043b01df2569b5723a6c68c8ebeb15cc72953d3b5f1d98a381c13592a",
+      "output": "public/instruments/clean-electric-guitar.jpg",
+      "outputSha256": "710d286df74a1d7dfd4172bb53baf5021e8b45b953a3e4a7a0cef3c6c266603b"
+    },
+    {
+      "id": "brass-ensemble",
+      "source": "PianoBallDesktop/assets/instruments/brass-ensemble.png",
+      "sourceSha256": "e4165a232156e88eb15f8c14ffcdedadbfc953b0c3647dfae533c937d8205cc2",
+      "output": "public/instruments/brass-ensemble.jpg",
+      "outputSha256": "a337e67c0e4a026f541641c3e3c8639dc463ddbc651bc841e1dda7ba87804d94"
+    }
+  ]
+}

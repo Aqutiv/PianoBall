@@ -1,3 +1,4 @@
+import { backingInstruments } from '../fixedPairings';
 import { LE_TEMPS_DES_CERISES, HAVA_NAGILA, CERISES_BACKING, HAVA_BACKING } from './accordionTunes';
 import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
@@ -17,15 +18,15 @@ export interface ChordEntry { tune: Tune; role: ChordRole }
 const pass = [0, 0.55, 0.60, 0.63, 0.67, 0.70];
 const close = (tune: Tune) => tune.chords.at(-1)!.beat;
 function entry(tune: Tune, difficulty: ChordRole['difficulty'], teaches: string,
-  notes: ChordRole['notes'], melodyVoiceId = 'bed-felt-piano', sustained = false): ChordEntry {
+  notes: ChordRole['notes']): ChordEntry {
   return { tune, role: { difficulty, teaches, pass: pass[difficulty], notes,
-    keyVoicing: sustained ? 'bed' : 'lead', keysVoiceId: sustained ? 'glass-pad' : 'felt-piano', melodyVoiceId } };
+    ...backingInstruments(tune.id) } };
 }
 
 /** Authored accompaniment course. The wire role remains `chords` for native v1. */
 export const CHORD_CURVE: ChordEntry[] = [
   entry(FRERE_JACQUES, 1, 'Follow C and G in the bass, including the final return home.',
-    harmonicBass(FRERE_JACQUES), 'bed-music-box'),
+    harmonicBass(FRERE_JACQUES)),
   entry(ODE_TO_JOY, 1, 'Follow the harmony in the bass, including changes inside the bar.',
     harmonicBass(ODE_TO_JOY)),
   entry(CHORD_GROUND, 1, 'Root and fifth: two bass notes to a bar.',
@@ -37,9 +38,9 @@ export const CHORD_CURVE: ChordEntry[] = [
   entry(YANKEE_DOODLE, 2, 'Alternate marching bass notes, then settle into the final chord.',
     YANKEE_DOODLE_BACKING),
   entry(HOPSCOTCH, 2, 'Bass on one, a held chord on three: bounce through Dorian harmony.',
-    HOPSCOTCH.backingNotes!, 'bed-electric-piano'),
+    HOPSCOTCH.backingNotes!),
   entry(DRUNKEN_SAILOR, 2, 'Keep the bass-and-chord march through D minor and C major.',
-    figure(DRUNKEN_SAILOR, [[0, 'bass', 0.85], [1, 'dyad', 0.8], [2, 'bass', 0.85], [3, 'dyad', 0.8]], { cadence: close(DRUNKEN_SAILOR) }), 'nylon-guitar'),
+    figure(DRUNKEN_SAILOR, [[0, 'bass', 0.85], [1, 'dyad', 0.8], [2, 'bass', 0.85], [3, 'dyad', 0.8]], { cadence: close(DRUNKEN_SAILOR) })),
   entry(CANON_IN_D, 3, 'Learn the repeating bass ground, with broken-chord answers.',
     figure(CANON_IN_D, [[0, 'bass', 0.45], [0.5, 'third', 0.45], [1, 'bass', 0.45], [1.5, 'third', 0.45],
       [2, 'bass', 0.45], [2.5, 'third', 0.45], [3, 'bass', 0.45], [3.5, 'third', 0.45]], { cadence: close(CANON_IN_D) })),
@@ -51,11 +52,11 @@ export const CHORD_CURVE: ChordEntry[] = [
     LA_BAMBA_BACKING),
   { tune: LE_TEMPS_DES_CERISES, role: {
     difficulty: 3, pass: .63, teaches: 'Keep bass and two light chord answers beneath the accordion melody.',
-    notes: CERISES_BACKING, keyVoicing: 'lead', keysVoiceId: 'accordion', melodyVoiceId: 'bed-accordion',
+    notes: CERISES_BACKING, ...backingInstruments(LE_TEMPS_DES_CERISES.id),
   } },
   { tune: HAVA_NAGILA, role: {
     difficulty: 3, pass: .63, teaches: 'Alternate plucked bass and chord answers through three contrasting sections.',
-    notes: HAVA_BACKING, keyVoicing: 'bed', keysVoiceId: 'nylon-guitar', melodyVoiceId: 'bed-accordion',
+    notes: HAVA_BACKING, ...backingInstruments(HAVA_NAGILA.id),
   } },
   entry(GYMNOPEDIE, 3, 'Bass on one; the written upper chord on two, held through three.',
     GYMNO_TARGETS),

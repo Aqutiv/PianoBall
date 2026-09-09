@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import { LE_TEMPS_DES_CERISES, HAVA_NAGILA } from './accordionTunes';
 import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
@@ -10,14 +11,13 @@ import { LA_BAMBA } from './laBamba';
  * Automatic accompaniments are independently authored score parts. `chords` is
  * the harmonic map for the economical playable backing course, not the audio.
  */
-const PIANO = { voiceId: 'felt-piano', bedVoiceId: 'bed-felt-piano' } as const;
 
 /** Breitkopf 1888: pickup, first strain and its first ending; eighth-note units. */
 export const FUR_ELISE: Tune = {
   id: 'fur-elise', title: 'Für Elise', composer: 'Beethoven', origin: 'classic', difficulty: 3,
   teaches: 'Alternating semitones, then leaving room for the other hand.',
   bpm: 84, beatsPerBar: 3, pickup: 1, root: 69, scaleId: 'aeolian',
-  accompaniment: 'broken', ...PIANO, borrows: [6, 11], pass: 0.65,
+  accompaniment: 'broken', ...melodyInstruments('fur-elise'), borrows: [6, 11], pass: 0.65,
   melody: dynamics(part(`
     E5/0.5 D#5/0.5 |
     E5/0.5 D#5/0.5 E5/0.5 B4/0.5 D5/0.5 C5/0.5 |
@@ -47,7 +47,7 @@ export const ODE_TO_JOY: Tune = {
   id: 'ode-to-joy', title: 'Ode to Joy', composer: 'Beethoven', origin: 'classic', difficulty: 1,
   teaches: 'Neighbouring keys, with a question and its answer.',
   bpm: 96, beatsPerBar: 4, root: 60, scaleId: 'ionian', accompaniment: 'march',
-  ...PIANO, borrows: [6], pass: 0.6,
+  ...melodyInstruments('ode-to-joy'), borrows: [6], pass: 0.6,
   melody: dynamics(part(`
     E4/1 E4/1 F4/1 G4/1 | G4/1 F4/1 E4/1 D4/1 |
     C4/1 C4/1 D4/1 E4/1 | E4/1.5 D4/0.5 D4/2 |
@@ -73,7 +73,7 @@ export const TWINKLE: Tune = {
   id: 'twinkle', title: 'Twinkle, Twinkle', composer: 'Traditional', origin: 'classic', difficulty: 1,
   teaches: 'Jumping a fifth and shaping a complete tune.',
   bpm: 100, beatsPerBar: 4, root: 60, scaleId: 'ionian', accompaniment: 'march',
-  ...PIANO, pass: 0.6,
+  ...melodyInstruments('twinkle'), pass: 0.6,
   melody: dynamics(part(`
     C4/1 C4/1 G4/1 G4/1 | A4/1 A4/1 G4/2 |
     F4/1 F4/1 E4/1 E4/1 | D4/1 D4/1 C4/2 |
@@ -103,7 +103,7 @@ export const AMAZING_GRACE: Tune = {
   id: 'amazing-grace', title: 'Amazing Grace', composer: 'Traditional', origin: 'classic', difficulty: 2,
   teaches: 'A pickup and a hymn phrase that breathes in three.',
   bpm: 84, beatsPerBar: 3, pickup: 1, root: 67, scaleId: 'ionian', accompaniment: 'waltz',
-  ...PIANO, pass: 0.6,
+  ...melodyInstruments('amazing-grace'), pass: 0.6,
   melody: dynamics(part(`D4/1 |
     G4/2 B4/0.5 G4/0.5 | B4/2 A4/1 | G4/2 E4/1 | D4/2 D4/1 |
     G4/2 B4/0.5 G4/0.5 | B4/2 A4/1 | D5/3 |
@@ -134,7 +134,7 @@ export const SCARBOROUGH_FAIR: Tune = {
   id: 'scarborough-fair', title: 'Scarborough Fair', composer: 'Traditional', origin: 'classic', difficulty: 2,
   teaches: 'A Dorian melody, with held notes across the bar line.',
   bpm: 92, beatsPerBar: 3, root: 69, scaleId: 'dorian', accompaniment: 'arpeggio',
-  ...PIANO, pass: 0.63,
+  ...melodyInstruments('scarborough-fair'), pass: 0.63,
   melody: dynamics(part(`
     A4/2 A4/1 | E5/2 E5/1 | B4/1.5 C5/0.5 B4/1 | A4/4 E5/1 G5/1 |
     A5/2 G5/1 | E5/1 F#5/1 D5/1 | E5/5 A5/1 |
@@ -166,7 +166,7 @@ export const GREENSLEEVES: Tune = {
   id: 'greensleeves', title: 'Greensleeves', composer: 'Traditional', origin: 'classic', difficulty: 3,
   teaches: 'Two lilting pulses, dotted notes, and minor-key cadences.',
   bpm: 112, beatsPerBar: 6, pickup: 1, root: 69, scaleId: 'aeolian', accompaniment: 'compound',
-  ...PIANO, borrows: [9, 11], pass: 0.65,
+  ...melodyInstruments('greensleeves'), borrows: [9, 11], pass: 0.65,
   melody: dynamics(part(`A4/1 |
     C5/2 D5/1 E5/1.5 F5/0.5 E5/1 | D5/2 B4/1 G4/1.5 A4/0.5 B4/1 |
     C5/2 A4/1 A4/1.5 G#4/0.5 A4/1 | B4/3 E4/2 A4/1 |
@@ -195,7 +195,7 @@ export const LONDONDERRY_AIR: Tune = {
   id: 'londonderry-air', title: 'Londonderry Air', composer: 'Traditional', origin: 'classic', difficulty: 3,
   teaches: 'A three-note pickup and a singing, continuous phrase.',
   bpm: 72, beatsPerBar: 4, pickup: 1.5, root: 60, scaleId: 'ionian', accompaniment: 'arpeggio',
-  ...PIANO, borrows: [8], pass: 0.65,
+  ...melodyInstruments('londonderry-air'), borrows: [8], pass: 0.65,
   melody: dynamics(part(`B4/0.5 C5/0.5 D5/0.5 |
     E5/1.5 D5/0.5 E5/0.5 A5/0.5 G5/0.5 E5/0.5 |
     D5/0.5 C5/0.5 A4/1 _/0.5 C5/0.5 E5/0.5 F5/0.5 |
@@ -229,7 +229,7 @@ export const MINUET_IN_G: Tune = {
   id: 'minuet-in-g', title: 'Minuet in G', composer: 'Petzold', origin: 'classic', difficulty: 4,
   teaches: 'Running quavers and a complete question-and-answer section.',
   bpm: 100, beatsPerBar: 3, root: 67, scaleId: 'ionian', accompaniment: 'broken',
-  ...PIANO, pass: 0.67,
+  ...melodyInstruments('minuet-in-g'), pass: 0.67,
   melody: dynamics(part(`
     D5/1 G4/0.5 A4/0.5 B4/0.5 C5/0.5 | D5/1 G4/1 G4/1 |
     E5/1 C5/0.5 D5/0.5 E5/0.5 F#5/0.5 | G5/1 G4/1 G4/1 |
@@ -258,7 +258,7 @@ export const GYMNOPEDIE: Tune = {
   id: 'gymnopedie', title: 'Gymnopédie No. 1', composer: 'Satie', origin: 'classic', difficulty: 4,
   teaches: 'Entering after the bass and carrying a note across four bars.',
   bpm: 60, beatsPerBar: 3, root: 62, scaleId: 'ionian', accompaniment: 'waltz',
-  ...PIANO, pass: 0.67,
+  ...melodyInstruments('gymnopedie'), pass: 0.67,
   melody: dynamics(part(`_/7 F#5/1 A5/1 | G5/1 F#5/1 C#5/1 | B4/1 C#5/1 D5/1 | A4/3 | F#4/12`, 0, 0.83),
     [[7, 0.76], [12, 1], [18, 0.64], [30, 0.5]]),
   backingNotes: merge(
@@ -294,7 +294,7 @@ export const CANON_IN_D: Tune = {
   id: 'canon-in-d', title: 'Canon in D', composer: 'Pachelbel', origin: 'classic', difficulty: 5,
   teaches: 'Hear the canonic entrances as the lead changes from quarters to quavers.',
   bpm: 56, beatsPerBar: 4, root: 62, scaleId: 'ionian', accompaniment: 'arpeggio',
-  ...PIANO, pass: 0.7,
+  ...melodyInstruments('canon-in-d'), pass: 0.7,
   melody: dynamics(merge(CANON_LINE, part('D5/4', 32, 0.74)), [[0, 0.85], [16, 0.94], [28, 1], [32, 0.76]]),
   backingNotes: merge(
     ...[0, 8, 16, 24].map(beat => shift(CANON_GROUND, beat)),
@@ -310,7 +310,7 @@ export const JESU_JOY: Tune = {
   id: 'jesu-joy', title: 'Jesu, Joy of Man’s Desiring', composer: 'Bach', origin: 'classic', difficulty: 5,
   teaches: 'Three compound pulses and a melody carried by independent voices.',
   bpm: 176, beatsPerBar: 9, root: 67, scaleId: 'ionian', accompaniment: 'compound',
-  ...PIANO, borrows: [6], pass: 0.7,
+  ...melodyInstruments('jesu-joy'), borrows: [6], pass: 0.7,
   melody: dynamics(part(`
     _/1 G4/1 A4/1 B4/1 D5/1 C5/1 C5/1 E5/1 D5/1 |
     D5/1 G5/1 F#5/1 G5/1 D5/1 B4/1 G4/1 A4/1 B4/1 |

@@ -1,0 +1,508 @@
+{
+  "schemaVersion": 1,
+  "documentType": "implementation-handoff-voice-assignments",
+  "notDeployableCatalogue": true,
+  "browserSourceCommit": "c06176572f4f2c49101ca954544584f58d94dfe9",
+  "sourceCatalogueRevision": "ce9a291b044d0c745c278ce9be10b0b7e822c8ef0c16ecdff1e595e316bf4cae",
+  "selection": "One fixed primary pairing per piece; no randomization, alternate pool, shuffle or pin controls.",
+  "requiredBrowserLeadAdditions": [
+    "electric-bass",
+    "harmonica",
+    "trumpet"
+  ],
+  "requiredBrowserBedAdditions": [
+    "brass-ensemble",
+    "breath-flute",
+    "clean-electric-guitar",
+    "grand",
+    "harmonica",
+    "marimba",
+    "pipe-organ",
+    "solo-string",
+    "steel-string-guitar",
+    "trumpet",
+    "wurlitzer"
+  ],
+  "entries": [
+    {
+      "id": "first-light",
+      "role": "melody",
+      "title": "First Light",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "vibraphone",
+        "backing": "warm"
+      }
+    },
+    {
+      "id": "ode-to-joy",
+      "role": "melody",
+      "title": "Ode to Joy",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "strings"
+      }
+    },
+    {
+      "id": "twinkle",
+      "role": "melody",
+      "title": "Twinkle, Twinkle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "music-box",
+        "backing": "bed-harp"
+      }
+    },
+    {
+      "id": "frere-jacques",
+      "role": "melody",
+      "title": "Frère Jacques",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "marimba",
+        "backing": "nylon-guitar"
+      }
+    },
+    {
+      "id": "amazing-grace",
+      "role": "melody",
+      "title": "Amazing Grace",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harmonica",
+        "backing": "bed-organ"
+      }
+    },
+    {
+      "id": "scarborough-fair",
+      "role": "melody",
+      "title": "Scarborough Fair",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "breath-flute",
+        "backing": "nylon-guitar"
+      }
+    },
+    {
+      "id": "hopscotch",
+      "role": "melody",
+      "title": "Hopscotch",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "wurlitzer",
+        "backing": "clean-electric-guitar"
+      }
+    },
+    {
+      "id": "yankee-doodle",
+      "role": "melody",
+      "title": "Yankee Doodle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "drunken-sailor",
+      "role": "melody",
+      "title": "Drunken Sailor",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "steel-string-guitar"
+      }
+    },
+    {
+      "id": "greensleeves",
+      "role": "melody",
+      "title": "Greensleeves",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "breath-flute",
+        "backing": "bed-harp"
+      }
+    },
+    {
+      "id": "fur-elise",
+      "role": "melody",
+      "title": "Für Elise",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "londonderry-air",
+      "role": "melody",
+      "title": "Londonderry Air",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "la-bamba",
+      "role": "melody",
+      "title": "La Bamba",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "nylon-guitar"
+      }
+    },
+    {
+      "id": "le-temps-des-cerises",
+      "role": "melody",
+      "title": "Le Temps des cerises",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "nylon-guitar"
+      }
+    },
+    {
+      "id": "hava-nagila",
+      "role": "melody",
+      "title": "Hava Nagila",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "nylon-guitar"
+      }
+    },
+    {
+      "id": "can-can",
+      "role": "melody",
+      "title": "Can-Can",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "brass-ensemble"
+      }
+    },
+    {
+      "id": "minuet-in-g",
+      "role": "melody",
+      "title": "Minuet in G",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "strings"
+      }
+    },
+    {
+      "id": "gymnopedie",
+      "role": "melody",
+      "title": "Gymnopédie No. 1",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "felt-piano",
+        "backing": "bed-felt-piano"
+      }
+    },
+    {
+      "id": "two-hands",
+      "role": "melody",
+      "title": "Two Hands",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "wurlitzer",
+        "backing": "clean-electric-guitar"
+      }
+    },
+    {
+      "id": "irish-washerwoman",
+      "role": "melody",
+      "title": "The Irish Washerwoman",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "steel-string-guitar"
+      }
+    },
+    {
+      "id": "blue-danube",
+      "role": "melody",
+      "title": "The Blue Danube",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "strings"
+      }
+    },
+    {
+      "id": "canon-in-d",
+      "role": "melody",
+      "title": "Canon in D",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "bed-harp"
+      }
+    },
+    {
+      "id": "jesu-joy",
+      "role": "melody",
+      "title": "Jesu, Joy of Man’s Desiring",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "pipe-organ",
+        "backing": "strings"
+      }
+    },
+    {
+      "id": "the-entertainer",
+      "role": "melody",
+      "title": "The Entertainer",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "frere-jacques",
+      "role": "chords",
+      "title": "Frère Jacques",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "marimba"
+      }
+    },
+    {
+      "id": "ode-to-joy",
+      "role": "chords",
+      "title": "Ode to Joy",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "trumpet"
+      }
+    },
+    {
+      "id": "chord-ground",
+      "role": "chords",
+      "title": "Ground",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "electric-bass",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "twinkle",
+      "role": "chords",
+      "title": "Twinkle, Twinkle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "bed-music-box"
+      }
+    },
+    {
+      "id": "chord-march",
+      "role": "chords",
+      "title": "Off the Beat",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "clavinet",
+        "backing": "bed-electric-piano"
+      }
+    },
+    {
+      "id": "yankee-doodle",
+      "role": "chords",
+      "title": "Yankee Doodle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "trumpet"
+      }
+    },
+    {
+      "id": "hopscotch",
+      "role": "chords",
+      "title": "Hopscotch",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "clean-electric-guitar",
+        "backing": "wurlitzer"
+      }
+    },
+    {
+      "id": "drunken-sailor",
+      "role": "chords",
+      "title": "Drunken Sailor",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "steel-string-guitar",
+        "backing": "bed-accordion"
+      }
+    },
+    {
+      "id": "canon-in-d",
+      "role": "chords",
+      "title": "Canon in D",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "solo-string"
+      }
+    },
+    {
+      "id": "amazing-grace",
+      "role": "chords",
+      "title": "Amazing Grace",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "drawbar",
+        "backing": "harmonica"
+      }
+    },
+    {
+      "id": "scarborough-fair",
+      "role": "chords",
+      "title": "Scarborough Fair",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "breath-flute"
+      }
+    },
+    {
+      "id": "la-bamba",
+      "role": "chords",
+      "title": "La Bamba",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "trumpet"
+      }
+    },
+    {
+      "id": "le-temps-des-cerises",
+      "role": "chords",
+      "title": "Le Temps des cerises",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "bed-accordion"
+      }
+    },
+    {
+      "id": "hava-nagila",
+      "role": "chords",
+      "title": "Hava Nagila",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "bed-accordion"
+      }
+    },
+    {
+      "id": "gymnopedie",
+      "role": "chords",
+      "title": "Gymnopédie No. 1",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "felt-piano",
+        "backing": "bed-felt-piano"
+      }
+    },
+    {
+      "id": "londonderry-air",
+      "role": "chords",
+      "title": "Londonderry Air",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "solo-string"
+      }
+    },
+    {
+      "id": "greensleeves",
+      "role": "chords",
+      "title": "Greensleeves",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "breath-flute"
+      }
+    },
+    {
+      "id": "irish-washerwoman",
+      "role": "chords",
+      "title": "The Irish Washerwoman",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "steel-string-guitar",
+        "backing": "solo-string"
+      }
+    },
+    {
+      "id": "can-can",
+      "role": "chords",
+      "title": "Can-Can",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "brass-ensemble",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "blue-danube",
+      "role": "chords",
+      "title": "The Blue Danube",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "solo-string"
+      }
+    },
+    {
+      "id": "fur-elise",
+      "role": "chords",
+      "title": "Für Elise",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      }
+    },
+    {
+      "id": "minuet-in-g",
+      "role": "chords",
+      "title": "Minuet in G",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "bed-harp"
+      }
+    },
+    {
+      "id": "jesu-joy",
+      "role": "chords",
+      "title": "Jesu, Joy of Man’s Desiring",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "pipe-organ"
+      }
+    },
+    {
+      "id": "the-entertainer",
+      "role": "chords",
+      "title": "The Entertainer",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      }
+    }
+  ]
+}

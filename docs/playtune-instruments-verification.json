@@ -1,0 +1,2727 @@
+{
+  "date": "2026-09-09",
+  "sourceCommit": "c06176572f4f2c49101ca954544584f58d94dfe9",
+  "sourceDigest": "7f0451f54691cdeb2b691afeaf231d67b672874a2649c05e653ec474949bfadd",
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "renderScope": "First eight authored beats, retaining full durations of notes starting in the excerpt; solo soft/hard, repeated notes and held chord checks. Offline production graph at 24 kHz. No subjective listening acceptance.",
+  "banks": {
+    "lead": 31,
+    "bed": 26
+  },
+  "pass": true,
+  "comparison": {
+    "revision": "178e13b7d30b1a5561abf2aba4f91c1faa769418d7801812c562a146e9c9059d",
+    "bytes": 1473625,
+    "entries": 48,
+    "changedVoices": 44,
+    "nonVoiceMetadataAndPlayerNotesAndDrumsUnchanged": true,
+    "identicalRepeatedExports": true,
+    "eventChanges": []
+  },
+  "nativeParser": {
+    "checkedUtc": "2026-09-09T15:15:44.3916979Z",
+    "parser": "D:\\Projects\\PianoBallDesktop\\build\\desktop\\Release\\CatalogTests.exe",
+    "parserSHA256": "920fa6588ad4db881a279c2d863674672446b3c46e822665f260982ae7815c63",
+    "exportPath": "D:\\Projects\\PianoBall\\dist\\content\\v1\\catalog.178e13b7d30b1a5561abf2aba4f91c1faa769418d7801812c562a146e9c9059d.json",
+    "catalogueSHA256Before": "178e13b7d30b1a5561abf2aba4f91c1faa769418d7801812c562a146e9c9059d",
+    "catalogueSHA256After": "178e13b7d30b1a5561abf2aba4f91c1faa769418d7801812c562a146e9c9059d",
+    "exitCode": 0,
+    "output": [
+      "Validated 48 exported course entries",
+      "PASS: catalogue schema, notes, source validation, SHA256 and corrupt-cache fallback"
+    ],
+    "passed": true,
+    "scope": "Native catalogue parser, validation, checksums and isolated temporary cache tests; not listening or deployed desktop download acceptance."
+  },
+  "solo": [
+    {
+      "id": "solo-trumpet",
+      "velocity": 0.25,
+      "peakDbFS": -29.892518658067875,
+      "musicRmsDbFS": -42.92553973422693,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-trumpet",
+      "velocity": 0.95,
+      "peakDbFS": -12.296135307668457,
+      "musicRmsDbFS": -25.643335145787272,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-harmonica",
+      "velocity": 0.25,
+      "peakDbFS": -27.272296039144447,
+      "musicRmsDbFS": -41.705025138870994,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-harmonica",
+      "velocity": 0.95,
+      "peakDbFS": -11.32480096097411,
+      "musicRmsDbFS": -26.08139102447875,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-electric-bass",
+      "velocity": 0.25,
+      "peakDbFS": -28.125996685141526,
+      "musicRmsDbFS": -48.2209817537471,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-electric-bass",
+      "velocity": 0.95,
+      "peakDbFS": -11.322525339671493,
+      "musicRmsDbFS": -32.5369039493522,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-steel-string-guitar",
+      "velocity": 0.25,
+      "peakDbFS": -29.583290049931428,
+      "musicRmsDbFS": -50.59768538255882,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-steel-string-guitar",
+      "velocity": 0.95,
+      "peakDbFS": -11.513482874979228,
+      "musicRmsDbFS": -35.17867120676923,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-clean-electric-guitar",
+      "velocity": 0.25,
+      "peakDbFS": -28.07103098689442,
+      "musicRmsDbFS": -48.57067829378808,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-clean-electric-guitar",
+      "velocity": 0.95,
+      "peakDbFS": -11.617091780378964,
+      "musicRmsDbFS": -33.11922000006564,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-brass-ensemble",
+      "velocity": 0.25,
+      "peakDbFS": -26.167599951245627,
+      "musicRmsDbFS": -41.59787997647872,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    },
+    {
+      "id": "solo-brass-ensemble",
+      "velocity": 0.95,
+      "peakDbFS": -9.891069912452942,
+      "musicRmsDbFS": -26.234517694342404,
+      "endingRmsDbFS": -180,
+      "clippedSamples": 0,
+      "nearClipSamples": 0,
+      "nonfiniteSamples": 0
+    }
+  ],
+  "passages": [
+    {
+      "role": "melody",
+      "id": "first-light",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "vibraphone",
+        "backing": "warm"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -3.1320834426659516,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -22.962542870969944,
+          "musicRmsDbFS": -40.74657303660007,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -20.54472326198755,
+          "musicRmsDbFS": -37.61448959393412,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -21.332963235577505,
+          "musicRmsDbFS": -36.38490429739597,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "ode-to-joy",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "strings"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 4.2394445860793795,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -22.98479452282298,
+          "musicRmsDbFS": -34.770752165732446,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -23.86914091485459,
+          "musicRmsDbFS": -39.010196751811826,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -21.588565109473656,
+          "musicRmsDbFS": -33.705928819704354,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "twinkle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "music-box",
+        "backing": "bed-harp"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 10.72265802255459,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -26.087124556088636,
+          "musicRmsDbFS": -41.23277537066624,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -27.842185744027045,
+          "musicRmsDbFS": -51.95543339322083,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.27485567203224,
+          "musicRmsDbFS": -41.19436151132624,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "frere-jacques",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "marimba",
+        "backing": "nylon-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 5.128950528373323,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -27.776901315190816,
+          "musicRmsDbFS": -48.15274987959823,
+          "endingRmsDbFS": -148.2986491463373,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -31.444847673484514,
+          "musicRmsDbFS": -53.281700407971556,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -25.193123965205324,
+          "musicRmsDbFS": -47.248932000668155,
+          "endingRmsDbFS": -148.2986491463373,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "amazing-grace",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harmonica",
+        "backing": "bed-organ"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 1.0817843059204435,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -22.888878696408792,
+          "musicRmsDbFS": -34.96584624343149,
+          "endingRmsDbFS": -134.5224044189255,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -19.62981413364863,
+          "musicRmsDbFS": -36.047630549351936,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -19.148408431617042,
+          "musicRmsDbFS": -32.82465366682109,
+          "endingRmsDbFS": -134.52270348459268,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "scarborough-fair",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "breath-flute",
+        "backing": "nylon-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 24.910092457459637,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -17.1101086099426,
+          "musicRmsDbFS": -27.229149593169684,
+          "endingRmsDbFS": -140.48668480332788,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -29.628734893231258,
+          "musicRmsDbFS": -52.13924205062932,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -17.09654467620835,
+          "musicRmsDbFS": -27.201075682660193,
+          "endingRmsDbFS": -140.48668480332788,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "hopscotch",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "wurlitzer",
+        "backing": "clean-electric-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -3.3400076795248097,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -23.220586775220923,
+          "musicRmsDbFS": -39.23420194771397,
+          "endingRmsDbFS": -133.32662695488546,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -14.388499920295093,
+          "musicRmsDbFS": -35.89419426818916,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -13.661270682531644,
+          "musicRmsDbFS": -34.3135668873608,
+          "endingRmsDbFS": -133.20305235362758,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "yankee-doodle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 7.145165686452046,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -23.41853983773514,
+          "musicRmsDbFS": -35.46217147829173,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -15.421014897104708,
+          "musicRmsDbFS": -42.607337164743775,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -15.852235079434475,
+          "musicRmsDbFS": -34.68184522330854,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "drunken-sailor",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "steel-string-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 9.680950375561963,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -22.84754062908498,
+          "musicRmsDbFS": -34.61816358332403,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -23.175546321087182,
+          "musicRmsDbFS": -44.299113958886,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -21.34389963713412,
+          "musicRmsDbFS": -34.36948895931741,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "greensleeves",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "breath-flute",
+        "backing": "bed-harp"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 23.66172152908133,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -18.102858587496613,
+          "musicRmsDbFS": -29.898319000355546,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -29.250484562682587,
+          "musicRmsDbFS": -53.560040529436876,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -18.08413281227813,
+          "musicRmsDbFS": -29.884430224573812,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "fur-elise",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 9.340517727324183,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -25.015038592774253,
+          "musicRmsDbFS": -39.480705246979014,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.300719921096785,
+          "musicRmsDbFS": -48.8212229743032,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.70298346910095,
+          "musicRmsDbFS": -39.05851884420069,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "londonderry-air",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 14.95291301312804,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.542817264417778,
+          "musicRmsDbFS": -33.65920644352063,
+          "endingRmsDbFS": -122.97371113316646,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.124962220015,
+          "musicRmsDbFS": -48.61211945664867,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -19.381649910572875,
+          "musicRmsDbFS": -33.562568714998804,
+          "endingRmsDbFS": -122.97354079113327,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "la-bamba",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "trumpet",
+        "backing": "nylon-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 15.805911168495925,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -23.087789746402997,
+          "musicRmsDbFS": -37.031257116347504,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -25.48940223952134,
+          "musicRmsDbFS": -52.83716828484343,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.176803367900526,
+          "musicRmsDbFS": -36.969714332124724,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "le-temps-des-cerises",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "nylon-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 22.892570085734114,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -24.07394630439992,
+          "musicRmsDbFS": -34.87727886537253,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -35.34755216992177,
+          "musicRmsDbFS": -57.769848951106646,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -23.925332730098702,
+          "musicRmsDbFS": -34.86982334613538,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "hava-nagila",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "accordion",
+        "backing": "nylon-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 15.150690760601549,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -23.242998885506026,
+          "musicRmsDbFS": -35.38588148549485,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -27.574992906828356,
+          "musicRmsDbFS": -50.5365722460964,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -23.021021416226976,
+          "musicRmsDbFS": -35.29398889521416,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "can-can",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "brass-ensemble"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 4.379839251766164,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -24.88890236558219,
+          "musicRmsDbFS": -38.57696132578379,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -23.343745906962404,
+          "musicRmsDbFS": -42.956800577549956,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.26357897994594,
+          "musicRmsDbFS": -37.65226235223176,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "minuet-in-g",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "strings"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -9.143681474125565,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -31.060045396488093,
+          "musicRmsDbFS": -51.24830756615996,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -24.9622600959037,
+          "musicRmsDbFS": -42.104626092034394,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -25.687089383067814,
+          "musicRmsDbFS": -42.48259994235021,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "gymnopedie",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "felt-piano",
+        "backing": "bed-felt-piano"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 0.4626626187114411,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -22.641091002832646,
+          "musicRmsDbFS": -45.490732586032856,
+          "endingRmsDbFS": -118.14980373625149,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -30.2451979529475,
+          "musicRmsDbFS": -45.9533952047443,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -21.119677917230348,
+          "musicRmsDbFS": -42.87152541452694,
+          "endingRmsDbFS": -118.14976666713966,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "two-hands",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "wurlitzer",
+        "backing": "clean-electric-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 0.820781807093546,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -23.906076020866433,
+          "musicRmsDbFS": -38.87945950928485,
+          "endingRmsDbFS": -151.79016532568508,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -16.384707928240793,
+          "musicRmsDbFS": -39.700241316378396,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -14.966734725766866,
+          "musicRmsDbFS": -36.25046193405088,
+          "endingRmsDbFS": -151.79016532568508,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "irish-washerwoman",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "steel-string-guitar"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 7.155380844666439,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -20.752115523571838,
+          "musicRmsDbFS": -34.40223631624627,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -15.875579408461707,
+          "musicRmsDbFS": -41.557617160912706,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -14.981905974478257,
+          "musicRmsDbFS": -33.61694768773621,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "blue-danube",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "strings"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 8.88433887341241,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.609849116395324,
+          "musicRmsDbFS": -34.34229452292483,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -25.571465105375975,
+          "musicRmsDbFS": -43.22663339633724,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -19.609849116395324,
+          "musicRmsDbFS": -33.88817310460415,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "canon-in-d",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "solo-string",
+        "backing": "bed-harp"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 21.732887090167743,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -20.29183679618514,
+          "musicRmsDbFS": -32.90821273763435,
+          "endingRmsDbFS": -93.34311528580038,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -30.82874156365239,
+          "musicRmsDbFS": -54.641099827802094,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -20.216322542393705,
+          "musicRmsDbFS": -32.88292645675164,
+          "endingRmsDbFS": -93.3431223596223,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "jesu-joy",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "pipe-organ",
+        "backing": "strings"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 17.32884982749709,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -9.304471495722114,
+          "musicRmsDbFS": -23.57691355434913,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -26.359672269956636,
+          "musicRmsDbFS": -40.90576338184622,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -8.986214669048342,
+          "musicRmsDbFS": -23.528169546163817,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "melody",
+      "id": "the-entertainer",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 8.653432618515723,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -25.130787903611083,
+          "musicRmsDbFS": -39.34272051997673,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.2720040272154,
+          "musicRmsDbFS": -47.99615313849245,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.02978097300601,
+          "musicRmsDbFS": -38.8983805551848,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "frere-jacques",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "marimba"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -0.6530586572069268,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -32.25333821526914,
+          "musicRmsDbFS": -54.250756687759356,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -34.291025730969,
+          "musicRmsDbFS": -53.59769803055243,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -33.44885928746813,
+          "musicRmsDbFS": -51.46043824122364,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "ode-to-joy",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "trumpet"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 12.014138355796696,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.485687406324345,
+          "musicRmsDbFS": -31.30756288562693,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.6499756224497,
+          "musicRmsDbFS": -43.321701241423625,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -18.806574032185846,
+          "musicRmsDbFS": -31.074282328100182,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "chord-ground",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "electric-bass",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -0.9186562019903164,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -21.982877042943528,
+          "musicRmsDbFS": -42.367906613284035,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -17.30162531337986,
+          "musicRmsDbFS": -41.44925041129372,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -17.303958409009713,
+          "musicRmsDbFS": -39.31955613937883,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "twinkle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "bed-music-box"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -3.797206874133302,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -30.48726034954266,
+          "musicRmsDbFS": -47.004898975372726,
+          "endingRmsDbFS": -163.2812540217822,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -25.414783762681967,
+          "musicRmsDbFS": -43.207692101239424,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -23.684416040545003,
+          "musicRmsDbFS": -42.75891794695252,
+          "endingRmsDbFS": -163.2812540217822,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "chord-march",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "clavinet",
+        "backing": "bed-electric-piano"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -18.10993442508593,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -26.43929907677455,
+          "musicRmsDbFS": -52.10723153636151,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -15.928046145318673,
+          "musicRmsDbFS": -33.99729711127558,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -15.927603135881323,
+          "musicRmsDbFS": -34.54002028580346,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "yankee-doodle",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "trumpet"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 1.859761195464955,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -26.430772298217438,
+          "musicRmsDbFS": -38.91421529217506,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -16.442012091000237,
+          "musicRmsDbFS": -40.77397648764001,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -16.443363844617082,
+          "musicRmsDbFS": -36.83965160928295,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "hopscotch",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "clean-electric-guitar",
+        "backing": "wurlitzer"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -5.1615115119640365,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.469235163823456,
+          "musicRmsDbFS": -40.753931701769176,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -14.6820169968694,
+          "musicRmsDbFS": -35.59242018980514,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -14.15507096585721,
+          "musicRmsDbFS": -34.39342785718674,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "drunken-sailor",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "steel-string-guitar",
+        "backing": "bed-accordion"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -8.190554621937476,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.66725862694237,
+          "musicRmsDbFS": -39.12213272640548,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -16.83963281378321,
+          "musicRmsDbFS": -30.931578104468006,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -14.497484846455427,
+          "musicRmsDbFS": -31.360514535292285,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "canon-in-d",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "solo-string"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 0.8728455848983359,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -28.510317209734936,
+          "musicRmsDbFS": -44.826974750986814,
+          "endingRmsDbFS": -113.4927930481931,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -30.848089179687975,
+          "musicRmsDbFS": -45.69982033588515,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -26.57685560875462,
+          "musicRmsDbFS": -42.7062263564424,
+          "endingRmsDbFS": -113.4927930481931,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "amazing-grace",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "drawbar",
+        "backing": "harmonica"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 19.38203447990121,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -11.242864623166305,
+          "musicRmsDbFS": -26.241735095331432,
+          "endingRmsDbFS": -145.29845279061337,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.012385336954765,
+          "musicRmsDbFS": -45.62376957523264,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -11.2942133975626,
+          "musicRmsDbFS": -26.165568713052497,
+          "endingRmsDbFS": -145.29845279061337,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "scarborough-fair",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "breath-flute"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -4.092469297890823,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -28.50814704970935,
+          "musicRmsDbFS": -44.612873552665576,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -30.9008942536653,
+          "musicRmsDbFS": -40.52040425477475,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -27.04222912852433,
+          "musicRmsDbFS": -39.965990836815266,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "la-bamba",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "trumpet"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -3.3138436181582733,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -29.185273965578567,
+          "musicRmsDbFS": -49.85042096072573,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -31.36834176086414,
+          "musicRmsDbFS": -46.536577342567455,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -29.116647009413974,
+          "musicRmsDbFS": -45.137818621890005,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "le-temps-des-cerises",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "bed-accordion"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -6.001459841164092,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -26.991420449389874,
+          "musicRmsDbFS": -45.066769716060705,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -26.631525013419505,
+          "musicRmsDbFS": -39.06530987489661,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -24.137066983872316,
+          "musicRmsDbFS": -38.796607230635516,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "hava-nagila",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "nylon-guitar",
+        "backing": "bed-accordion"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -5.9076818894387415,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -29.37404026620644,
+          "musicRmsDbFS": -45.14327682772433,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -25.541237093556525,
+          "musicRmsDbFS": -39.23559493828559,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -25.004158307146565,
+          "musicRmsDbFS": -39.04465964789332,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "gymnopedie",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "felt-piano",
+        "backing": "bed-felt-piano"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 22.7453746636859,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -18.153853809922786,
+          "musicRmsDbFS": -34.612878541969714,
+          "endingRmsDbFS": -118.92457182691695,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -33.662047910249505,
+          "musicRmsDbFS": -57.358253205655615,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -17.325284159978185,
+          "musicRmsDbFS": -34.574347313978116,
+          "endingRmsDbFS": -118.9240650151035,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "londonderry-air",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "solo-string"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 8.67994114102492,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -25.367686269444366,
+          "musicRmsDbFS": -38.731509884640204,
+          "endingRmsDbFS": -127.51506657922398,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.35561203840919,
+          "musicRmsDbFS": -47.41145102566512,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -25.053328017940082,
+          "musicRmsDbFS": -38.31581090536306,
+          "endingRmsDbFS": -127.51506657922398,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "greensleeves",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "harp",
+        "backing": "breath-flute"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -3.6908248325102804,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -28.909522832417917,
+          "musicRmsDbFS": -45.66750236938752,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -29.629107459973053,
+          "musicRmsDbFS": -41.97667753687724,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -28.127063034337844,
+          "musicRmsDbFS": -41.003058612818215,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "irish-washerwoman",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "steel-string-guitar",
+        "backing": "solo-string"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": -0.1540130420955137,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -17.598200714283198,
+          "musicRmsDbFS": -40.51851701788215,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -15.948357308711671,
+          "musicRmsDbFS": -40.36450397578663,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -15.261875114965484,
+          "musicRmsDbFS": -37.3402393548539,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "can-can",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "brass-ensemble",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 14.196250925367274,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -18.481162961339013,
+          "musicRmsDbFS": -34.81155643341565,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -31.108438695860407,
+          "musicRmsDbFS": -49.00780735878293,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -17.859717341319453,
+          "musicRmsDbFS": -34.691057550332964,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "blue-danube",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "solo-string"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 13.898813042795283,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -16.550714786085514,
+          "musicRmsDbFS": -32.98791659873806,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -31.425844368506812,
+          "musicRmsDbFS": -46.88672964153334,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -16.50591325268771,
+          "musicRmsDbFS": -32.83289955292028,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "fur-elise",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 6.88352651460918,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -26.31050677185047,
+          "musicRmsDbFS": -43.23836856413188,
+          "endingRmsDbFS": -135.69174815898904,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -33.582547297337726,
+          "musicRmsDbFS": -50.12189507874106,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -26.053262555314568,
+          "musicRmsDbFS": -42.29449052040457,
+          "endingRmsDbFS": -135.69174815898904,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "minuet-in-g",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "bed-harp"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 25.321757094608053,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -16.60680127032787,
+          "musicRmsDbFS": -30.517276641741205,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -30.138494871108094,
+          "musicRmsDbFS": -55.83903373634926,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -16.60956641712314,
+          "musicRmsDbFS": -30.508412377975077,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "jesu-joy",
+      "voices": {
+        "keyVoicing": "bed",
+        "keys": "strings",
+        "backing": "pipe-organ"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 9.180168985198655,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -19.104498618947396,
+          "musicRmsDbFS": -31.170643887635258,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -27.81071277413215,
+          "musicRmsDbFS": -40.35081287283391,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -18.636973735516204,
+          "musicRmsDbFS": -30.6028649099513,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    },
+    {
+      "role": "chords",
+      "id": "the-entertainer",
+      "voices": {
+        "keyVoicing": "lead",
+        "keys": "grand",
+        "backing": "grand"
+      },
+      "pass": true,
+      "playerMinusAutomaticRmsDb": 11.36377077608595,
+      "stems": [
+        {
+          "stem": "player",
+          "peakDbFS": -21.796115979642387,
+          "musicRmsDbFS": -37.030144742735864,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "automatic",
+          "peakDbFS": -32.252242761636595,
+          "musicRmsDbFS": -48.393915518821814,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        },
+        {
+          "stem": "combined",
+          "peakDbFS": -21.620387946499832,
+          "musicRmsDbFS": -36.87731954565863,
+          "endingRmsDbFS": -180,
+          "clippedSamples": 0,
+          "nearClipSamples": 0,
+          "nonfiniteSamples": 0
+        }
+      ]
+    }
+  ],
+  "liveBrowser": {
+    "commit": "c06176572f4f2c49101ca954544584f58d94dfe9",
+    "sourceDigest": "7f0451f54691cdeb2b691afeaf231d67b672874a2649c05e653ec474949bfadd",
+    "sourceFiles": 130,
+    "rendererDigest": "6243a3510fc3980dbe404f55d1e8e1b37a5c0e65c162279e32e22cbd58fa9b3b",
+    "rendererDigestBasis": "captured from the executing adapter files",
+    "capturedAt": "2026-09-09T15:24:08.851Z",
+    "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+    "clock": "Production AudioContext and requestAnimationFrame; no clock acceleration",
+    "isolatedStorage": true,
+    "speakerOutputMuted": true,
+    "checks": [
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "first-light",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "vibraphone",
+          "backing": "warm"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "ode-to-joy",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "trumpet",
+          "backing": "strings"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "twinkle",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "music-box",
+          "backing": "bed-harp"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "frere-jacques",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "marimba",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "amazing-grace",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "harmonica",
+          "backing": "bed-organ"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "scarborough-fair",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "breath-flute",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "hopscotch",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "wurlitzer",
+          "backing": "clean-electric-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "yankee-doodle",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "trumpet",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "drunken-sailor",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "accordion",
+          "backing": "steel-string-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "greensleeves",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "breath-flute",
+          "backing": "bed-harp"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "fur-elise",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "londonderry-air",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "solo-string",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "la-bamba",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "trumpet",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "le-temps-des-cerises",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "accordion",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "hava-nagila",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "accordion",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "can-can",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "brass-ensemble"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "minuet-in-g",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "harp",
+          "backing": "strings"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "gymnopedie",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "felt-piano",
+          "backing": "bed-felt-piano"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "two-hands",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "wurlitzer",
+          "backing": "clean-electric-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "irish-washerwoman",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "solo-string",
+          "backing": "steel-string-guitar"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "blue-danube",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "solo-string",
+          "backing": "strings"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "canon-in-d",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "solo-string",
+          "backing": "bed-harp"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "jesu-joy",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "pipe-organ",
+          "backing": "strings"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "melody",
+        "id": "the-entertainer",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "frere-jacques",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "marimba"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "ode-to-joy",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "strings",
+          "backing": "trumpet"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "chord-ground",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "electric-bass",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "twinkle",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "harp",
+          "backing": "bed-music-box"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "chord-march",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "clavinet",
+          "backing": "bed-electric-piano"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "yankee-doodle",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "trumpet"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "hopscotch",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "clean-electric-guitar",
+          "backing": "wurlitzer"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "drunken-sailor",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "steel-string-guitar",
+          "backing": "bed-accordion"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "canon-in-d",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "harp",
+          "backing": "solo-string"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "amazing-grace",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "drawbar",
+          "backing": "harmonica"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "scarborough-fair",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "breath-flute"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "la-bamba",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "trumpet"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "le-temps-des-cerises",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "bed-accordion"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "hava-nagila",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "bed-accordion"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "gymnopedie",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "felt-piano",
+          "backing": "bed-felt-piano"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "londonderry-air",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "solo-string"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "greensleeves",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "harp",
+          "backing": "breath-flute"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "irish-washerwoman",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "steel-string-guitar",
+          "backing": "solo-string"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "can-can",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "brass-ensemble",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "blue-danube",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "strings",
+          "backing": "solo-string"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "fur-elise",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "minuet-in-g",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "strings",
+          "backing": "bed-harp"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "jesu-joy",
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "strings",
+          "backing": "pipe-organ"
+        }
+      },
+      {
+        "test": "fixed role lifecycle",
+        "role": "chords",
+        "id": "the-entertainer",
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "grand",
+          "backing": "grand"
+        }
+      },
+      {
+        "test": "register",
+        "role": "melody",
+        "keys": 49,
+        "shiftSemitones": -12,
+        "playerLow": 48,
+        "playerHigh": 64,
+        "automaticLow": 40,
+        "automaticHigh": 57,
+        "automaticAuthoredRegister": true
+      },
+      {
+        "test": "register",
+        "role": "melody",
+        "keys": 25,
+        "shiftSemitones": -24,
+        "playerLow": 36,
+        "playerHigh": 52,
+        "automaticLow": 40,
+        "automaticHigh": 57,
+        "automaticAuthoredRegister": true
+      },
+      {
+        "test": "register",
+        "role": "chords",
+        "keys": 49,
+        "shiftSemitones": 0,
+        "playerLow": 52,
+        "playerHigh": 69,
+        "automaticLow": 60,
+        "automaticHigh": 76,
+        "automaticAuthoredRegister": true
+      },
+      {
+        "test": "register",
+        "role": "chords",
+        "keys": 25,
+        "shiftSemitones": -12,
+        "playerLow": 40,
+        "playerHigh": 57,
+        "automaticLow": 60,
+        "automaticHigh": 76,
+        "automaticAuthoredRegister": true
+      },
+      {
+        "test": "same-pitch ownership",
+        "playerAttack": true,
+        "playerPedal": true,
+        "playerRelease": true,
+        "automaticIndependent": true
+      },
+      {
+        "test": "restart/pause/resume/stop",
+        "restartHasFreshCountIn": true,
+        "automaticRestarts": true,
+        "stopMutesAutomatic": true,
+        "stopReleasesPlayer": true
+      },
+      {
+        "test": "active HUD rhythm toggle",
+        "accessibleSwitchStateUpdates": true,
+        "drumsAndRoomCancelled": true,
+        "playerAndAutomaticNotesContinue": true,
+        "chartAndEndingClockUnchanged": true,
+        "newDrumRouteOnEnable": true
+      },
+      {
+        "test": "Hopscotch notes/drums stop/restart",
+        "role": "chords",
+        "automaticVoice": "wurlitzer",
+        "pauseMutesNotesAndDrumRooms": true,
+        "resumeUsesFreshGenerations": true
+      },
+      {
+        "test": "accordion course routing/live keys/restart/stop",
+        "id": "le-temps-des-cerises",
+        "role": "melody",
+        "keys": 25,
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "accordion",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "accordion course routing/live keys/restart/stop",
+        "id": "le-temps-des-cerises",
+        "role": "chords",
+        "keys": 25,
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "bed-accordion"
+        }
+      },
+      {
+        "test": "accordion course routing/live keys/restart/stop",
+        "id": "hava-nagila",
+        "role": "melody",
+        "keys": 25,
+        "voices": {
+          "keyVoicing": "lead",
+          "keys": "accordion",
+          "backing": "nylon-guitar"
+        }
+      },
+      {
+        "test": "accordion course routing/live keys/restart/stop",
+        "id": "hava-nagila",
+        "role": "chords",
+        "keys": 25,
+        "voices": {
+          "keyVoicing": "bed",
+          "keys": "nylon-guitar",
+          "backing": "bed-accordion"
+        }
+      },
+      {
+        "test": "independent bed-key chord releases",
+        "id": "hopscotch",
+        "voice": "clean-electric-guitar"
+      },
+      {
+        "test": "independent bed-key chord releases",
+        "id": "drunken-sailor",
+        "voice": "steel-string-guitar"
+      },
+      {
+        "test": "independent bed-key chord releases",
+        "id": "can-can",
+        "voice": "brass-ensemble"
+      },
+      {
+        "test": "natural ending",
+        "id": "first-light",
+        "logicalEnd": 62.66105263157895,
+        "audibleEnd": 62.66105263157895,
+        "expectedFinish": 65.81894736842105,
+        "observedFinish": 65.872,
+        "formRestSeconds": 3.1578947368421026,
+        "resultsScreen": "result",
+        "stingScheduled": true
+      },
+      {
+        "test": "return to Freestyle",
+        "lead": "grand",
+        "backing": "warm",
+        "noCourseOwnership": true
+      }
+    ],
+    "audioState": "running",
+    "pass": true,
+    "finishedAt": "2026-09-09T15:25:14.643Z",
+    "audioQuality": "full"
+  }
+}

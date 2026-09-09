@@ -70,8 +70,8 @@ it('exports four correctly routed roles after La Bamba and excludes the deferred
       expect(role.backing(tune).notes).toBe(role.id === 'melody' ? tune.backingNotes : tune.melody);
     }
   }
-  expect(ROLES.melody.voices(french)).toEqual({ keyVoicing: 'lead', keys: 'accordion', backing: 'bed-accordion' });
-  expect(ROLES.chords.voices(french)).toEqual({ keyVoicing: 'lead', keys: 'accordion', backing: 'bed-accordion' });
+  expect(ROLES.melody.voices(french)).toEqual({ keyVoicing: 'lead', keys: 'accordion', backing: 'nylon-guitar' });
+  expect(ROLES.chords.voices(french)).toEqual({ keyVoicing: 'bed', keys: 'nylon-guitar', backing: 'bed-accordion' });
   expect(ROLES.melody.voices(hava)).toEqual({ keyVoicing: 'lead', keys: 'accordion', backing: 'nylon-guitar' });
   expect(ROLES.chords.voices(hava)).toEqual({ keyVoicing: 'bed', keys: 'nylon-guitar', backing: 'bed-accordion' });
   expect(JSON.stringify(catalog)).not.toMatch(/ravorombazaha|iny-hono/i);

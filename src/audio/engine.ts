@@ -20,7 +20,7 @@ import {
 import type { SoundTag } from '../physics/colliders';
 import {
   DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE, findBedVoice, findLeadVoice, noises,
-  type BedSpec, type Unison, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
+  type BedArticulation, type BedSpec, type Unison, type VoiceLayer, type VoiceLfo, type VoiceNoise, type VoiceSpec,
 } from './voices';
 
 export interface AudioSettings {
@@ -538,7 +538,7 @@ export class AudioEngine {
   /** Manual chords own sources that cannot be left running on an old pad generation. */
   private heldPads = new Set<HeldPadHandle>();
 
-  private scheduledPianos = new Set<{ sources: Pitched[]; amp: GainNode }>();
+  private scheduledPianos = new Set<{ sources: Pitched[]; amp: GainNode; release?: (fade: number) => void }>();
   get scheduledPianoCount(): number { return this.scheduledPianos.size; }
 
   get heldPadCount(): number { return this.heldPads.size; }
@@ -1133,6 +1133,9 @@ export class AudioEngine {
     if (!this.ready || !this.ctx) return;
     const t = this.ctx.currentTime;
     for (const voice of this.scheduledPianos) {
+      // Articulated notes keep the earliest stop in their owner; calling stop
+      // directly here could let a later manual release extend an old tail.
+      if (voice.release) { voice.release(fade); continue; }
       for (const source of voice.sources) {
         try { source.stop(t + fade + 0.02); } catch { /* already ended */ }
       }
@@ -1598,6 +1601,10 @@ export class AudioEngine {
    */
   private bedKeyOn(note: number, velocity: number, pan: number): void {
     if (!this.ctx) return;
+    if (this.keyBedSpec.articulation) {
+      this.articulatedBedKeyOn(note, velocity, pan, this.keyBedSpec.articulation);
+      return;
+    }
     const t = this.ctx.currentTime;
     this.retrigger(note, t);
 
@@ -1654,6 +1661,41 @@ export class AudioEngine {
     // After `cull`, so the count the bus is set from is the one that survived,
     // and aimed at this note's own onset so the new level is in place before
     // its attack rather than on its way there.
+    this.applyLeadGain(onset);
+  }
+
+  /** The same bed patch under a finger, with independent note ownership. */
+  private articulatedBedKeyOn(note: number, velocity: number, pan: number, a: BedArticulation): void {
+    const ctx = this.ctx!;
+    this.retrigger(note, ctx.currentTime);
+    const spec = this.keyBedSpec;
+    const v = clamp01(velocity);
+    const freq = noteToFreq(note);
+    const k = keyFactors(a.keyTrack, note);
+    const h = humanize(Math.random, HUMANIZE * (a.humanize ?? 1));
+    const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+    const str = spec.string && { id: this.keyBedId, spec: spec.string, note, bucket: velocityBucket(v) };
+    const moves = a.lfo?.target === 'tremolo' || a.lfo?.target === 'rotary';
+    const chain = this.makeChain(pan, LEAD_WIDTH, { hall: BED_KEY_REVERB, cab: 0, delay: 0, body: a.body }, moves);
+    // Schedule the string and each short-lived layer at the audible onset;
+    // otherwise a pick transient can finish behind the muted amplifier.
+    const onset = ctx.currentTime + this.onsetMargin;
+    const sources = spec.layers.flatMap(layer => this.addLayer(chain.filter, layer, freq, v, onset,
+      k, h, registerOf(note), detunes, stretchCents(a.stretch, note), str));
+    const bursts = noises(spec.noise).map(n => this.prepareNoise(chain.filter, n, freq, v, k));
+    const taps = this.attachExpression(sources, chain, a.lfo, onset);
+    this.applyEnvelope(chain, a, freq, v, onset, k, h, velocityPeak(v, a.velDb) * spec.gain * k.level * h.level);
+    for (const burst of bursts) burst(onset);
+    this.duck(onset);
+    const voice: KeyVoice = {
+      note, startedAt: onset, sources, filter: chain.filter, amp: chain.amp, panner: chain.panner,
+      freq, k, release: a.env.release * k.release, damper: a.damper, taps,
+      releasing: false, stopAt: null, remainingSources: sources.length, retired: false,
+    };
+    this.voices.set(note, voice);
+    this.active.push(voice);
+    this.trackVoice(voice);
+    this.cull();
     this.applyLeadGain(onset);
   }
 
@@ -1836,7 +1878,7 @@ export class AudioEngine {
    * same place.
    */
   private applyEnvelope(
-    chain: Chain, spec: VoiceSpec, freq: number, v: number, t: number,
+    chain: Chain, spec: BedArticulation, freq: number, v: number, t: number,
     k: KeyFactors, h: Humanized, peak: number,
   ): void {
     const { filter: f, env } = spec;
@@ -1865,13 +1907,15 @@ export class AudioEngine {
    * arrives: on the held note, never on the attack.
    */
   private attachExpression(
-    sources: readonly Pitched[], chain: Chain, lfo: VoiceLfo | undefined, t: number,
+    sources: readonly Pitched[], chain: Chain, lfo: VoiceLfo | undefined, t: number, player = true,
   ): Tap[] {
-    for (const s of sources) {
-      this.bendSource.connect(s.detune);
-      this.lfoVibrato.connect(s.detune);
+    if (player) {
+      for (const s of sources) {
+        this.bendSource.connect(s.detune);
+        this.lfoVibrato.connect(s.detune);
+      }
+      this.lfoColour.connect(chain.filter.frequency);
     }
-    this.lfoColour.connect(chain.filter.frequency);
     const taps: Tap[] = [];
     if (!lfo) return taps;
     const ctx = this.ctx!;
@@ -1970,7 +2014,11 @@ export class AudioEngine {
    * sound. Pads are placed ahead of time and never notice a miss at all.
    */
   private stringBuffer(at: StringAt): AudioBuffer {
-    const key = `${at.id}:${at.note}:${at.bucket}`;
+    // A wire identity may be shared by the lead and bed banks. Include all
+    // model parameters so differently voiced strings cannot poison this cache.
+    const model = [at.spec.decay, at.spec.keyTrack, at.spec.damp, at.spec.stretch,
+      at.spec.pick, at.spec.bright, at.spec.velBright].join(',');
+    const key = `${at.id}:${model}:${at.note}:${at.bucket}`;
     let buf = this.strings.get(key);
     if (!buf) {
       const ctx = this.ctx!;
@@ -2854,6 +2902,10 @@ export class AudioEngine {
     const ctx = this.ctx;
     const spec = this.bedSpec;
     const v = clamp01(velocity);
+    if (spec.articulation) {
+      return this.articulatedPad(notes, 0.1 * (0.35 + v * 0.65), 0, spec.articulation,
+        spec.manualDecay ?? spec.pluck, v);
+    }
     const decay = spec.manualDecay ?? spec.pluck;
     const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
     const group = ctx.createGain();
@@ -2925,6 +2977,103 @@ export class AudioEngine {
     for (const source of sources) {
       source.addEventListener('ended', () => { if (--remaining === 0) retire(); }, { once: true });
       if (decay) source.stop(stopAt);
+    }
+    if (!remaining) retire();
+    return handle;
+  }
+
+  /**
+   * Articulated automatic notes use the bed's explicit patch. Optional duration
+   * belongs to the scheduler; without one the returned handle owns release.
+   * Neither route connects the player's expression, pedal or note map.
+   */
+  private articulatedPad(
+    notes: readonly number[], gain: number, at: number, a: BedArticulation,
+    seconds?: number, velocity = clamp01(0.15 + Math.sqrt(gain / Math.max(1, notes.length)) * 2),
+  ): HeldPadHandle {
+    const ctx = this.ctx!;
+    const spec = this.bedSpec;
+    const start = Math.max(ctx.currentTime + this.onsetMargin, at || ctx.currentTime);
+    const duration = seconds === undefined ? undefined : Math.max(0.005, seconds);
+    const sources: Pitched[] = [];
+    const nodes: AudioNode[] = [];
+    const taps: Tap[] = [];
+    const group = ctx.createGain();
+    group.gain.value = 1;
+    group.connect(this.padGen);
+    nodes.push(group);
+    let stopAt = duration === undefined ? Infinity : start + duration + 0.02;
+    for (const note of notes) {
+      const freq = noteToFreq(note);
+      const k = keyFactors(a.keyTrack, note);
+      const h = humanize(() => 0.5, 0);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      const amp = ctx.createGain();
+      amp.gain.value = 0.0001;
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = clamp((note - 60) / 48, -0.65, 0.65);
+      const moves = a.lfo?.target === 'tremolo' || a.lfo?.target === 'rotary';
+      const trem = moves ? ctx.createGain() : null;
+      if (trem) {
+        trem.gain.value = 1;
+        filter.connect(amp).connect(trem).connect(panner).connect(group);
+        nodes.push(trem);
+      } else filter.connect(amp).connect(panner).connect(group);
+      const chain: Chain = { filter, amp, panner, trem };
+      nodes.push(filter, amp, panner);
+      const detunes = unisonDetunes(this.lite ? 1 : spec.unison?.voices ?? 1, spec.unison?.cents ?? 0);
+      const str = spec.string && { id: this.bedId, spec: spec.string, note, bucket: velocityBucket(velocity) };
+      const pitched = spec.layers.flatMap(layer => this.addLayer(filter, layer, freq, velocity, start,
+        k, h, registerOf(note), detunes, stretchCents(a.stretch, note), str));
+      sources.push(...pitched);
+      taps.push(...this.attachExpression(pitched, chain, a.lfo, start, false));
+      const peak = gain / Math.max(1, notes.length) * spec.gain * k.level;
+      if (duration === undefined) {
+        this.applyEnvelope(chain, a, freq, velocity, start, k, h, peak);
+      } else {
+        const release = Math.min(a.env.release * k.release, duration * 0.25);
+        const sounding = duration - release;
+        const rise = Math.min(a.env.attack * (1 - (a.attackVel ?? 0) * velocity), sounding * 0.2);
+        const performance: BedArticulation = { ...a, attackVel: 0,
+          env: { ...a.env, attack: Math.max(0.001, rise),
+            decay: Math.min(a.env.decay, (sounding - 0.001) / k.decay) } };
+        this.applyEnvelope(chain, performance, freq, velocity, start, k, h, peak);
+        amp.gain.setValueAtTime(Math.max(0.0002, peak * a.env.sustain), start + sounding);
+        amp.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      }
+      for (const noise of noises(spec.noise)) this.prepareNoise(filter, noise, freq, velocity, k)(start);
+    }
+    // One owner for every attack, including repeated notes of the same pitch.
+    const scheduled = { sources, amp: group, release: (fade: number) => handle.release(fade) };
+    this.scheduledPianos.add(scheduled);
+    let remaining = sources.length;
+    let retired = false;
+    const retire = () => {
+      if (retired) return;
+      retired = true;
+      this.scheduledPianos.delete(scheduled);
+      this.heldPads.delete(handle);
+      for (const tap of taps) { tap.lfo.disconnect(tap.gain); tap.gain.disconnect(); }
+      for (const node of nodes) node.disconnect();
+      for (const source of sources) source.disconnect();
+    };
+    const handle: HeldPadHandle = {
+      release: (fade = a.env.release) => {
+        if (retired) return;
+        const now = ctx.currentTime;
+        const end = now + Math.max(0.004, fade);
+        if (end + 0.02 >= stopAt) return;
+        holdAtTime(group.gain, now);
+        group.gain.linearRampToValueAtTime(0.0001, end);
+        stopAt = end + 0.02;
+        for (const source of sources) source.stop(stopAt);
+      },
+    };
+    if (seconds === undefined) this.heldPads.add(handle);
+    for (const source of sources) {
+      source.addEventListener('ended', () => { if (--remaining === 0) retire(); }, { once: true });
+      if (Number.isFinite(stopAt)) source.stop(stopAt);
     }
     if (!remaining) retire();
     return handle;
@@ -3012,6 +3161,10 @@ export class AudioEngine {
       return;
     }
     if (!this.running || !this.ctx || !this.settings.bed) return;
+    if (this.bedSpec.articulation) {
+      this.articulatedPad(notes, gain, at, this.bedSpec.articulation, seconds);
+      return;
+    }
     const ctx = this.ctx;
     const t = Math.max(ctx.currentTime, at || ctx.currentTime);
     const rise = clamp(attack, 0.004, seconds * 0.9);

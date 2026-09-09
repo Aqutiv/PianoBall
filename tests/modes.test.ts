@@ -13,6 +13,8 @@ import { resetPlayTuneSettings } from '../src/modes/playtune/settings';
 import { resetPinballSettings, setPinballSettings } from '../src/modes/pinball/settings';
 import type { Stage } from '../src/render/stage';
 import type { Hud } from '../src/ui/hud';
+import type { RoleId } from '../src/modes/playtune/role';
+import fixedPairings from './fixtures/playtune-fixed-pairings.json';
 
 /**
  * Nothing in this codebase used to be torn down, because nothing was ever left.
@@ -145,7 +147,7 @@ function playtuneRig() {
     stage, input, audio: engine, bed, music, hud: fakeHud(),
     openScreen: () => {}, setResult: () => {},
   };
-  return { mode: new PlayTuneMode(ctx), engine };
+  return { mode: new PlayTuneMode(ctx), engine, input };
 }
 
 /**
@@ -162,18 +164,18 @@ describe('playtune instruments', () => {
     expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
 
     expect(mode.start('fur-elise')).toBe(true);
-    expect(engine.leadVoice).toBe('felt-piano');
-    expect(engine.bedVoice).toBe('bed-felt-piano');
+    expect(engine.leadVoice).toBe('grand');
+    expect(engine.bedVoice).toBe('grand');
     mode.exit();
   });
 
-  it('uses matching piano parts in the introductory original', () => {
+  it('uses vibraphone over a warm pad in the introductory original', () => {
     const { mode, engine } = playtuneRig();
     mode.enter();
     expect(mode.start('first-light')).toBe(true);
 
-    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
-    expect(engine.bedVoice).toBe('bed-felt-piano');
+    expect(engine.leadVoice).toBe('vibraphone');
+    expect(engine.bedVoice).toBe('warm');
     mode.exit();
   });
 
@@ -202,7 +204,7 @@ describe('playtune instruments', () => {
     mode.start('frere-jacques');
 
     expect(cleared).toBe(1);
-    expect(engine.leadVoice).toBe('music-box');
+    expect(engine.leadVoice).toBe('marimba');
     mode.exit();
   });
 
@@ -212,8 +214,9 @@ describe('playtune instruments', () => {
     mode.start('fur-elise');
     mode.start('frere-jacques');
 
-    expect(engine.leadVoice).toBe('music-box');
-    expect(engine.bedVoice).toBe('bed-harp');
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe('marimba');
+    expect(engine.bedVoice).toBe('nylon-guitar');
     mode.exit();
   });
 });
@@ -284,17 +287,18 @@ describe('playtune role', () => {
     mode.enter();
     mode.setRole('chords');
     expect(mode.start('hopscotch')).toBe(true);
-    expect(engine.keyVoicing).toBe('lead');
-    expect(engine.leadVoice).toBe('felt-piano');
-    expect(engine.bedVoice).toBe('bed-electric-piano');
+    expect(engine.keyVoicing).toBe('bed');
+    expect(engine.keyBedVoice).toBe('clean-electric-guitar');
+    expect(engine.bedVoice).toBe('wurlitzer');
     expect(mode.start('frere-jacques')).toBe(true);
-    expect(engine.keyVoicing).toBe('lead');
-    expect(engine.leadVoice).toBe('felt-piano');
-    expect(engine.bedVoice).toBe('bed-music-box');
+    expect(engine.keyVoicing).toBe('bed');
+    expect(engine.keyBedVoice).toBe('nylon-guitar');
+    expect(engine.bedVoice).toBe('marimba');
     mode.setRole('melody');
     expect(mode.start('frere-jacques')).toBe(true);
-    expect(engine.leadVoice).toBe('music-box');
-    expect(engine.bedVoice).toBe('bed-harp');
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe('marimba');
+    expect(engine.bedVoice).toBe('nylon-guitar');
     mode.exit();
     expect(engine.keyVoicing).toBe('lead');
     expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
@@ -327,5 +331,35 @@ describe('playtune role', () => {
 
     expect(mode.role.id).toBe('melody');
     mode.exit();
+  });
+});
+
+describe('fixed instruments across the PlayTune lifecycle', () => {
+  it.each(fixedPairings.entries)('$role:$id resolves the authored banks through restart, pause and exit', ({ role, id, voices }) => {
+    const { mode, engine, input } = playtuneRig();
+    // A full piano admits every authored range, including Canon's wide melody.
+    Object.assign(input.mapping.settings, { baseNote: 21, count: 88, autoLatch: false });
+    const assertPairing = () => {
+      expect(engine.keyVoicing).toBe(voices.keyVoicing);
+      expect(voices.keyVoicing === 'lead' ? engine.leadVoice : engine.keyBedVoice).toBe(voices.keys);
+      expect(engine.bedVoice).toBe(voices.backing);
+    };
+    mode.enter();
+    mode.setRole(role as RoleId);
+    expect(mode.start(id)).toBe(true);
+    assertPairing();
+    expect(mode.restart()).toBe(true);
+    assertPairing();
+    mode.pause();
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
+    mode.resume();
+    assertPairing();
+    mode.exit();
+    expect(engine.keyVoicing).toBe('lead');
+    expect(engine.leadVoice).toBe(DEFAULT_LEAD_VOICE);
+    expect(engine.keyBedVoice).toBe(DEFAULT_BED_VOICE);
+    expect(engine.bedVoice).toBe(DEFAULT_BED_VOICE);
   });
 });

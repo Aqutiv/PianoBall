@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import type { ChartNote, Tune } from '../chart';
 import { line, progression, R } from './notation';
 import { melodyPerformance } from './performanceNotation';
@@ -21,8 +22,7 @@ export const HOPSCOTCH: Tune = {
   root: D,
   scaleId: 'dorian',
   accompaniment: 'pulse',
-  voiceId: 'electric-piano',
-  bedVoiceId: 'bed-felt-piano',
+  ...melodyInstruments('hopscotch'),
   pass: 0.6,
   melody: melodyPerformance(line([
     // A: the D-F-A call; B natural opens the minor colour into Dorian.

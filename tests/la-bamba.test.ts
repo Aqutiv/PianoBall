@@ -59,7 +59,7 @@ describe('La Bamba traditional vocal excerpt', () => {
       }
       expect(notes.every(n => inScale(n.note, 60, SCALES.ionian))).toBe(true);
     }
-    expect(LA_BAMBA.voiceId).toBe('felt-piano');
+    expect(LA_BAMBA.voiceId).toBe('trumpet');
     expect(LA_BAMBA.bedVoiceId).toBe('nylon-guitar');
     expect(LA_BAMBA.backingNotes).not.toBe(LA_BAMBA_BACKING);
     expect(LA_BAMBA_BACKING.length).toBeLessThan(LA_BAMBA.backingNotes!.length);

@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import { HOPSCOTCH } from './hopscotch';
 import type { Tune } from '../chart';
 import { melodyPerformance } from './performanceNotation';
@@ -29,8 +30,7 @@ export const FIRST_LIGHT: Tune = {
   root: D4,
   scaleId: 'minorPentatonic',
   accompaniment: 'pulse',
-  voiceId: 'grand',
-  bedVoiceId: 'bed-felt-piano',
+  ...melodyInstruments('first-light'),
   rhythm: repeatRhythm({
     beatsPerBar: 4, endBeat: 32,
     hits: [
@@ -185,8 +185,7 @@ export const TWO_HANDS: Tune = {
   root: D4,
   scaleId: 'aeolian',
   accompaniment: 'arpeggio',
-  voiceId: 'grand',
-  bedVoiceId: 'bed-felt-piano',
+  ...melodyInstruments('two-hands'),
   rhythm: repeatRhythm({
     beatsPerBar: 4, endBeat: 64,
     hits: [

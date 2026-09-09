@@ -39,6 +39,8 @@ export const ART_IDS: readonly string[] = [
   'saw-lead', 'square-lead', 'supersaw', 'bright-poly', 'sub-bass',
   'warm', 'strings', 'glass-pad', 'analog-brass', 'nylon-guitar',
   'square-pad', 'saw-swell', 'sine-bed',
+  'trumpet', 'harmonica', 'electric-bass', 'steel-string-guitar',
+  'clean-electric-guitar', 'brass-ensemble',
 ];
 
 const HAVE = new Set(ART_IDS);
