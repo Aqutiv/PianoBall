@@ -8,7 +8,7 @@ import type { CourseEntryV1 } from '../src/content/schema';
 import { REVISED_BACKING_IDS, REVISED_MELODY_IDS } from '../src/modes/playtune/chartRevisions';
 import previous from './fixtures/playable-signatures-9840971.json';
 
-const inserted = ['yankee-doodle', 'la-bamba', 'irish-washerwoman'];
+const inserted = ['yankee-doodle', 'la-bamba', 'irish-washerwoman', 'le-temps-des-cerises', 'hava-nagila'];
 const newIds = ['hopscotch', ...inserted];
 
 // Freeze the OLD playable contract only. The new score checks live in the
@@ -18,7 +18,7 @@ function signature(e: CourseEntryV1) {
     pickup: e.pickup, pass: e.pass, notes: e.playerNotes.map(({ beat, len, note }) => ({ beat, len, note })) })).digest('hex');
 }
 
-it('replaces retired Drift and inserts the three new traditional songs without reordering retained courses', () => {
+it('replaces retired Drift and inserts the new traditional songs without reordering retained courses', () => {
   const entries = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null }).entries;
   const expectedPositions = previous.entries.map(({ id, role }) => ({ id: id === 'drift' ? 'hopscotch' : id, role }));
   expect(entries.filter(e => !inserted.includes(e.id)).map(({ id, role }) => ({ id, role }))).toEqual(expectedPositions);
@@ -30,7 +30,7 @@ it('replaces retired Drift and inserts the three new traditional songs without r
     .map(({ id, role }) => ({ id, role }))).toEqual([
       { id: 'drift', role: 'melody' }, { id: 'drift', role: 'chords' },
     ]);
-  expect(new Set(entries.map(e => e.id)).size).toBe(24);
+  expect(new Set(entries.map(e => e.id)).size).toBe(26);
 });
 
 it('archives changed retained roles without inventing old signatures for new repertoire', () => {

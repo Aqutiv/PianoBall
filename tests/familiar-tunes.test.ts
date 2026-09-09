@@ -9,7 +9,7 @@ import { FAMILIAR_TUNES, FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, TH
 import { LEGACY_ORDERS } from '../src/modes/playtune/legacyOrder';
 import { ROLES } from '../src/modes/playtune/role';
 
-const additions = ['yankee-doodle', 'la-bamba', 'irish-washerwoman'];
+const additions = ['yankee-doodle', 'la-bamba', 'irish-washerwoman', 'le-temps-des-cerises', 'hava-nagila'];
 const ids = ['frere-jacques', 'drunken-sailor', 'can-can', 'blue-danube', 'the-entertainer'];
 const end = (notes: readonly { beat: number; len: number }[]) => Math.max(...notes.map(n => n.beat + n.len));
 const phrase = (notes: ChartNote[], start: number, len: number) => notes
@@ -18,8 +18,8 @@ const phrase = (notes: ChartNote[], start: number, len: number) => notes
 describe('five familiar additions', () => {
   it('retains all familiar additions, with the backing course ordered independently', () => {
     expect(FAMILIAR_TUNES.map(t => t.id)).toEqual(ids);
-    expect(LIBRARY).toHaveLength(22);
-    expect(CHORD_CURVE).toHaveLength(22);
+    expect(LIBRARY).toHaveLength(24);
+    expect(CHORD_CURVE).toHaveLength(24);
     expect(CHORD_ORDER.slice(0, 3)).toEqual(['frere-jacques', 'ode-to-joy', 'chord-ground']);
     for (const role of Object.values(ROLES)) {
       expect(new Set(role.order).size).toBe(role.order.length);
@@ -41,7 +41,7 @@ describe('five familiar additions', () => {
   it('publishes all ten role entries in schema v1 with their own teaching and pass marks', () => {
     const catalog = compilePublishedCatalog({ sourceCommit: null, sourceDirty: null });
     expect(catalog.schemaVersion).toBe(1);
-    expect(catalog.entries).toHaveLength(44);
+    expect(catalog.entries).toHaveLength(48);
     expect(catalog.entries.filter(e => ids.includes(e.id))).toHaveLength(10);
     for (const [i, id] of ids.entries()) {
       const melody = catalog.entries.find(e => e.id === id && e.role === 'melody')!;

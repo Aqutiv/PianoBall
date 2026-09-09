@@ -346,6 +346,25 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
     }),
   },
 
+  {
+    id: 'accordion', name: 'Accordion', family: 'Keys',
+    // Two free-reed ranks beat gently against each other. The bellows sustain
+    // the tone until release, without a piano's decay or an organ's rotary.
+    spec: steady({
+      layers: [
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.42, detune: -4 },
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.38, detune: 4 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.5] }, ratio: 2, level: 0.07 },
+      ],
+      noise: { freq: 1100, q: 0.8, decay: 0.09, gain: 0.012, attack: 0.025 },
+      filter: { base: 5, track: 3, q: 0.6, qVel: 0.2, settle: 4.5, settleVel: 2, settleTime: 0.1 },
+      env: { attack: 0.025, decay: 0.12, sustain: 0.88, release: 0.09 },
+      gain: 0.8, velDb: 20, attackVel: 0.25,
+      keyTrack: { bright: -0.12, level: -0.08 },
+      reverb: 0.14, delay: 0,
+    }),
+  },
+
   // --------------------------------------------------------------- organ ---
   // An organ does not decay: it holds while the key is down and stops when it
   // is let go, which is `sustain: 1` and a release measured in hundredths.
@@ -898,6 +917,20 @@ export const BED_VOICES: readonly BedDef[] = [
         { type: 'sine', ratio: 0.5, level: 0.35 },
       ],
       filter: { start: 400, startStruck: 850, peak: 1100, peakStruck: 1500, end: 420, q: 1 },
+    }),
+  },
+
+  {
+    id: 'bed-accordion', name: 'Accordion', family: 'Keys',
+    // Written durations articulate bass/chords and sustain automatic melody.
+    spec: bed({
+      layers: [
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.95, detune: -4 },
+        { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.85, detune: 4 },
+        { type: 'spectrum', spectrum: { gen: 'saw', params: [1.5] }, ratio: 2, level: 0.16 },
+      ],
+      filter: { start: 2600, startStruck: 3200, peak: 3800, peakStruck: 4400, end: 2600, q: 0.6 },
+      gain: 0.8, ensemble: 0,
     }),
   },
 

@@ -2931,7 +2931,7 @@ export class AudioEngine {
   }
 
   /**
-   * Written Felt Piano notes use the struck-piano partials and hammer, on the
+   * Written piano and accordion notes use their lead envelopes on the
    * automatic bus. Every attack owns its sources; player pedals, retriggers,
    * polyphony culling and expression never reach this independent performance.
    */
@@ -2940,8 +2940,11 @@ export class AudioEngine {
     const ctx = this.ctx;
     const start = Math.max(ctx.currentTime, at || ctx.currentTime);
     const duration = Math.max(0.005, seconds);
-    // pad() selects this path for bed-felt-piano, independently of the player.
-    const spec = findLeadVoice('felt-piano').spec;
+    // Reuse the accordion's bellows envelope with its backing-bank reeds.
+    // Other written voices keep the existing Felt Piano path.
+    const spec = this.bedId === 'bed-accordion'
+      ? { ...findLeadVoice('accordion').spec, layers: this.bedSpec.layers }
+      : findLeadVoice('felt-piano').spec;
     const velocity = clamp01(0.15 + Math.sqrt(gain / Math.max(1, notes.length)) * 2);
     for (const note of notes) {
       const freq = noteToFreq(note);
@@ -3004,7 +3007,7 @@ export class AudioEngine {
    */
   pad(notes: readonly number[], seconds: number, gain = 0.1, at = 0, attack = seconds * 0.35, written = false): void {
     if (gain <= 0 || seconds <= 0 || notes.length === 0) return;
-    if (written && this.bedId === 'bed-felt-piano') {
+    if (this.bedId === 'bed-accordion' || (written && this.bedId === 'bed-felt-piano')) {
       this.scheduledPiano(notes, seconds, gain, at, attack);
       return;
     }

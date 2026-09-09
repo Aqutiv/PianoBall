@@ -1,3 +1,4 @@
+import { LE_TEMPS_DES_CERISES, HAVA_NAGILA, CERISES_BACKING, HAVA_BACKING } from './accordionTunes';
 import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
 import type { ChordRole } from '../chords';
@@ -48,6 +49,14 @@ export const CHORD_CURVE: ChordEntry[] = [
     figure(SCARBOROUGH_FAIR, [[0, 'bass', 0.9], [1, 'third', 0.9], [2, 'top', 0.9]], { cadence: close(SCARBOROUGH_FAIR) })),
   entry(LA_BAMBA, 3, 'Keep the plucked bass and chord answers steady beneath La Bamba’s short pickups.',
     LA_BAMBA_BACKING),
+  { tune: LE_TEMPS_DES_CERISES, role: {
+    difficulty: 3, pass: .63, teaches: 'Keep bass and two light chord answers beneath the accordion melody.',
+    notes: CERISES_BACKING, keyVoicing: 'lead', keysVoiceId: 'accordion', melodyVoiceId: 'bed-accordion',
+  } },
+  { tune: HAVA_NAGILA, role: {
+    difficulty: 3, pass: .63, teaches: 'Alternate plucked bass and chord answers through three contrasting sections.',
+    notes: HAVA_BACKING, keyVoicing: 'bed', keysVoiceId: 'nylon-guitar', melodyVoiceId: 'bed-accordion',
+  } },
   entry(GYMNOPEDIE, 3, 'Bass on one; the written upper chord on two, held through three.',
     GYMNO_TARGETS),
   entry(LONDONDERRY_AIR, 4, 'Flowing broken chords with breathing space at the cadence.',
