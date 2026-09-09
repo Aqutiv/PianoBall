@@ -189,6 +189,55 @@ export interface VoiceDef {
   spec: VoiceSpec;
 }
 
+// Brass uses a focused harmonic spectrum, with tonguing separate from its body.
+const TRUMPET = key({
+  layers: [
+    { type: 'spectrum', spectrum: { gen: 'brass', params: [1] }, ratio: 1, level: 0.55 },
+    { type: 'spectrum', spectrum: { gen: 'saw', params: [0.8] }, ratio: 1,
+      level: 0.04, velLevel: 0.18, velCurve: 1.4, decay: 0.09 },
+    { type: 'sine', ratio: 1, level: 0.12 },
+  ],
+  noise: { freq: 2100, pitchTrack: 4, q: 1.1, attack: 0.003, decay: 0.045, gain: 0.025, velCurve: 1 },
+  filter: { base: 3.2, track: 9, q: 0.8, qVel: 0.8, settle: 3, settleVel: 4, settleTime: 0.12 },
+  env: { attack: 0.014, decay: 0.13, sustain: 0.82, release: 0.1 },
+  gain: 0.9, velDb: 24, attackVel: 0.35,
+  keyTrack: { bright: -0.15, level: -0.1 },
+  lfo: { rate: 5.3, depth: 7, target: 'vibrato', delay: 0.3 },
+  reverb: 0.17, delay: 0.025,
+});
+
+const HARMONICA = key({
+  layers: [
+    { type: 'spectrum', spectrum: { gen: 'reed' }, ratio: 1, level: 0.42, detune: -2 },
+    { type: 'spectrum', spectrum: { gen: 'pulse', params: [0.32] }, ratio: 1, level: 0.25, detune: 2 },
+    { type: 'sine', ratio: 2, level: 0.08 },
+  ],
+  noise: { freq: 1450, pitchTrack: 3, q: 0.8, decay: 0.075, gain: 0.018, attack: 0.006 },
+  filter: { base: 4, track: 5, q: 0.65, qVel: 0.4, settle: 3.2, settleVel: 2, settleTime: 0.14 },
+  env: { attack: 0.009, decay: 0.14, sustain: 0.88, release: 0.09 },
+  gain: 0.85, velDb: 22, attackVel: 0.2,
+  keyTrack: { bright: -0.18 },
+  lfo: { rate: 4.8, depth: 0.045, target: 'tremolo', delay: 0.2 },
+  reverb: 0.15, delay: 0.025,
+});
+
+const ELECTRIC_BASS = key({
+  layers: [
+    { type: 'string', ratio: 1, level: 0.55 },
+    { type: 'sine', ratio: 1, level: 0.25, decay: 1.2 },
+    { type: 'sine', ratio: 2, level: 0.07, decay: 0.25 },
+  ],
+  string: { decay: 1.5, keyTrack: -0.35, damp: 0.6, stretch: 0.5, pick: 0.32, bright: 650, velBright: 3500 },
+  noise: { freq: 950, pitchTrack: 5, q: 0.7, decay: 0.009, gain: 0.02, velCurve: 1.2 },
+  damper: { freq: 180, q: 0.7, decay: 0.035, gain: 0.018 },
+  filter: { base: 2.2, track: 7, q: 0.7, qVel: 0.25, settle: 1.8, settleVel: 1.4, settleTime: 0.19 },
+  env: { attack: 0.003, decay: 1.1, sustain: 0.04, release: 0.09 },
+  // Rendered plucks have less energy than continuously driven oscillators.
+  gain: 2.4, velDb: 25, attackVel: 0.2,
+  keyTrack: { bright: 0.1, level: -0.08 },
+  body: 0.08, reverb: 0.045, delay: 0,
+});
+
 export const LEAD_VOICES: readonly VoiceDef[] = [
   // ---------------------------------------------------------------- keys ---
   {
@@ -549,6 +598,9 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
     }),
   },
 
+  { id: 'trumpet', name: 'Trumpet', family: 'Air', spec: TRUMPET },
+  { id: 'harmonica', name: 'Harmonica', family: 'Air', spec: HARMONICA },
+
   // ------------------------------------------------------------- mallets ---
   // Struck and left to ring: `sustain` near zero, and partials that die at
   // their own rates so the strike is bright and the tail under it is not.
@@ -667,6 +719,8 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
     }),
   },
 
+  { id: 'electric-bass', name: 'Electric Bass', family: 'Bass', spec: ELECTRIC_BASS },
+
   // --------------------------------------------------------------- synth ---
   // A synth is allowed to sound like one. What these gain is width — unison
   // where a second detuned layer used to stand in for it — and a velocity
@@ -761,15 +815,25 @@ export const LEAD_VOICES: readonly VoiceDef[] = [
  * of, how its filter moves, and, if it is a plucked thing, how much of that
  * length it actually *sounds* for.
  */
-export interface BedLayer {
-  type: LayerType;
-  ratio: number;
-  level: number;
-  detune?: number;
-  spectrum?: SpectrumRef;
+export interface BedLayer extends VoiceLayer {}
+
+/** Articulated instruments retain their pitch-relative filter and note envelope. */
+export interface BedArticulation {
+  filter: VoiceSpec['filter'];
+  env: VoiceSpec['env'];
+  attackVel?: number;
+  velDb?: number;
+  keyTrack?: KeyTrack;
+  humanize?: number;
+  stretch?: number;
+  lfo?: VoiceLfo;
+  damper?: VoiceNoise;
+  body?: number;
 }
 
 export interface BedSpec {
+  articulation?: BedArticulation;
+  noise?: VoiceNoise | readonly VoiceNoise[];
   /** Decay for manual chord strikes only; automatic accompaniment keeps its envelope. */
   manualDecay?: number;
   layers: readonly BedLayer[];
@@ -819,6 +883,73 @@ export interface BedDef {
   family: string;
   spec: BedSpec;
 }
+
+/**
+ * Map shared synthesis parameters explicitly. A bed is not a cast lead voice:
+ * it keeps its own scheduler duration and bus, while retaining every layer's
+ * decay/FM, transients, string model and note articulation. No lead glide is
+ * carried over, so each automatic note and each held key owns its release.
+ */
+function articulatedBed(source: VoiceSpec, pluck?: number, manualDecay?: number): BedSpec {
+  return bed({
+    layers: source.layers,
+    noise: source.noise,
+    string: source.string,
+    unison: source.unison,
+    gain: source.gain,
+    pluck,
+    manualDecay,
+    articulation: {
+      filter: source.filter, env: source.env, attackVel: source.attackVel,
+      velDb: source.velDb, keyTrack: source.keyTrack, humanize: source.humanize,
+      stretch: source.stretch, lfo: source.lfo, damper: source.damper, body: source.body,
+    },
+  });
+}
+
+const STEEL_STRING_GUITAR = key({
+  layers: [
+    { type: 'string', ratio: 1, level: 0.75 },
+    { type: 'spectrum', spectrum: { gen: 'saw', params: [1.2] }, ratio: 2,
+      level: 0.035, velLevel: 0.075, decay: 0.055, velCurve: 1.4 },
+  ],
+  string: { decay: 2.2, keyTrack: -0.4, damp: 0.23, stretch: 0.5, pick: 0.18, bright: 3200, velBright: 11500 },
+  noise: { freq: 3800, pitchTrack: 9, q: 0.9, decay: 0.012, gain: 0.045, velCurve: 1.2 },
+  damper: { freq: 520, q: 0.8, decay: 0.035, gain: 0.025 },
+  filter: { base: 4, track: 12, q: 0.8, qVel: 0.4, settle: 2.5, settleVel: 2.5, settleTime: 0.32 },
+  env: { attack: 0.002, decay: 1.8, sustain: 0.025, release: 0.13 },
+  gain: 2.8, velDb: 26, keyTrack: { bright: 0.1 }, body: 0.15,
+  reverb: 0.16, delay: 0,
+});
+
+const CLEAN_ELECTRIC_GUITAR = key({
+  layers: [
+    { type: 'string', ratio: 1, level: 0.65 },
+    { type: 'sine', ratio: 1, level: 0.16, decay: 1.2 },
+    { type: 'sine', ratio: 3, level: 0.04, decay: 0.16 },
+  ],
+  string: { decay: 1.85, keyTrack: -0.35, damp: 0.4, stretch: 0.5, pick: 0.22, bright: 1700, velBright: 6500 },
+  noise: { freq: 2000, pitchTrack: 5, q: 0.8, decay: 0.008, gain: 0.018, velCurve: 1.3 },
+  damper: { freq: 320, q: 0.7, decay: 0.025, gain: 0.015 },
+  filter: { base: 3.2, track: 8, q: 0.7, qVel: 0.3, settle: 2, settleVel: 1.6, settleTime: 0.24 },
+  env: { attack: 0.002, decay: 1.55, sustain: 0.035, release: 0.11 },
+  gain: 2.5, velDb: 25, keyTrack: { bright: 0.1 }, body: 0.015,
+  reverb: 0.1, delay: 0,
+});
+
+const BRASS_ENSEMBLE = key({
+  layers: [
+    { type: 'spectrum', spectrum: { gen: 'brass', params: [1.35] }, ratio: 1, level: 0.27, detune: -6 },
+    { type: 'spectrum', spectrum: { gen: 'brass', params: [1.15] }, ratio: 1, level: 0.3, detune: 1 },
+    { type: 'spectrum', spectrum: { gen: 'brass', params: [1.55] }, ratio: 1, level: 0.25, detune: 6, attack: 0.006 },
+  ],
+  noise: { freq: 1650, pitchTrack: 3, q: 0.8, decay: 0.05, gain: 0.02, attack: 0.004 },
+  filter: { base: 3, track: 7, q: 0.7, qVel: 0.5, settle: 2.8, settleVel: 3, settleTime: 0.14 },
+  env: { attack: 0.019, decay: 0.16, sustain: 0.8, release: 0.14 },
+  gain: 0.86, velDb: 22, attackVel: 0.3,
+  lfo: { rate: 4.7, depth: 4, target: 'vibrato', delay: 0.4 },
+  reverb: 0.2, delay: 0,
+});
 
 export const BED_VOICES: readonly BedDef[] = [
   // ---------------------------------------------------------------- pads ---
@@ -934,6 +1065,10 @@ export const BED_VOICES: readonly BedDef[] = [
     }),
   },
 
+  { id: 'grand', name: 'Grand Piano', family: 'Keys', spec: articulatedBed(findLeadVoice('grand').spec, undefined, 2.4) },
+  { id: 'wurlitzer', name: 'Wurlitzer', family: 'Keys', spec: articulatedBed(findLeadVoice('wurlitzer').spec, undefined, 1.8) },
+  { id: 'pipe-organ', name: 'Pipe Organ', family: 'Keys', spec: articulatedBed(findLeadVoice('pipe-organ').spec) },
+
   // ------------------------------------------------------------- plucked ---
   // Every voice here strikes and decays. Without `pluck` they were pads with
   // plucked names — a nylon guitar that swelled in over a third of the bar.
@@ -975,6 +1110,16 @@ export const BED_VOICES: readonly BedDef[] = [
       pluck: 1.3,
     }),
   },
+
+  { id: 'steel-string-guitar', name: 'Steel-String Acoustic Guitar', family: 'Plucked', spec: articulatedBed(STEEL_STRING_GUITAR, 2.2) },
+  { id: 'clean-electric-guitar', name: 'Clean Electric Guitar', family: 'Plucked', spec: articulatedBed(CLEAN_ELECTRIC_GUITAR, 1.85) },
+
+  { id: 'trumpet', name: 'Trumpet', family: 'Air', spec: articulatedBed(TRUMPET) },
+  { id: 'harmonica', name: 'Harmonica', family: 'Air', spec: articulatedBed(HARMONICA) },
+  { id: 'breath-flute', name: 'Breath Flute', family: 'Air', spec: articulatedBed(findLeadVoice('breath-flute').spec) },
+  { id: 'solo-string', name: 'Solo String', family: 'Air', spec: articulatedBed(findLeadVoice('solo-string').spec) },
+  { id: 'brass-ensemble', name: 'Brass Ensemble', family: 'Air', spec: articulatedBed(BRASS_ENSEMBLE) },
+  { id: 'marimba', name: 'Marimba', family: 'Mallets', spec: articulatedBed(findLeadVoice('marimba').spec, undefined, 1.3) },
 
   // --------------------------------------------------------------- synth ---
   {

@@ -35,6 +35,8 @@ async function provenance() {
 const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1:'+port);
   try {
+    if(url.pathname==='/__instrument_app'){res.setHeader('content-type','text/html');res.end(await vite.transformIndexHtml('/__instrument_app',await readFile(path.join(root,'index.html'),'utf8')));return;}
+    if(url.pathname==='/__instrument_review'){res.setHeader('content-type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>Fixed instrument review</title><h1>Fixed instrument review</h1><p id="status">Ready</p><script type="module">import("/scripts/review-fixed-instruments.mjs").then(m=>window.instrumentReview=m)</script>');return;}
     if(url.pathname==='/__music_review') {res.setHeader('content-type','text/html');res.end('<!doctype html><meta charset="utf-8"><title>PianoBall audio review</title><h1>Production audio review</h1><p id="status">Ready</p><script type="module">import("/scripts/render-music.mjs").then(m=>window.musicReview=m).catch(error=>fetch("/__music_done",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ok:false,error:String(error)})}))</script>');return;}
     if(url.pathname==='/__music_app'){
       const html=(await readFile(path.join(root,'index.html'),'utf8')).replace('</body>','<script type="module">import {smoke} from "/scripts/render-music.mjs";smoke('+JSON.stringify(options)+').then(result=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:true,smoke:result})})).catch(error=>fetch("/__music_done",{method:"POST",body:JSON.stringify({ok:false,error:error.stack??String(error)})}));</script></body>');

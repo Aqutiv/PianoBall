@@ -193,7 +193,7 @@ describe('native wire acceptance limits', () => {
     ['teaches', (e) => { e.teaches = 'a'.repeat(1025); }], ['root', (e) => { e.root = 60.5; }],
     ['scaleId', (e) => { e.scaleId = 'toString'; }],
     ['voices.keys', (e) => { e.voices.keys = 'missing'; }],
-    ['voices.keys', (e) => { e.voices.keyVoicing = 'bed'; e.voices.keys = 'grand'; }],
+    ['voices.keys', (e) => { e.voices.keyVoicing = 'bed'; e.voices.keys = 'electric-bass'; }],
     ['voices.keyVoicing', (e) => { e.voices.keyVoicing = 'other' as never; }],
     ['voices.backing', (e) => { e.voices.backing = 'missing'; }],
     ['playerNotes', (e) => { e.playerNotes = []; }],

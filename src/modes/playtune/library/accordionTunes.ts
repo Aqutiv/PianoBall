@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import { chordNotes } from '../../../audio/music';
 import type { ChartNote, Tune } from '../chart';
 import { scorePart } from './classicalNotation';
@@ -11,7 +12,7 @@ export const LE_TEMPS_DES_CERISES: Tune = {
   origin: 'classic', difficulty: 3, pass: 0.65,
   teaches: 'Let the accordion sing through a long tie, then breathe between phrases.',
   bpm: 108, beatsPerBar: 3, pickup: 1, root: 60, scaleId: 'ionian',
-  voiceId: 'accordion', bedVoiceId: 'bed-accordion', accompaniment: 'waltz',
+  ...melodyInstruments('le-temps-des-cerises'), accompaniment: 'waltz',
   // Benoit E.B.3940, printed pp.1-2: first vocal stanza, Ab major -> C.
   // Each source eighth becomes one chart beat. Omit the two small ornaments.
   melody: melodyPerformance(scorePart(`
@@ -90,7 +91,7 @@ export const HAVA_NAGILA: Tune = {
   origin: 'classic', difficulty: 3, pass: 0.65,
   teaches: 'Hear the distinctive modal steps and build a three-part celebration.',
   bpm: 108, beatsPerBar: 4, root: 62, scaleId: 'aeolian', borrows: [1, 4],
-  voiceId: 'accordion', bedVoiceId: 'nylon-guitar', accompaniment: 'march',
+  ...melodyInstruments('hava-nagila'), accompaniment: 'march',
   melody: melodyPerformance(scorePart([HAVA_A, HAVA_A, HAVA_B, HAVA_B, HAVA_C].join(' | ')),
     [[0, .78], [16, .84], [32, .78], [48, .84], [64, .65], [72, .78], [80, .87], [88, .9], [95, .62]], .9, .035),
   // D major is the modal tonic; G minor and C minor support the upper phrases.

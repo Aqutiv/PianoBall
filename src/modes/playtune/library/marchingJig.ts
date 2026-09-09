@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import type { ChartNote, Tune } from '../chart';
 import { figure } from './backingNotation';
 import { line, progression, R, type ChordStep, type Step } from './notation';
@@ -56,7 +57,7 @@ export const YANKEE_DOODLE: Tune = {
   difficulty: 2, pass: .63,
   teaches: 'A marching tune with dotted rhythms and a returning chorus.',
   bpm: 132, beatsPerBar: 4, pickup: 1, root: C4, scaleId: 'ionian',
-  voiceId: 'felt-piano', bedVoiceId: 'bed-felt-piano', accompaniment: 'march',
+  ...melodyInstruments('yankee-doodle'), accompaniment: 'march',
   melody: line([[G3, .5], ...YANKEE_STRAIN, ...YANKEE_CHORUS, ...YANKEE_CHORDAL_CHORUS]
     .map(([note, len]): Step => [note, len * 2])),
   chords: progression([[4, 'maj', .5], ...YANKEE_A_HARMONY, ...YANKEE_B_HARMONY, ...YANKEE_B_HARMONY])
@@ -123,7 +124,7 @@ export const IRISH_WASHERWOMAN: Tune = {
   difficulty: 4, pass: .67,
   teaches: 'A double jig in two groups of three, with pickups into each strain.',
   bpm: 132, beatsPerBar: 6, pickup: 1, root: G4, scaleId: 'ionian',
-  voiceId: 'felt-piano', bedVoiceId: 'bed-harp', accompaniment: 'compound',
+  ...melodyInstruments('irish-washerwoman'), accompaniment: 'compound',
   melody: line([...IRISH_A, ...IRISH_A, ...IRISH_B, ...IRISH_B]),
   // Each dotted-quarter pulse names its harmony, including repeated chords.
   chords: progression([...IRISH_A_HARMONY, ...IRISH_A_HARMONY, ...IRISH_B_HARMONY, ...IRISH_B_HARMONY]

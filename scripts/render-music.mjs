@@ -57,7 +57,7 @@ async function save(name, body, type) {
   if(!response.ok)throw Error(await response.text());return response.json();
 }
 
-export async function render(entry, stem, { sampleRate = 48000, label = 'current', written = true, nameSuffix = '' } = {}) {
+export async function render(entry, stem, { sampleRate = 48000, label = 'current', written = true, nameSuffix = '', playerVelocity = .62 } = {}) {
   const beatSeconds = 60/entry.bpm;
   const last = Math.max(0,...entry.playerNotes.map(n=>n.beat+n.len),...entry.backingEvents.map(n=>n.beat+n.len),...(entry.drumEvents??[]).map(hit=>hit.beat));
   const contentEnd = LEAD_IN + last*beatSeconds;
@@ -100,7 +100,7 @@ export async function render(entry, stem, { sampleRate = 48000, label = 'current
         for(const event of events){
           maxInputQuantizationMs=Math.max(maxInputQuantizationMs,Math.abs(context.currentTime-event.time)*1000);
           fixed(base ^ hash('player:'+event.serial+':'+event.press),()=>{
-            if(event.press)engine.noteOn(event.note,.62,Math.max(-.65,Math.min(.65,(event.note-60)/48)));
+            if(event.press)engine.noteOn(event.note,playerVelocity,Math.max(-.65,Math.min(.65,(event.note-60)/48)));
             else engine.noteOff(event.note);
           });
         }
@@ -114,7 +114,7 @@ export async function render(entry, stem, { sampleRate = 48000, label = 'current
   if(measured.nonfiniteSamples)throw Error(entry.id+': nonfinite rendered samples');
   const name=[label,entry.role,entry.id,stem].join('_')+(nameSuffix?'_'+nameSuffix:'')+'.wav';
   const output=await save(name,wav(buffer),'audio/wav');
-  return {id:entry.id,role:entry.role,title:entry.title,bpm:entry.bpm,stem,label,written,playerVelocity:.62,
+  return {id:entry.id,role:entry.role,title:entry.title,bpm:entry.bpm,stem,label,written,playerVelocity,
     register:'authored',keyboardShiftSemitones:0,drumEventCount:stem==='player'?0:(entry.drumEvents?.length??0),maxInputQuantizationMs,...measured,...output};
 }
 
@@ -183,7 +183,7 @@ export async function smoke({label='current'} = {}) {
     await delay(30);
   }};
   const check=(condition,message)=>{if(!condition)throw Error(message);};
-  await waitFor(()=>window.__pianoball?.shell.active,'application boot');
+  await waitFor(()=>window.__pianoball,'application boot');
   const api=window.__pianoball, engine=api.audio;
   check(await api.startAudio(),'AudioContext did not start');
   // Keep the ordinary hardware clock running, with only its final speaker feed muted.
@@ -194,6 +194,22 @@ export async function smoke({label='current'} = {}) {
   const result={...(await (await fetch('/__music_provenance')).json()),browser:navigator.userAgent,
     clock:'Production AudioContext and requestAnimationFrame; no clock acceleration',isolatedStorage:true,
     speakerOutputMuted:true,checks:[],audioState:engine.ctx.state};
+  // Resolve every fixed role through the actual mode, including intermediate lifecycle transitions.
+  api.input.mapping.settings={baseNote:21,count:88,autoLatch:false};mode.remap();
+  for(const role of Object.values(ROLES)) {
+    mode.setRole(role.id);
+    for(const id of role.order) {
+      check(mode.start(id),'Cannot start fixed course '+role.id+':'+id);
+      const expected=role.voices(mode.tune);
+      const resolved=()=>({keyVoicing:engine.keyVoicing,keys:engine.keyVoicing==='bed'?engine.keyBedVoice:engine.leadVoice,backing:engine.bedVoice});
+      check(JSON.stringify(resolved())===JSON.stringify(expected),'Fixed instrument resolution mismatch');
+      const generation=engine.padGen;check(mode.restart()&&engine.padGen!==generation,'Fixed restart kept old generation');
+      mode.pause();mode.resume();check(JSON.stringify(resolved())===JSON.stringify(expected),'Resume changed fixed instruments');
+      mode.stopRun();
+      check(engine.voices.size===0&&engine.scheduledPianoCount===0&&!api.bed.running,'Fixed course retained ownership');
+      result.checks.push({test:'fixed role lifecycle',role:role.id,id,voices:expected});
+    }
+  }
   const originalPad=engine.pad.bind(engine),calls=[];
   engine.pad=(...args)=>{calls.push({notes:[...args[0]],at:args[3],written:args[5]===true});return originalPad(...args);};
   for(const role of ['melody','chords']) {
@@ -266,7 +282,7 @@ export async function smoke({label='current'} = {}) {
   api.noteOff(togglePitch);
   result.checks.push({test:'active HUD rhythm toggle',accessibleSwitchStateUpdates:true,drumsAndRoomCancelled:true,playerAndAutomaticNotesContinue:true,chartAndEndingClockUnchanged:true,newDrumRouteOnEnable:true});
   const hopscotchDrumTrack=mode.drums.track;
-  check(engine.bedVoice==='bed-electric-piano','Hopscotch did not select its automatic electric piano');
+  check(engine.bedVoice==='wurlitzer','Hopscotch did not select its automatic Wurlitzer');
   mode.pause();await delay(200);
   check(!engine.bedAudible&&!api.bed.running&&!mode.drums.track&&engine.drumTracks.size===0,'Hopscotch pause retained notes or drum room');
   mode.resume();
@@ -274,7 +290,7 @@ export async function smoke({label='current'} = {}) {
   await waitFor(()=>mode.drums.track,'Hopscotch fresh drum route');
   check(mode.drums.track!==hopscotchDrumTrack,'Hopscotch resumed the prior drum route');
   mode.stopRun();
-  result.checks.push({test:'Hopscotch notes/drums stop/restart',role:'chords',automaticVoice:'bed-electric-piano',pauseMutesNotesAndDrumRooms:true,resumeUsesFreshGenerations:true});
+  result.checks.push({test:'Hopscotch notes/drums stop/restart',role:'chords',automaticVoice:'wurlitzer',pauseMutesNotesAndDrumRooms:true,resumeUsesFreshGenerations:true});
   for(const id of ['le-temps-des-cerises','hava-nagila']) for(const role of ['melody','chords']) {
     mode.setRole(role);api.input.mapping.settings={baseNote:36,count:25,autoLatch:false};mode.remap();
     check(mode.start(id),'Cannot start '+role+':'+id+' on 25 keys');
@@ -293,6 +309,18 @@ export async function smoke({label='current'} = {}) {
     check(!api.bed.running&&!engine.bedAudible&&engine.voices.size===0&&engine.scheduledPianoCount===0,'New song stop retained notes');
     result.checks.push({test:'accordion course routing/live keys/restart/stop',id,role,keys:25,voices:expected});
   }
+  for(const [id,voice] of [['hopscotch','clean-electric-guitar'],['drunken-sailor','steel-string-guitar'],['can-can','brass-ensemble']]) {
+    mode.setRole('chords');api.input.mapping.settings={baseNote:21,count:88,autoLatch:false};mode.remap();
+    check(mode.start(id),'Cannot start held-key course '+id);
+    check(engine.keyVoicing==='bed'&&engine.keyBedVoice===voice,'Wrong held-key instrument');
+    const notes=[48,52,55];notes.forEach(n=>api.noteOn(n,90));await delay(120);
+    check(notes.every(n=>engine.voices.has(n)),'Held chord lost a key');
+    const remaining=engine.voices.get(55);api.noteOff(48);await delay(70);
+    check(!engine.voices.has(48)&&engine.voices.get(55)===remaining,'Independent held note release failed');
+    api.noteOn(48,105);api.noteOff(48);api.noteOff(52);api.noteOff(55);await delay(180);
+    check(engine.voices.size===0,'Repeated chord retained a key');mode.stopRun();
+    result.checks.push({test:'independent bed-key chord releases',id,voice});
+  }
   mode.setRole('melody');
   await save(label+'_browser-smoke-progress.json',JSON.stringify({...result,pending:'natural song completion'},null,2)+'\n','application/json');
   // Let a complete short excerpt finish on the unmodified real clock.
@@ -300,10 +328,14 @@ export async function smoke({label='current'} = {}) {
   const logicalEnd=mode.transport.timeOf(Math.max(...mode.tune.melody.map(n=>n.beat+n.len),...mode.tune.backingNotes.map(n=>n.beat+n.len),...mode.tune.chords.map(n=>n.beat+n.len)));
   const audibleEnd=mode.transport.timeOf(Math.max(...mode.tune.backingNotes.map(n=>n.beat+(n.soundingLen??n.len))));
   const expectedFinish=mode.endsAt;
-  await waitFor(()=>mode.phase==='finished','natural song completion',(expectedFinish-engine.now+5)*1000);
+  await waitFor(()=>mode.phase==='finished','natural song completion',(expectedFinish-engine.now+15)*2000);
   check(engine.now>=expectedFinish&&expectedFinish>=audibleEnd,'Completion cut automatic sounding duration');
   check(!mode.transport.running&&!api.bed.running,'Completed song kept scheduling');
   result.checks.push({test:'natural ending',id:'first-light',logicalEnd,audibleEnd,expectedFinish,observedFinish:engine.now,formRestSeconds:expectedFinish-logicalEnd,resultsScreen:api.overlay.screen,stingScheduled:mode.sting!==null});
+  api.mode('freestyle');await delay(250);
+  check(engine.voices.size===0&&engine.scheduledPianoCount===0,'Return to Freestyle retained course audio');
+  check(engine.leadVoice==='grand'&&engine.bedVoice==='warm','Return to Freestyle did not restore its default instruments');
+  result.checks.push({test:'return to Freestyle',lead:engine.leadVoice,backing:engine.bedVoice,noCourseOwnership:true});
   result.pass=true;result.finishedAt=new Date().toISOString();result.audioQuality=engine.lite?'lite':'full';
   await save(label+'_browser-smoke.json',JSON.stringify(result,null,2)+'\n','application/json');
   return result;

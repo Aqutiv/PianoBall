@@ -232,13 +232,11 @@ describe('the tune library', () => {
     }
   });
 
-  it('uses matching piano parts for the originals and electric piano for Hopscotch', () => {
-    for (const id of ['first-light', 'two-hands']) {
-      expect(findTune(id)!.voiceId).toBe('grand');
-      expect(findTune(id)!.bedVoiceId).toBe('bed-felt-piano');
+  it('assigns vibraphone and Wurlitzer to the originals while retaining global defaults', () => {
+    expect(findTune('first-light')).toMatchObject({ voiceId: 'vibraphone', bedVoiceId: 'warm' });
+    for (const id of ['two-hands', 'hopscotch']) {
+      expect(findTune(id)).toMatchObject({ voiceId: 'wurlitzer', bedVoiceId: 'clean-electric-guitar' });
     }
-    expect(findTune('hopscotch')!.voiceId).toBe('electric-piano');
-    expect(findTune('hopscotch')!.bedVoiceId).toBe('bed-felt-piano');
     expect(DEFAULT_LEAD_VOICE).toBe('grand');
     expect(DEFAULT_BED_VOICE).toBe('warm');
   });

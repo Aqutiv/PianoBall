@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import type { ChartNote, Tune } from '../chart';
 import { figure } from './backingNotation';
 import { line, merge, progression, shift, type Step } from './notation';
@@ -67,8 +68,7 @@ const quarterNoteChart: Tune = {
   pickup: PICKUP,
   root: C4,
   scaleId: 'ionian',
-  voiceId: 'felt-piano',
-  bedVoiceId: 'nylon-guitar',
+  ...melodyInstruments('la-bamba'),
   accompaniment: 'pulse',
   pass: 0.65,
   // The sourced phrase lasts 35 7/12 beats. A 5/12-beat breath places its

@@ -1,3 +1,4 @@
+import { melodyInstruments } from '../fixedPairings';
 import type { Tune } from '../chart';
 import { melodyPerformance as perform } from './performanceNotation';
 import { line, progression, R, type Step, type ChordStep } from './notation';
@@ -36,7 +37,7 @@ export const FRERE_JACQUES: Tune = {
   id: 'frere-jacques', title: 'Frère Jacques', composer: 'Traditional', origin: 'classic',
   difficulty: 1, teaches: 'Short phrases that answer themselves, and the ringing bells below.',
   bpm: 80, beatsPerBar: 4, root: C4, scaleId: 'ionian', pass: 0.6,
-  accompaniment: 'march', voiceId: 'music-box', bedVoiceId: 'bed-harp',
+  accompaniment: 'march', ...melodyInstruments('frere-jacques'),
   melody: perform(line([...JACQUES, ...JACQUES]),
     [[0, .82], [8, .94], [16, 1], [30, .7], [32, .86], [48, .98], [62, .68]]),
   chords: progression([...JACQUES_CHORDS, ...JACQUES_CHORDS]),
@@ -73,7 +74,7 @@ export const DRUNKEN_SAILOR: Tune = {
   id: 'drunken-sailor', title: 'Drunken Sailor', composer: 'Traditional', origin: 'classic',
   difficulty: 2, teaches: 'Repeated notes and a minor tune, with a chorus to answer it.',
   bpm: 108, beatsPerBar: 4, root: D4, scaleId: 'dorian', pass: 0.63,
-  accompaniment: 'march', voiceId: 'choir', bedVoiceId: 'nylon-guitar',
+  accompaniment: 'march', ...melodyInstruments('drunken-sailor'),
   melody: perform(line([...SAILOR, ...SAILOR]),
     [[0, .85], [20, .96], [30, .74], [32, .96], [52, 1], [62, .78], [64, .86], [84, .98], [94, .74], [96, .98], [116, 1], [126, .72]], .9)
     // The Backing role uses a fast-decaying nylon melody; balance it locally.
@@ -104,7 +105,7 @@ export const CAN_CAN: Tune = {
   id: 'can-can', title: 'Can-Can', composer: 'Offenbach', origin: 'classic',
   difficulty: 3, teaches: 'Repeated notes, a leap, and a running dance refrain.',
   bpm: 112, beatsPerBar: 4, root: C4, scaleId: 'ionian', pass: 0.65,
-  accompaniment: 'march', voiceId: 'grand', bedVoiceId: 'bed-felt-piano',
+  accompaniment: 'march', ...melodyInstruments('can-can'),
   // Four complete eight-bar refrains, each resolving onto the tonic harmony.
   melody: perform(line([...GALOP, ...GALOP, ...GALOP, ...GALOP]),
     [[0, .8], [8, .94], [30, .74], [32, .9], [40, 1], [62, .8], [64, .84], [72, .96], [94, .76], [96, .94], [104, 1], [126, .78]], .78),
@@ -149,7 +150,7 @@ export const BLUE_DANUBE: Tune = {
   id: 'blue-danube', title: 'The Blue Danube', composer: 'Strauss II', origin: 'classic',
   difficulty: 4, teaches: 'Wide arpeggios, a waltz, and the space between phrases.',
   bpm: 120, beatsPerBar: 3, root: D4, scaleId: 'ionian', borrows: [6], pass: 0.67,
-  accompaniment: 'waltz', voiceId: 'felt-piano', bedVoiceId: 'bed-felt-piano',
+  accompaniment: 'waltz', ...melodyInstruments('blue-danube'),
   // Lower complete upper responses/cadence by an octave, rather than folding
   // individual peaks: their internal contour stays intact on a 25-key board.
   // The two D-F#-A lead-ins at beats48 and60 retain their original register.
@@ -201,7 +202,7 @@ export const THE_ENTERTAINER: Tune = {
   bpm: 120, beatsPerBar: 4, pickup: 1, root: C4, scaleId: 'ionian', pass: 0.7,
   // C7, D7 and F minor, plus E-flat in the source's descending bass.
   borrows: [10, 6, 8, 3],
-  accompaniment: 'march', voiceId: 'felt-piano', bedVoiceId: 'bed-felt-piano',
+  accompaniment: 'march', ...melodyInstruments('the-entertainer'),
   melody: perform(line([
     [D4, 0.5], [Ds4, 0.5],
     ...RAG_OPEN, ...RAG_MIDDLE, ...RAG_RETURN, ...RAG_RUN,

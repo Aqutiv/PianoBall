@@ -148,8 +148,8 @@ describe('performance and ownership', () => {
   });
   it.each(CHORD_CURVE)('$tune.id leaves the entire accompaniment to the player', ({ tune }) => {
     expect(CHORDS_ROLE.backing(tune)).toEqual({ chords: [], pattern: 'sustain', parts: [], notes: tune.melody });
-    expect(CHORDS_ROLE.voices(tune).keyVoicing).toBe(tune.id === 'hava-nagila' ? 'bed' : 'lead');
-    expect(CHORDS_ROLE.voices(tune).keys).toBe(tune.id === 'hava-nagila' ? 'nylon-guitar' : tune.id === 'le-temps-des-cerises' ? 'accordion' : 'felt-piano');
+    expect(CHORDS_ROLE.voices(tune).keyVoicing).toBe(findChordEntry(tune.id)!.role.keyVoicing);
+    expect(CHORDS_ROLE.voices(tune).keys).toBe(findChordEntry(tune.id)!.role.keysVoiceId);
     expect(CHORDS_ROLE.voices(tune).backing).toBe(findChordEntry(tune.id)!.role.melodyVoiceId);
     expect(MELODY_ROLE.chart(tune)).toEqual(tune.melody);
     expect(MELODY_ROLE.backing(tune)).toEqual({ chords: [], pattern: 'sustain', parts: [], notes: tune.backingNotes });
