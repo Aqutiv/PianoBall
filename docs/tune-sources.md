@@ -101,3 +101,7 @@ Yankee Doodle and La Bamba are slower than the initial proposal so their source 
 First Light adds a soft quarter-note rim pulse with a slightly stronger downbeat. Two Hands adds quiet kick on one/three, rim on two/four and eighth-note hi-hat. Ground adds soft kick on one/three and quarter-note hi-hat. Off the Beat adds kick on one/three, rim on two/four and quarter-note hi-hat. Hopscotch’s authored parts, phrase changes and ending remain unchanged. The percussion additions leave graded notes untouched; the separate pitched corrections are documented above. None of the 32 existing classical/traditional role entries gains percussion.
 
 The three new pieces use restrained synthetic marching or dance accents as editorial arrangements. They do not claim a historically performed drum part. Every new playable part uses piano; percussion remains an optional live layer shared across both roles, while the exported score always retains its authored drum events.
+
+## Accordion additions
+
+[Accordion teaching arrangements](accordion-tunes.md) documents **Le Temps des cerises** (Benoît ca. 1889) and **Hava Nagila** (accessible early 1923 printing substituted for the unavailable 1922 pages). Both have difficulty-3 Melody and Backing entries, immediately after La Bamba, with original accompaniment and no drums. The historical source details, note-value changes, teaching reductions and instrument routing are recorded there. [The Malagasy candidate remains deferred](deferred-malagasy-tune.md) and is absent from the playable/exported catalog.

@@ -1,3 +1,4 @@
+import { LE_TEMPS_DES_CERISES, HAVA_NAGILA } from './accordionTunes';
 import { FRERE_JACQUES, DRUNKEN_SAILOR, CAN_CAN, BLUE_DANUBE, THE_ENTERTAINER } from './familiar';
 import type { Tune } from '../chart';
 import { ODE_TO_JOY, TWINKLE, AMAZING_GRACE, SCARBOROUGH_FAIR, GREENSLEEVES,
@@ -29,6 +30,8 @@ export const LIBRARY: Tune[] = [
   FUR_ELISE,
   LONDONDERRY_AIR,
   LA_BAMBA,
+  LE_TEMPS_DES_CERISES,
+  HAVA_NAGILA,
   CAN_CAN,
   MINUET_IN_G,
   GYMNOPEDIE,

@@ -1,0 +1,21 @@
+{
+  "sourceProject": "PianoBallDesktop",
+  "sourceAsset": "assets/instruments/accordion.png",
+  "sourceProvenance": {
+    "generator": "OpenAI built-in imagegen",
+    "date": "2026-09-09",
+    "prompt": "Use case: product-mockup. Asset: PianoBall instrument card, square 1024x1024 PNG. The supplied image is a STYLE REFERENCE ONLY, not the target subject. Generate one realistic acoustic button accordion with warm burgundy body panels, ivory round melody buttons and round bass buttons, dark pleated bellows slightly extended. Both button boards and the bellows fully visible in three-quarter view, centered. Match the reference's polished realistic studio product rendering, deep dark navy seamless background, restrained cyan and violet rim lights, soft warm key light and subtle grounding shadow. Fill most of the square while retaining a safe margin around the complete instrument. No people, hands, text, lettering, logos, watermark, accessories or extra instruments. Anatomically credible instrument construction. Do not reproduce the acoustic guitar in the reference.",
+    "styleReference": "assets/instruments/steel-string-guitar.png",
+    "output": "accordion.png",
+    "sourceFilename": "exec-48ddad70-182b-4e29-910a-f4ff6a72572e.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "sha256": "b8dca12ca032e98a37679d8db2b6bc3bc3aa84f63fe4798e7fc253bbf38c38b8",
+    "inspection": "Complete instrument visible, no text/logos, navy studio style; original generated PNG retained."
+  },
+  "output": "public/instruments/accordion.jpg",
+  "conversion": "sharp: 400x400 contain, JPEG quality 85",
+  "sha256": "d5cbc1a8df6b9311c8a9d4d19fbc303d012d5fefc5e468dadabad9e845f3fa11"
+}

@@ -15,13 +15,13 @@ const expanded = {
   melody: [
     'first-light', 'ode-to-joy', 'twinkle', 'frere-jacques', 'amazing-grace',
     'scarborough-fair', 'hopscotch', 'yankee-doodle', 'drunken-sailor', 'greensleeves',
-    'fur-elise', 'londonderry-air', 'la-bamba', 'can-can', 'minuet-in-g', 'gymnopedie',
+    'fur-elise', 'londonderry-air', 'la-bamba', 'le-temps-des-cerises', 'hava-nagila', 'can-can', 'minuet-in-g', 'gymnopedie',
     'two-hands', 'irish-washerwoman', 'blue-danube', 'canon-in-d', 'jesu-joy', 'the-entertainer',
   ],
   chords: [
     'frere-jacques', 'ode-to-joy', 'chord-ground', 'twinkle', 'chord-march',
     'yankee-doodle', 'hopscotch', 'drunken-sailor', 'canon-in-d', 'amazing-grace',
-    'scarborough-fair', 'la-bamba', 'gymnopedie', 'londonderry-air', 'greensleeves',
+    'scarborough-fair', 'la-bamba', 'le-temps-des-cerises', 'hava-nagila', 'gymnopedie', 'londonderry-air', 'greensleeves',
     'irish-washerwoman', 'can-can', 'blue-danube', 'fur-elise', 'minuet-in-g', 'jesu-joy', 'the-entertainer',
   ],
 };
@@ -41,15 +41,15 @@ beforeEach(() => {
 afterEach(() => { resetPlayTuneSettings(); vi.unstubAllGlobals(); });
 
 describe('traditional course expansion', () => {
-  it('publishes 22 courses per role at their approved teaching positions', () => {
-    expect(LIBRARY).toHaveLength(22);
-    expect(CHORD_CURVE).toHaveLength(22);
+  it('publishes 24 courses per role at their approved teaching positions', () => {
+    expect(LIBRARY).toHaveLength(24);
+    expect(CHORD_CURVE).toHaveLength(24);
     const catalog = compilePublishedCatalog(provenance);
     expect(catalog.schemaVersion).toBe(1);
-    expect(catalog.entries).toHaveLength(44);
+    expect(catalog.entries).toHaveLength(48);
     for (const role of Object.values(ROLES)) {
       expect(role.order).toEqual(expanded[role.id]);
-      expect(role.order.filter(id => !additions.includes(id))).toEqual(baseline[role.id]);
+      expect(role.order.filter(id => !additions.includes(id) && !['le-temps-des-cerises', 'hava-nagila'].includes(id))).toEqual(baseline[role.id]);
       expect(role.order.slice(0, 3)).toEqual(baseline[role.id].slice(0, 3));
       expect(catalog.entries.filter(entry => entry.role === role.id).map(entry => entry.id)).toEqual(role.order);
     }
@@ -66,7 +66,7 @@ describe('traditional course expansion', () => {
     }
   });
 
-  it('exports percussion for all originals and the new dances, leaving the 32 existing classic entries unchanged', () => {
+  it('exports percussion for all originals and the new dances, leaving the 36 undrummed classic entries unchanged', () => {
     const catalog = compilePublishedCatalog(provenance);
     const rhythmic = catalog.entries.filter(entry => entry.drumEvents?.length);
     expect(rhythmic).toHaveLength(12);
@@ -80,7 +80,7 @@ describe('traditional course expansion', () => {
         expect(Object.hasOwn(entry, 'drumEvents'), role.id + ':' + tune.id).toBe(false);
       }
     }
-    expect(oldClassics).toBe(32);
+    expect(oldClassics).toBe(36);
     for (const id of ['hopscotch', ...additions]) {
       const [melody, backing] = catalog.entries.filter(entry => entry.id === id);
       expect(melody.drumEvents).toEqual(backing.drumEvents);
@@ -169,7 +169,8 @@ for (const role of Object.values(ROLES)) describe(role.id + ' progress through a
         expect(progress.previousBest?.[id]).toEqual(oldRecord);
       } else expect(progress.best[id]).toEqual(oldRecord);
     }
-    expect(new Set(progress.unlocked)).toEqual(new Set(role.order));
+    expect(progress.unlocked).toHaveLength(role.id === 'chords' ? 22 : 24);
+    expect(progress.unlocked).toEqual(expect.arrayContaining(oldOrder.filter(id => id !== 'hopscotch')));
     expect(JSON.parse(localStorage.getItem('pianoball.' + source)!)).toEqual(oldSave);
     expect(loadProgress(role.storageKey, role.order)).toEqual(progress);
   });

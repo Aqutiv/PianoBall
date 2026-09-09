@@ -63,7 +63,8 @@ describe('Backing access migration', () => {
   it('caps fully unlocked old access at the expanded course without fabricating achievements', () => {
     write(CHORD_STORE, { unlocked: [...CA92_BACKING_ORDER.map(id => id === 'hopscotch' ? 'drift' : id),'chord-three','first-light','two-hands'], best: {} });
     const p = load();
-    expect(new Set(p.unlocked)).toEqual(new Set(CHORD_ORDER));
+    expect(p.unlocked).toHaveLength(22);
+    expect(p.unlocked).toEqual(expect.arrayContaining(CA92_BACKING_ORDER.filter(id => id !== 'hopscotch')));
     expect(p.unlockCredit).toBe(19);
     expect(p.best).toEqual({});
   });

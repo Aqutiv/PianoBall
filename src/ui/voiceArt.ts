@@ -33,7 +33,7 @@ export function artId(voiceId: string): string {
 /** Every art id that ships, so a test can hold the bank and the folder together. */
 export const ART_IDS: readonly string[] = [
   'signature', 'grand', 'electric-piano', 'wurlitzer', 'clavinet', 'felt-piano', 'toy-piano',
-  'drawbar', 'rock-organ', 'pipe-organ', 'reed-organ',
+  'accordion', 'drawbar', 'rock-organ', 'pipe-organ', 'reed-organ',
   'choir', 'vox-pad', 'breath-flute', 'glass', 'solo-string',
   'music-box', 'marimba', 'vibraphone', 'glockenspiel', 'tubular-bell', 'harp',
   'saw-lead', 'square-lead', 'supersaw', 'bright-poly', 'sub-bass',

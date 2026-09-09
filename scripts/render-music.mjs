@@ -275,6 +275,24 @@ export async function smoke({label='current'} = {}) {
   check(mode.drums.track!==hopscotchDrumTrack,'Hopscotch resumed the prior drum route');
   mode.stopRun();
   result.checks.push({test:'Hopscotch notes/drums stop/restart',role:'chords',automaticVoice:'bed-electric-piano',pauseMutesNotesAndDrumRooms:true,resumeUsesFreshGenerations:true});
+  for(const id of ['le-temps-des-cerises','hava-nagila']) for(const role of ['melody','chords']) {
+    mode.setRole(role);api.input.mapping.settings={baseNote:36,count:25,autoLatch:false};mode.remap();
+    check(mode.start(id),'Cannot start '+role+':'+id+' on 25 keys');
+    const expected=mode.role.voices(mode.tune);
+    check(engine.keyVoicing===expected.keyVoicing&&engine.bedVoice===expected.backing,'Incorrect role bank routing');
+    check((expected.keyVoicing==='lead'?engine.leadVoice:engine.keyBedVoice)===expected.keys,'Incorrect player instrument');
+    await waitFor(()=>mode.phase==='playing','new song count-in');
+    const pitch=mode.judge.targets[0].note;
+    api.noteOn(pitch,90);await delay(700);
+    check(engine.voices.has(pitch),'New instrument did not hold a live key');
+    api.noteOff(pitch);await delay(250);
+    check(!engine.voices.has(pitch),'New instrument retained a released key');
+    const generation=engine.padGen;
+    check(mode.restart()&&engine.padGen!==generation&&mode.phase==='countin','New song restart retained old audio');
+    mode.stopRun();await delay(200);
+    check(!api.bed.running&&!engine.bedAudible&&engine.voices.size===0&&engine.scheduledPianoCount===0,'New song stop retained notes');
+    result.checks.push({test:'accordion course routing/live keys/restart/stop',id,role,keys:25,voices:expected});
+  }
   mode.setRole('melody');
   await save(label+'_browser-smoke-progress.json',JSON.stringify({...result,pending:'natural song completion'},null,2)+'\n','application/json');
   // Let a complete short excerpt finish on the unmodified real clock.

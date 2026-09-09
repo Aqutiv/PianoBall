@@ -1012,8 +1012,8 @@ describe('polyphony on the lead bus', () => {
 
 
 describe('independent written piano', () => {
-  function pianoHarness(lead = 'felt-piano') {
-    const h = graphHarness(1, { lead, bed: 'bed-felt-piano' });
+  function pianoHarness(lead = 'felt-piano', bed = 'bed-felt-piano') {
+    const h = graphHarness(1, { lead, bed });
     const sources: (FakeSource & FakeNode)[] = [];
     h.state.addLayer = vi.fn(() => {
       const s = Object.assign(source(), { connect: vi.fn(), disconnect: vi.fn() });
@@ -1095,6 +1095,25 @@ describe('independent written piano', () => {
     expect(strong).toBeGreaterThan(quiet);
     expect(strong).toBeLessThan(1);
     expect(filters[1]!.frequency.setValueAtTime.mock.calls[0]![0]).toBeGreaterThan(filters[0]!.frequency.setValueAtTime.mock.calls[0]![0]);
+  });
+
+  it.each([false, true])('sustains accordion reeds and cancels them independently (written=%s)', written => {
+    const { engine, state, gains, sources } = pianoHarness('accordion', 'bed-accordion');
+    engine.pad([60], 4, .04, 2, .03, written);
+    expect(state.addLayer.mock.calls[0]![1]).toMatchObject({ spectrum: { gen: 'reed' } });
+    const envelope = gains[0]!.gain;
+    const sustain = envelope.exponentialRampToValueAtTime.mock.calls[1]![0] as number;
+    const hold = envelope.setValueAtTime.mock.calls.at(-1)!;
+    expect(hold[0]).toBeCloseTo(sustain);
+    expect(hold[1]).toBeCloseTo(5.91);
+    expect(envelope.exponentialRampToValueAtTime).toHaveBeenLastCalledWith(.0001, 6);
+    engine.noteOff(60);
+    expect(engine.scheduledPianoCount).toBe(1);
+    engine.stopPads(.05);
+    expect(engine.scheduledPianoCount).toBe(0);
+    expect(sources.every(source => source.stop.mock.calls.at(-1)?.[0] === 1.07)).toBe(true);
+    engine.pad([64], 1, .04, 3, .03, written);
+    expect(engine.scheduledPianoCount).toBe(1);
   });
 
   it('leaves Freestyle pad piano synthesis unchanged', () => {

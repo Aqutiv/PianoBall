@@ -148,9 +148,9 @@ describe('the instrument bank', () => {
     expect(LEAD_VOICES.some((v) => v.spec.glide !== undefined)).toBe(true);
   });
 
-  it('lets organs and synths hold their pitch while everything else drifts', () => {
+  it('lets organs, synths and accordion hold their pitch while everything else drifts', () => {
     for (const v of LEAD_VOICES) {
-      const steady = v.family === 'Organ' || v.family === 'Synth';
+      const steady = v.family === 'Organ' || v.family === 'Synth' || v.id === 'accordion';
       expect(v.spec.humanize ?? 1, `${v.id}`).toBe(steady ? 0 : 1);
     }
   });
