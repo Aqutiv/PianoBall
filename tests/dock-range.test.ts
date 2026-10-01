@@ -3,6 +3,7 @@ import { dockFrame, layoutDock, playtuneRows, type DockEnv, type DockLayout } fr
 import { fitToRange, fitted } from '../src/modes/playtune/chart';
 import { ROLES } from '../src/modes/playtune/role';
 import { FreestyleMode } from '../src/modes/freestyle/freestyle';
+import { PlayTuneMode } from '../src/modes/playtune/playtune';
 import { AudioEngine } from '../src/audio/engine';
 import { ChordBed } from '../src/audio/bed';
 import { MusicState } from '../src/audio/musicState';
@@ -15,6 +16,9 @@ import { resetDockSettings, setDockOverride } from '../src/render/dockSettings';
 
 vi.mock('../src/modes/freestyle/hud', () => ({
   FreestyleHud: class { mount() {} sync() {} update() {} closeHelp() {} destroy() {} },
+}));
+vi.mock('../src/modes/playtune/hud', () => ({
+  TuneHud: class { mount() {} setTune() {} setRhythm() {} update() {} },
 }));
 
 const MAPPED = { low: 48, high: 79 };
@@ -101,7 +105,7 @@ describe('Freestyle on a touch screen', () => {
     } as unknown as ModeContext;
     const mode = new FreestyleMode(ctx);
     const layout = () => (mode as unknown as { dock: { layout(): DockLayout } }).dock.layout();
-    return { input, audio, bed, stage, mode, layout };
+    return { input, audio, bed, stage, ctx, mode, layout };
   }
 
   it('sizes the keys for fingers, and the computer keyboard follows them', () => {
@@ -112,6 +116,24 @@ describe('Freestyle on a touch screen', () => {
     expect(r.input.keyboardBase?.()).toBe(48);
     r.mode.exit();
     expect(r.input.keyboardBase).toBeNull();
+    r.bed.stop();
+  });
+
+  it('keeps the computer keyboard on the keys on screen when a mode behind them is remapped', () => {
+    setFreestyleSettings({ bed: true, bedMode: 'manual' });
+    const r = rig(390, 844);
+    // Visited and left: the shell keeps a mode it has built for the session.
+    const playtune = new PlayTuneMode(r.ctx);
+    playtune.enter();
+    expect(r.input.keyboardBase?.()).toBe(60);
+    playtune.exit();
+    r.mode.enter();
+    expect(r.input.keyboardBase?.()).toBe(48);
+    // What `Shell.remapKeys` does after a Key size change: every built mode, in
+    // the order it was built.
+    for (const mode of [r.mode, playtune]) mode.remap();
+    expect(r.input.keyboardBase?.()).toBe(48);
+    r.mode.exit();
     r.bed.stop();
   });
 

@@ -127,6 +127,11 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private songRows: DockRowSpec[] | null = null;
   /** The rows the keyboard was last built for, to notice when they change. */
   private rowsKey = '';
+  /**
+   * Whether the mode is on screen. The shell remaps every mode it has built,
+   * and one that is not showing must not point the computer keyboard at its keys.
+   */
+  private entered = false;
   private readonly transport = new Transport();
   private readonly drums: TuneDrums;
   /** Last applied preference, so unrelated settings never replay queued hits. */
@@ -209,7 +214,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.rowsKey = rowsKey(rows);
     this.dock.setRows(rows);
     this.deck.build(low, rows[rows.length - 1].high - low + 1);
-    this.ctx.input.keyboardBase = this.dock.touch ? () => this.deck.range.low : null;
+    if (this.entered) this.ctx.input.keyboardBase = this.dock.touch ? () => this.deck.range.low : null;
   }
 
   /**
@@ -250,6 +255,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   // -------------------------------------------------------------- lifecycle ---
 
   enter(): void {
+    this.entered = true;
     const { input } = this.ctx;
     this.dock.forget();
 
@@ -268,6 +274,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   }
 
   exit(): void {
+    this.entered = false;
     this.release();
     this.pending = null;
     this.stopRun();
