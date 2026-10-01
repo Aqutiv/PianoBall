@@ -1936,7 +1936,8 @@ kbd {
    the geometry the keyboard publishes, on the right of its header so the
    canvas captions keep the left. */
 .dock-bar {
-  position: absolute; pointer-events: auto; z-index: 1;
+  /* No z-index: in page order it is above the keys and under the menus. */
+  position: absolute; pointer-events: auto;
   top: calc(var(--dock-top, 70vh) + 4px);
   height: max(24px, calc(var(--dock-keys, 70vh) - var(--dock-top, 70vh) - 14px));
   right: calc(100% - var(--dock-right, 100%));
