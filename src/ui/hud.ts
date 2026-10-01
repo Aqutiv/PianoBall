@@ -30,6 +30,8 @@ export class Hud {
   /** Mode-owned panels, top left and top right. */
   readonly left: HTMLElement;
   readonly right: HTMLElement;
+  /** A mode-owned strip in the header of a docked keyboard. */
+  readonly dock: HTMLElement;
 
   private readonly controlsEl: HTMLButtonElement;
 
@@ -63,12 +65,14 @@ export class Hud {
           <span class="dot" id="hud-sound-dot"></span><span id="hud-sound">Sound off</span>
         </div>
       </div>
+      <div class="dock-bar" id="hud-dock" hidden></div>
       <div class="banner" id="hud-banner"></div>
       <div class="fps" id="hud-fps" style="display:none"></div>
     `;
     const q = (sel: string) => root.querySelector(sel) as HTMLElement;
     this.left = q('#hud-left');
     this.right = q('#hud-right');
+    this.dock = q('#hud-dock');
     this.controlsEl = q('#hud-controls') as HTMLButtonElement;
     q('#hud-menu').addEventListener('click', () => {
       this.setControlsOpen(false);
@@ -92,6 +96,8 @@ export class Hud {
     this.setControlsOpen(false);
     this.left.innerHTML = '';
     this.right.innerHTML = '';
+    this.dock.innerHTML = '';
+    this.dock.hidden = true;
     this.setDock(null);
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  BLACK_LENGTH, BLACK_WIDTH, KEY_TARGET, dockForce, dockFrame, freestyleRows, layoutDock, pickDock,
+  BLACK_LENGTH, BLACK_WIDTH, KEY_TARGET, centreFor, dockForce, dockFrame, freestyleRows, layoutDock, mapFraction, noteAtFraction, pickDock,
   playtuneRows, touchOctaves, touchWindow, whiteCount, type DockEnv, type DockLayout, type DockRowSpec,
 } from '../src/game/dock';
 import { isBlackKey } from '../src/midi/notes';
@@ -223,5 +223,29 @@ describe('dock range policy', () => {
     expect(share(lanes)).toBeGreaterThan(0.3);
     const desktop = dock(1440, 900, [MAPPED], { touch: false, header: 32 });
     expect(share(desktop)).toBeLessThanOrEqual(0.32);
+  });
+});
+
+describe('dock range strip', () => {
+  it('places notes along a full piano by white keys', () => {
+    expect(mapFraction(21)).toBe(0);
+    expect(mapFraction(108)).toBe(1);
+    expect(mapFraction(60)).toBeCloseTo(23 / 51, 6);
+    // A black key sits halfway between its white neighbours.
+    expect(mapFraction(61)).toBeCloseTo(mapFraction(60) + 0.5 / 51, 6);
+    for (const n of [21, 24, 48, 60, 72, 96, 108]) expect(noteAtFraction(mapFraction(n))).toBe(n);
+  });
+
+  it('centres a dragged window on the note under the finger', () => {
+    // Two octaves are centred on their middle C.
+    expect(centreFor(60, 2)).toBe(60);
+    expect(centreFor(65, 2)).toBe(60);
+    expect(centreFor(67, 2)).toBe(72);
+    // One octave sits half an octave above its C.
+    expect(centreFor(66, 1)).toBe(60);
+    expect(touchWindow(centreFor(78, 1), 1)).toEqual({ low: 72, high: 84 });
+    // Never off the end of the piano.
+    expect(centreFor(21, 2)).toBe(36);
+    expect(centreFor(108, 2)).toBe(96);
   });
 });

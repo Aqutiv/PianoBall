@@ -352,3 +352,33 @@ function nextWhite(note: number, dir: 1 | -1): number {
   while (isBlackKey(n)) n += dir;
   return n;
 }
+
+// ------------------------------------------------------------ range strip ---
+
+/** White keys on a full piano, A0 to C8. */
+export const PIANO_WHITES = 52;
+
+/** Where a note sits along a full piano, 0 at A0 and 1 at C8, by white keys. */
+export function mapFraction(note: number): number {
+  // A black key sits halfway between the white keys either side of it.
+  const whites = whiteCount(PIANO_LOW, clamp(note, PIANO_LOW, PIANO_HIGH)) - (isBlackKey(note) ? 0.5 : 1);
+  return clamp(whites / (PIANO_WHITES - 1), 0, 1);
+}
+
+/** The white key at a fraction of the way along a full piano. */
+export function noteAtFraction(f: number): number {
+  const target = Math.round(clamp(f, 0, 1) * (PIANO_WHITES - 1));
+  let n = PIANO_LOW;
+  for (let seen = 0; seen < target; n++) if (!isBlackKey(n + 1)) seen++;
+  return n;
+}
+
+/**
+ * The C to build a `k`-octave touch window on, so the window's middle sits as
+ * near `note` as whole octaves allow. An odd number of octaves is centred half
+ * an octave above its C.
+ */
+export function centreFor(note: number, k: number): number {
+  const offset = 6 * k - 12 * Math.floor(k / 2);
+  return clamp(nearestC(note - offset), 36, 96);
+}

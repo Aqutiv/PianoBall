@@ -16,6 +16,8 @@ export interface DockLook {
   chordSplit?: number;
   /** Lane lines from every key up to this screen y, for falling notes. */
   lanesTop?: number;
+  /** Captions in the header stop short of this x, where the octave bar begins. */
+  captionLimit?: number;
 }
 
 /** What changes from frame to frame, drawn over the baked keys. */
@@ -291,21 +293,25 @@ export function bakeDock(ctx: CanvasRenderingContext2D, stage: Stage, layout: Do
     }
   }
 
-  if (look.chordSplit !== undefined) drawSplit(ctx, stage, layout, look.chordSplit);
+  if (look.chordSplit !== undefined) drawSplit(ctx, stage, layout, look.chordSplit, look.captionLimit ?? Infinity);
 }
 
 /** The line and captions between Manual backing's chord keys and the melody. */
-function drawSplit(ctx: CanvasRenderingContext2D, stage: Stage, layout: DockLayout, split: number): void {
+function drawSplit(ctx: CanvasRenderingContext2D, stage: Stage, layout: DockLayout, split: number, limit: number): void {
   const pal = stage.palette;
   const first = layout.byNote.get(split);
   const caption = (text: string, x: number, y: number, color: string) => {
     ctx.save();
     ctx.font = `600 11px ${stage.theme.fonts.ui}`;
     if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '0.14em';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = color;
-    ctx.fillText(text.toUpperCase(), x, y);
+    // A caption the octave bar would cover is left out: the split line and
+    // the tinted chord keys already say where the zones are.
+    if (x + ctx.measureText(text.toUpperCase()).width <= limit) {
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = color;
+      ctx.fillText(text.toUpperCase(), x, y);
+    }
     ctx.restore();
   };
   const headerY = (layout.top + layout.keysTop - 8) / 2;
@@ -411,5 +417,5 @@ export function drawDockKeys(
 
 /** The bake key for a docked keyboard: everything `bakeDock` paints from. */
 export function dockBakeKey(stage: Stage, layout: DockLayout, look: DockLook, scaleSignature = ''): string {
-  return [layout.key, stage.quality.labels, look.chordSplit ?? '-', look.lanesTop ?? '-', scaleSignature].join('|');
+  return [layout.key, stage.quality.labels, look.chordSplit ?? '-', look.lanesTop ?? '-', look.captionLimit ?? '-', scaleSignature].join('|');
 }

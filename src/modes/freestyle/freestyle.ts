@@ -5,7 +5,7 @@ import { chordNotes, identifyChord, inScale } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { DockView } from '../../render/dockView';
-import { freestyleRows, type DockRowSpec } from '../../game/dock';
+import { centreFor, freestyleRows, type DockRowSpec } from '../../game/dock';
 import { dockSettings, readDockEnv, setDockSettings } from '../../render/dockSettings';
 import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
 import { RhythmBox } from '../../audio/rhythmBox';
@@ -65,7 +65,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
-    this.dock = new DockView(ctx.stage, ctx.hud, { touch: 44, desk: 32 });
+    this.dock = new DockView(ctx.stage, ctx.hud, { touch: 50, desk: 40 });
     this.chords = new ChordInput(ctx.bed);
     this.field = new Field(ctx.stage);
     const r = rhythmSettings();
@@ -78,6 +78,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
       ctx.hud, ctx.music, ctx.audio, this.box, {
         bed: ctx.bed,
         range: () => this.range(),
+        centreOn: (note) => this.centreOn(note),
         change: () => this.applyBed(),
         stop: () => this.chords.stop(),
         shift: (dir) => this.shift(dir),
@@ -121,14 +122,33 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   /** The keys on screen, for the backing panel's range readout. */
-  private range(): { low: number; count: number; canDown: boolean; canUp: boolean } {
+  private range(): { low: number; high: number; count: number; canDown: boolean; canUp: boolean } {
     const { low, high } = this.deck.range;
     if (this.dock.touch) {
       const centre = dockSettings().touchCenter;
-      return { low, count: high - low + 1, canDown: centre > 36, canUp: centre < 96 };
+      return { low, high, count: high - low + 1, canDown: centre > 36, canUp: centre < 96 };
     }
     const m = this.ctx.input.mapping;
-    return { low, count: high - low + 1, canDown: m.low > 0, canUp: m.low < 127 - m.settings.count };
+    return { low, high, count: high - low + 1, canDown: m.low > 0, canUp: m.low < 127 - m.settings.count };
+  }
+
+  /**
+   * Bring the keys to a note dragged to on the range strip, by whole octaves.
+   * On a touch screen the window is rebuilt around it; with a controller its
+   * mapping is walked there an octave at a time, as its own buttons would.
+   */
+  centreOn(note: number): void {
+    if (this.dock.touch) {
+      const k = Math.round((this.deck.range.high - this.deck.range.low) / 12);
+      setDockSettings({ touchCenter: centreFor(note, this.dock.rowSpecs.length > 1 ? 2 : k) });
+      this.remap();
+      return;
+    }
+    const m = this.ctx.input.mapping;
+    const steps = Math.round((note - (m.low + m.high) / 2) / 12);
+    if (!steps) return;
+    for (let i = 0; i < Math.abs(steps); i++) m.shiftOctave(Math.sign(steps));
+    if (this.ctx.remapKeys) this.ctx.remapKeys(); else this.remap();
   }
 
   /**
@@ -330,6 +350,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
     const look: DockLook = {
       scale: auto ? (n) => this.scaleMark(n) : undefined,
       chordSplit: split,
+      // Where the octave bar begins: `.dock-bar` is min(300px, 56%) wide.
+      captionLimit: layout.right - Math.min(300, stage.cssW * 0.56) - 8,
     };
     const scaleSig = auto ? `${music.root}:${music.scale.join('.')}` : '-';
     if (stage.needsBake(`freestyle|${dockBakeKey(stage, layout, look, scaleSig)}`)) {

@@ -1931,6 +1931,44 @@ kbd {
 [data-theme="toybox"] .hist span { background: linear-gradient(180deg, var(--neon2), rgba(160, 92, 255, 0.3)); }
 
 
+/* The header strip of a docked keyboard: an octave down, the whole piano in
+   miniature with the keys on screen lit on it, and an octave up. Placed from
+   the geometry the keyboard publishes, on the right of its header so the
+   canvas captions keep the left. */
+.dock-bar {
+  position: absolute; pointer-events: auto; z-index: 1;
+  top: calc(var(--dock-top, 70vh) + 4px);
+  height: max(24px, calc(var(--dock-keys, 70vh) - var(--dock-top, 70vh) - 14px));
+  right: calc(100% - var(--dock-right, 100%));
+  width: min(300px, 56%);
+  display: flex; align-items: stretch; gap: 6px;
+}
+.dock-bar[hidden] { display: none; }
+.dock-oct {
+  min-width: 40px; padding: 0; font-size: 18px; line-height: 1;
+  background: var(--floor-deep); color: var(--ink); border-color: var(--stroke);
+}
+.dock-strip {
+  position: relative; flex: 1; display: flex; padding: 3px 2px; gap: 1px;
+  border-radius: 7px; background: var(--floor-deep); border: 1px solid var(--stroke);
+  touch-action: none; cursor: grab; overflow: hidden;
+}
+.dock-strip:active { cursor: grabbing; }
+.dock-strip:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
+.dock-strip i { flex: 1; border-radius: 1px; background: rgba(255, 255, 255, 0.16); }
+.dock-strip i.c { background: rgba(255, 255, 255, 0.34); }
+.dock-window {
+  position: absolute; top: 0; bottom: 0; border-radius: 6px;
+  border: 1.5px solid var(--neon); background: color-mix(in srgb, var(--neon) 20%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  transition: left 90ms ease-out, width 90ms ease-out;
+}
+.dock-window span {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; text-shadow: 0 0 4px var(--void);
+}
+[data-reduced-motion] .dock-window { transition: none; }
+
 /* Under a docked keyboard the status line has the strip below the keys on a
    desktop; under a touch keyboard there is no strip, so it shows only to say
    that sound is off, as a chip above the keys. */

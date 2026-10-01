@@ -54,7 +54,7 @@ export class KeyboardFallback {
     // Focus can move between animation frames. Native controls own their keys
     // immediately, before the shell's next frame updates `enabled`.
     const target = e.target as Element | null;
-    if (target?.closest?.('input, select, textarea, button, summary, [contenteditable="true"], [role="radio"], [role="switch"]')) return;
+    if (target?.closest?.('input, select, textarea, button, summary, [contenteditable="true"], [role="radio"], [role="switch"], [role="slider"]')) return;
     const now = performance.now();
 
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
