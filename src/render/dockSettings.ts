@@ -1,6 +1,6 @@
 import { load, save } from '../core/storage';
 import { clamp } from '../core/math';
-import { KEY_TARGET, nearestC, type DockEnv, type KeySize } from '../game/dock';
+import { CENTRE_HIGH, CENTRE_LOW, KEY_TARGET, nearestC, type DockEnv, type KeySize } from '../game/dock';
 import type { InputHub } from '../midi/inputHub';
 
 const KEY = 'dock';
@@ -21,7 +21,7 @@ function sanitise(s: Partial<DockSettings>): DockSettings {
   const keySize = SIZES.includes(s.keySize as KeySize) ? (s.keySize as KeySize) : DEFAULT_DOCK_SETTINGS.keySize;
   const centre = typeof s.touchCenter === 'number' && Number.isFinite(s.touchCenter)
     ? nearestC(s.touchCenter) : DEFAULT_DOCK_SETTINGS.touchCenter;
-  return { keySize, touchCenter: clamp(centre, 36, 96) };
+  return { keySize, touchCenter: clamp(centre, CENTRE_LOW, CENTRE_HIGH) };
 }
 
 let current: DockSettings = sanitise(load<Partial<DockSettings>>(KEY, {}));

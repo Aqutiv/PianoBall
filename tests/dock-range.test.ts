@@ -166,6 +166,36 @@ describe('Freestyle on a touch screen', () => {
     r.bed.stop();
   });
 
+  it('moves the keys on every octave press it offers, and greys out the rest', () => {
+    // A tablet held sideways shows three octaves, which reach C8 a C early.
+    const r = rig(1024, 768);
+    r.mode.enter();
+    const range = () => (r.mode as unknown as { range(): { canDown: boolean; canUp: boolean } }).range();
+    r.mode.shift(1);
+    r.mode.shift(1);
+    expect(r.layout()).toMatchObject({ low: 72, high: 108 });
+    expect(range().canUp).toBe(false);
+    r.mode.shift(1);
+    r.mode.shift(-1);
+    expect(r.layout().low).toBe(60);
+    // Upright, one octave climbs to C7: further than three octaves can go.
+    r.stage.cssW = 390;
+    r.stage.cssH = 844;
+    r.mode.remap();
+    for (let i = 0; i < 3; i++) r.mode.shift(1);
+    expect(r.layout().low).toBe(96);
+    // Turned back, the first press down still moves the keys.
+    r.stage.cssW = 1024;
+    r.stage.cssH = 768;
+    r.mode.remap();
+    expect(r.layout().low).toBe(72);
+    expect(range().canDown).toBe(true);
+    r.mode.shift(-1);
+    expect(r.layout().low).toBe(60);
+    r.mode.exit();
+    r.bed.stop();
+  });
+
   it('ignores notes the keys on screen do not hold', () => {
     const r = rig(390, 844);
     r.mode.enter();

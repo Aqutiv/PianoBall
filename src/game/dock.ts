@@ -107,6 +107,9 @@ export interface MappedRange { low: number; high: number }
 /** Lowest and highest notes a touch window may reach: C1 to C8. */
 const WINDOW_LOW = 24;
 const WINDOW_HIGH = 108;
+/** The Cs a touch window may be built around, C2 to C7. */
+export const CENTRE_LOW = 36;
+export const CENTRE_HIGH = 96;
 /** The ends of a full piano, A0 and C8, which no row may pass. */
 const PIANO_LOW = 21;
 const PIANO_HIGH = 108;
@@ -380,5 +383,25 @@ export function noteAtFraction(f: number): number {
  */
 export function centreFor(note: number, k: number): number {
   const offset = 6 * k - 12 * Math.floor(k / 2);
-  return clamp(nearestC(note - offset), 36, 96);
+  return clamp(nearestC(note - offset), CENTRE_LOW, CENTRE_HIGH);
+}
+
+/**
+ * The centre that moves a touch window an octave down (`dir` -1) or up (1), or
+ * null when the window is already at that end of the piano. `lowAt` gives the
+ * window's lowest note for a centre.
+ *
+ * Not always the next C along. Three or four octaves meet C1 or C8 before
+ * their centre meets its own limits, and a centre chosen on a narrower screen
+ * can be left beyond that point, where the next C would change nothing on
+ * screen.
+ */
+export function shiftCentre(center: number, dir: number, lowAt: (center: number) => number): number | null {
+  const step = 12 * Math.sign(dir);
+  if (!step) return null;
+  const now = lowAt(center);
+  for (let c = center + step; c >= CENTRE_LOW && c <= CENTRE_HIGH; c += step) {
+    if (lowAt(c) !== now) return c;
+  }
+  return null;
 }

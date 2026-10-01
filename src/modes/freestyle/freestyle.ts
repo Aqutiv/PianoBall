@@ -5,7 +5,7 @@ import { chordNotes, identifyChord, inScale } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { DockView } from '../../render/dockView';
-import { centreFor, freestyleRows, type DockRowSpec } from '../../game/dock';
+import { centreFor, freestyleRows, shiftCentre, type DockRowSpec } from '../../game/dock';
 import { dockSettings, readDockEnv, setDockSettings } from '../../render/dockSettings';
 import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
 import { RhythmBox } from '../../audio/rhythmBox';
@@ -112,21 +112,30 @@ export class FreestyleMode extends ModeBase implements GameMode {
    * Sized for fingers on a touch screen and mirroring the controller anywhere
    * else; Manual backing on a narrow screen stacks its chord octave above the
    * melody. Cheap and pure, so it is asked every step and the keyboard is only
-   * rebuilt when the answer changes.
+   * rebuilt when the answer changes. `center` asks what a touch screen would
+   * hold around another C.
    */
-  private rowsFor(): DockRowSpec[] {
+  private rowsFor(center?: number): DockRowSpec[] {
     const env = readDockEnv(this.ctx.input);
     this.dock.setTouch(env.touch);
     const s = freestyleSettings();
-    return freestyleRows(env, this.ctx.input.mapping, s.bed && s.bedMode === 'manual', this.ctx.stage.cssW);
+    return freestyleRows(center === undefined ? env : { ...env, center }, this.ctx.input.mapping,
+      s.bed && s.bedMode === 'manual', this.ctx.stage.cssW);
+  }
+
+  /** The touch centre an octave button would move to, or null if the keys cannot go that way. */
+  private nextCentre(dir: number): number | null {
+    return shiftCentre(dockSettings().touchCenter, dir, (c) => this.rowsFor(c)[0].low);
   }
 
   /** The keys on screen, for the backing panel's range readout. */
   private range(): { low: number; high: number; count: number; canDown: boolean; canUp: boolean } {
     const { low, high } = this.deck.range;
     if (this.dock.touch) {
-      const centre = dockSettings().touchCenter;
-      return { low, high, count: high - low + 1, canDown: centre > 36, canUp: centre < 96 };
+      return {
+        low, high, count: high - low + 1,
+        canDown: this.nextCentre(-1) !== null, canUp: this.nextCentre(1) !== null,
+      };
     }
     const m = this.ctx.input.mapping;
     return { low, high, count: high - low + 1, canDown: m.low > 0, canUp: m.low < 127 - m.settings.count };
@@ -158,7 +167,9 @@ export class FreestyleMode extends ModeBase implements GameMode {
    */
   shift(dir: number): void {
     if (this.dock.touch) {
-      setDockSettings({ touchCenter: dockSettings().touchCenter + 12 * Math.sign(dir) });
+      const centre = this.nextCentre(dir);
+      if (centre === null) return;
+      setDockSettings({ touchCenter: centre });
       this.remap();
       return;
     }

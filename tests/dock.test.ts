@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BLACK_LENGTH, BLACK_WIDTH, KEY_TARGET, centreFor, dockForce, dockFrame, freestyleRows, layoutDock, mapFraction, noteAtFraction, pickDock,
-  playtuneRows, touchOctaves, touchWindow, whiteCount, type DockEnv, type DockLayout, type DockRowSpec,
+  playtuneRows, shiftCentre, touchOctaves, touchWindow, whiteCount, type DockEnv, type DockLayout, type DockRowSpec,
 } from '../src/game/dock';
 import { isBlackKey } from '../src/midi/notes';
 
@@ -247,5 +247,22 @@ describe('dock range strip', () => {
     // Never off the end of the piano.
     expect(centreFor(21, 2)).toBe(36);
     expect(centreFor(108, 2)).toBe(96);
+  });
+
+  it('steps the centre an octave only as far as the keys can follow', () => {
+    const lowAt = (k: number) => (c: number) => touchWindow(c, k).low;
+    // One or two octaves move with every C the centre may take.
+    expect(shiftCentre(60, 1, lowAt(1))).toBe(72);
+    expect(shiftCentre(96, 1, lowAt(1))).toBeNull();
+    expect(shiftCentre(36, -1, lowAt(2))).toBeNull();
+    // Three octaves reach C8 a C early.
+    expect(touchWindow(84, 3)).toEqual({ low: 72, high: 108 });
+    expect(shiftCentre(84, 1, lowAt(3))).toBeNull();
+    // Four reach both ends early. A centre left past C8's reach by a narrower
+    // screen still moves the keys an octave on the first press back.
+    expect(shiftCentre(48, -1, lowAt(4))).toBeNull();
+    expect(shiftCentre(96, -1, lowAt(4))).toBe(72);
+    expect(touchWindow(72, 4).low).toBe(touchWindow(96, 4).low - 12);
+    expect(shiftCentre(60, 0, lowAt(4))).toBeNull();
   });
 });
