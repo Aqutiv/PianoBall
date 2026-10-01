@@ -67,6 +67,52 @@ export function mix(a: string, b: string, t: number): string {
 }
 
 /**
+ * `mix` for any colour the app writes: hex, `rgb()`, or the `hsl()` that
+ * `tone` returns.
+ *
+ * `mix` reads hex only, because it is fed theme constants — and handed a
+ * `tone()` colour it quietly mixes towards black instead. Anything that blends
+ * towards a pitch colour, or blends a blend, comes through here.
+ */
+export function blend(a: string, b: string, t: number): string {
+  const pa = parseAny(a), pb = parseAny(b);
+  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
+  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
+  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+/** Parsed colours for `blend`. Capped, because blends of blends are endless. */
+const ANY = new Map<string, [number, number, number]>();
+
+function parseAny(color: string): [number, number, number] {
+  const hit = ANY.get(color);
+  if (hit) return hit;
+  let rgb: [number, number, number];
+  if (color.startsWith('#')) {
+    rgb = parseHex(color);
+  } else {
+    const n = (color.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    rgb = color.startsWith('hsl')
+      ? hslToRgb(n[0] ?? 0, (n[1] ?? 0) / 100, (n[2] ?? 0) / 100)
+      : [n[0] ?? 0, n[1] ?? 0, n[2] ?? 0];
+  }
+  if (ANY.size > 4096) ANY.clear();
+  ANY.set(color, rgb);
+  return rgb;
+}
+
+function hslToRgb(hue: number, s: number, l: number): [number, number, number] {
+  const h = ((hue % 360) + 360) % 360;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+/**
  * An evenly spaced `mix` from `a` to `b`, cached whole.
  *
  * The extrusions walk a gradient in fixed steps — a column is ten discs from

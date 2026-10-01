@@ -1,12 +1,11 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
 import type { KeyHit } from '../../app/pointerKeys';
 import { KeyDeck } from '../../game/keys';
-import { KEY_TOP_Z } from '../../game/keyLayout';
-import { drawKeys } from '../../render/keys';
-import { identifyChord, inScale } from '../../audio/music';
-import { clamp01 } from '../../core/math';
+import { chordNotes, identifyChord, inScale } from '../../audio/music';
+import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
-import { FIELD, fieldOutline, bakeField } from '../../render/field';
+import { DockView } from '../../render/dockView';
+import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
 import { RhythmBox } from '../../audio/rhythmBox';
 import { findPattern } from '../../audio/patterns';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
@@ -15,6 +14,9 @@ import { FreestyleHud } from './hud';
 import { freestyleSettings } from './settings';
 import { rhythmSettings } from './rhythmSettings';
 import { ChordInput } from './chordInput';
+
+/** Width of the keyboard's own geometry, which stereo position is read from. */
+const TABLE_WIDTH = 1024;
 
 /**
  * Playing for the sound of it.
@@ -25,8 +27,12 @@ import { ChordInput } from './chordInput';
  */
 export class FreestyleMode extends ModeBase implements GameMode {
   readonly id: GameModeId = 'freestyle';
+  readonly projection = 'flat' as const;
+  readonly glide = true;
 
   private readonly deck = new KeyDeck();
+  /** The keyboard along the bottom of the screen. */
+  private readonly dock: DockView;
   private readonly field: Field;
   private readonly panel: FreestyleHud;
   private readonly box: RhythmBox;
@@ -53,6 +59,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
   constructor(ctx: ModeContext) {
     super();
     this.ctx = ctx;
+    this.dock = new DockView(ctx.stage, ctx.hud, { touch: 44, desk: 32 });
     this.chords = new ChordInput(ctx.bed);
     this.field = new Field(ctx.stage);
     const r = rhythmSettings();
@@ -73,8 +80,11 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.remap();
   }
 
+  get keyLayoutRevision(): number { return this.dock.revision; }
+
   remap(): void {
     const m = this.ctx.input.mapping.settings;
+    this.dock.setRows([{ low: m.baseNote, high: m.baseNote + m.count - 1 }]);
     this.deck.build(m.baseNote, m.count);
     this.mappingRevision = this.ctx.input.mapping.revision;
     if (this.entered) {
@@ -140,9 +150,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
 
   enter(): void {
     this.entered = true;
-    const { stage, input, audio, music } = this.ctx;
-    stage.cam.configure({ width: FIELD.width, height: FIELD.height });
-    stage.resize(stage.cssW, stage.cssH, stage.dpr);
+    const { input, audio, music } = this.ctx;
+    this.dock.forget();
 
     this.remap();
     this.track(input.on((e) => this.onInput(e)));
@@ -192,6 +201,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.deck.allOff();
     this.field.reset();
     this.held.length = 0;
+    this.dock.forget();
     this.ctx.hud.clearPanels();
   }
 
@@ -248,29 +258,58 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   draw(_alpha: number, frameDt: number): void {
-    const stage = this.ctx.stage;
-    if (stage.needsBake('freestyle')) {
+    const { stage, music, bed } = this.ctx;
+    const layout = this.dock.layout();
+    // Effects are sized in the table units they were tuned in; a white key was
+    // about a hundred and ten of them deep.
+    const unit = clamp(layout.rows[layout.rows.length - 1].whiteW / 110, 0.4, 0.9);
+    stage.flat.floor = layout.top;
+    stage.flat.unit = unit;
+
+    const s = freestyleSettings();
+    const auto = s.bed && s.bedMode === 'auto';
+    const split = this.chords.active ? this.deck.range.low + 12 : undefined;
+    const look: DockLook = {
+      scale: auto ? (n) => this.scaleMark(n) : undefined,
+      chordSplit: split,
+    };
+    const scaleSig = auto ? `${music.root}:${music.scale.join('.')}` : '-';
+    if (stage.needsBake(`freestyle|${dockBakeKey(stage, layout, look, scaleSig)}`)) {
       const ctx = stage.baked.ctx;
       ctx.setTransform(stage.dpr, 0, 0, stage.dpr, 0, 0);
       ctx.clearRect(0, 0, stage.cssW, stage.cssH);
-      stage.measureBounds(fieldOutline());
-      bakeField(ctx, stage);
+      bakeDock(ctx, stage, layout, look);
     }
 
     stage.beginFrame(frameDt);
     const em = stage.emissive.ctx;
+    this.field.setFrame(stage.cssW, layout.top, unit);
     this.field.draw(em);
-    drawKeys(stage.ctx, em, stage, this.deck, {
-      highlight: (n) => this.highlight(n),
-      keyTint: freestyleSettings().bed && freestyleSettings().bedMode === 'auto',
-      chordSplit: this.chords.active ? this.ctx.input.mapping.low + 12 : undefined,
-      chordRoot: this.chords.active ? this.ctx.bed.manualChord?.root : undefined,
+    const chord = this.chords.active ? bed.manualChord : null;
+    drawDockKeys(stage.ctx, em, stage, layout, this.deck, look, {
+      chordTones: chord && split !== undefined ? this.chordKeys(chord.root, chord.quality, split) : undefined,
+      chordRoot: chord?.root,
     });
-    stage.particles.draw(em, stage.cam);
+    stage.particles.draw(em, stage.proj, 1);
     stage.composite();
-    stage.drawRoll();
-    stage.drawGlass();
+    stage.drawGlass(layout.top);
     stage.endFrame();
+    this.dock.publish();
+  }
+
+  /** Where a manual chord's tones sit among the chord keys, for the rings on them. */
+  private chordKeys(root: number, quality: Parameters<typeof chordNotes>[1], split: number): number[] {
+    return chordNotes(root, quality).map((n) => {
+      let note = n;
+      while (note >= split) note -= 12;
+      return note;
+    });
+  }
+
+  /** The scale guide on the keys: 2 on the tonic, 1 on other scale tones. */
+  private scaleMark(note: number): number {
+    const h = this.highlight(note);
+    return h > 0.4 ? 2 : h > 0 ? 1 : 0;
   }
 
   hud(): void {
@@ -282,10 +321,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
       + `bend ${this.ctx.input.bend.toFixed(2)}  mod ${this.ctx.input.mod.toFixed(2)}`;
   }
 
-  keyAt(x: number, y: number): KeyHit | null {
-    const t = this.ctx.stage.cam.unproject(x, y, KEY_TOP_Z);
-    const key = this.deck.pick(t.x, t.y);
-    return key ? { note: key.geom.note, force: this.deck.strikeForce(key, t.x, t.y) } : null;
+  keyAt(x: number, y: number, moving: boolean): KeyHit | null {
+    return this.dock.keyAt(x, y, moving);
   }
 
   // ------------------------------------------------------------- playing ---
@@ -305,7 +342,9 @@ export class FreestyleMode extends ModeBase implements GameMode {
       if (!this.running) return;
       if (this.mappingRevision !== input.mapping.revision) this.remap();
       const force = input.force(e.raw);
-      if (input.mapping.laneFor(e.note) < 0) return;
+      // Only notes on the keyboard on screen: a key the player cannot see
+      // must not make a sound they cannot place.
+      if (!this.deck.byNote.has(e.note)) return;
       const role = this.chords.noteOn(e.note, force);
       if (role === 'ignore') return;
       const key = this.deck.noteOn(e.note, force);
@@ -313,7 +352,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
       // Never snapped, whatever the assist setting says. The point of the mode
       // is that the keyboard does exactly what the player asks of it.
       audio.noteOn(e.note, force, this.pan(key.geom.cx));
-      this.field.noteOn(key.geom, force);
+      this.field.noteOn(e.note, this.dock.laneX(e.note) ?? stage.cssW / 2, force);
       const r = this.deck.range;
       stage.logNote(e.note, force, r.low, r.high);
       this.held.push(e.note);
@@ -336,7 +375,12 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.field.setChord(identifyChord(this.held), this.held);
   }
 
+  /**
+   * Stereo position from where the key sits on the keyboard. Read from the
+   * deck's own geometry rather than from the screen, so turning a phone round
+   * does not move the sound.
+   */
   private pan(x: number): number {
-    return clamp01(x / FIELD.width) * 1.5 - 0.75;
+    return clamp01(x / TABLE_WIDTH) * 1.5 - 0.75;
   }
 }

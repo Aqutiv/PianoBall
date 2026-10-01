@@ -638,7 +638,8 @@ kbd {
 .fs-compact { display: none; pointer-events: auto; align-items: center; gap: 8px; color: var(--ink); background: var(--floor-deep); border: 1px solid var(--stroke); border-radius: 8px; padding: 0 0 0 10px; font-size: 12px; }
 .fs-compact button { min-height: 44px; min-width: 48px; }
 @media (min-width: 701px) {
-  .hud-freestyle :is(.hud-left, .hud-right) { max-height: calc(100dvh - 190px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 2px 6px 6px; }
+  /* Clear of the docked keyboard, whose top the mode publishes as --dock-top. */
+  .hud-freestyle :is(.hud-left, .hud-right) { max-height: calc(var(--dock-top, calc(100dvh - 106px)) - 84px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 2px 6px 6px; }
   .hud-freestyle :is(.hud-left, .hud-right) > * { flex-shrink: 0; }
   .hud-freestyle :is(.hud-left, .hud-right) .voice-list { position: static; width: 100%; }
 }
@@ -1947,7 +1948,8 @@ kbd {
     grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
     align-items: start;
     gap: 10px;
-    max-height: min(52dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 144px));
+    /* Never over the keys: the sheet ends where the docked keyboard begins. */
+    max-height: calc(var(--dock-top, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 74px)) - 70px);
     overflow: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;

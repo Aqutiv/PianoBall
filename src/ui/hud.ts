@@ -1,3 +1,15 @@
+/** Where a music mode's docked keyboard sits, in canvas CSS pixels. */
+export interface DockGeometry {
+  /** Top of the dock's header strip: the stage ends here. */
+  top: number;
+  keysTop: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+const DOCK_VARS = ['--dock-top', '--dock-keys', '--dock-end', '--dock-left', '--dock-right'] as const;
+
 /**
  * DOM heads-up display. Kept out of the canvas so text stays crisp at any DPR
  * and so it can be read by assistive tech.
@@ -73,6 +85,28 @@ export class Hud {
     this.setControlsOpen(false);
     this.left.innerHTML = '';
     this.right.innerHTML = '';
+    this.setDock(null);
+  }
+
+  /**
+   * Where the keyboard is docked, or null when the mode on screen has none.
+   *
+   * Published as custom properties on the app, so the panels above can keep
+   * clear of the keys with plain CSS rather than with a measurement each.
+   */
+  setDock(geom: DockGeometry | null): void {
+    const host = (this.root.parentElement ?? this.root) as HTMLElement;
+    this.root.classList.toggle('hud-dock', geom !== null);
+    if (!geom) {
+      for (const v of DOCK_VARS) host.style.removeProperty(v);
+      return;
+    }
+    const px = (n: number) => `${Math.round(n)}px`;
+    host.style.setProperty('--dock-top', px(geom.top));
+    host.style.setProperty('--dock-keys', px(geom.keysTop));
+    host.style.setProperty('--dock-end', px(geom.bottom));
+    host.style.setProperty('--dock-left', px(geom.left));
+    host.style.setProperty('--dock-right', px(geom.right));
   }
 
   setFreestyle(on: boolean): void {
