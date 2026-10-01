@@ -264,6 +264,9 @@ export class Shell {
       mode = factory(ctx);
       this.built.set(id, mode);
     }
+    // After `stage.reset`, which puts the table camera back, and before
+    // `enter`, so a mode sets itself up under the camera it will draw with.
+    this.stage.setProjection(mode.projection ?? 'table');
     this.active = mode;
     this.modeId = id;
     this.hud.setFreestyle(id === 'freestyle');
@@ -824,8 +827,11 @@ ${this.active?.debugLines?.() ?? ''}`
       const rect = this.canvasRect = canvas.getBoundingClientRect();
       const hit = mode.keyAt(e.clientX - rect.left, e.clientY - rect.top, false);
       if (!this.pointerKeys.down(e.pointerId, hit, mode.keyLayoutRevision ?? 0)) return;
-      canvas.setPointerCapture(e.pointerId);
       e.preventDefault();
+      // A pointer can be gone before its own down event is handled. The note
+      // is already playing; without capture it is simply released by the
+      // canvas's own `pointerup` rather than by one routed to it.
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* released on up */ }
     });
 
     // A finger sliding across the keys plays each one it crosses, in the modes

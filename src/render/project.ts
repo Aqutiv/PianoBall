@@ -34,6 +34,46 @@ const MIN_ELEVATION_DEG = 50;
 
 export interface ScreenPoint { x: number; y: number }
 
+/**
+ * What drawing needs from a camera: where a point lands on the screen, and how
+ * many pixels a unit of size is worth there. Every primitive that places
+ * something — halos, labels, particles, paths — goes through one of these, so
+ * the same drawing code serves the raked table and the flat music stage.
+ */
+export interface Projector {
+  project(x: number, y: number, z: number, out: ScreenPoint): ScreenPoint;
+  scaleAt(x: number, y: number, z?: number): number;
+}
+
+/**
+ * The music modes' camera: no rake and no perspective.
+ *
+ * Freestyle and PlayTune draw above a keyboard docked along the bottom of the
+ * screen, so their world is the screen itself, turned to read upwards from the
+ * keys. World x is screen x. World y is height above the top of the keys, in
+ * pixels, so effects rise from the keyboard the way they used to travel away
+ * from it up the table. Height off the floor (z) lifts things up the screen,
+ * as it does on the table.
+ *
+ * Sizes were written in table units, where a white key was about a hundred and
+ * ten units deep. `unit` turns them into pixels for the keys actually on this
+ * screen, so a halo sized for a key stays the size of a key.
+ */
+export class FlatCamera implements Projector {
+  /** Screen y of world y = 0: the top of the keys. */
+  floor = 0;
+  /** Pixels per table unit, for sizes and heights carried over from the table. */
+  unit = 1;
+
+  project(x: number, y: number, z: number, out: ScreenPoint): ScreenPoint {
+    out.x = x;
+    out.y = this.floor - y - z * this.unit;
+    return out;
+  }
+
+  scaleAt(_x?: number, _y?: number, _z?: number): number { return this.unit; }
+}
+
 /** The fit box as it lands on screen, in focal-length units. */
 interface Extent {
   minU: number; maxU: number; minV: number; maxV: number;
@@ -47,7 +87,7 @@ interface Extent {
  * space is x right, y away from the viewer, z up out of the playfield, so
  * anything with height simply lifts up-screen and can draw its own side walls.
  */
-export class TableCamera {
+export class TableCamera implements Projector {
   opts: CameraOptions;
 
   /** Camera position in table space. */

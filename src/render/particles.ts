@@ -1,4 +1,4 @@
-import type { TableCamera } from './project';
+import type { Projector } from './project';
 import { glowSprite } from './sprites';
 import { tone } from './palette';
 
@@ -177,8 +177,13 @@ export class Particles {
     if (this.live > this.cap) this.live = this.cap;
   }
 
-  /** Draws into the emissive layer, which is additively composited later. */
-  draw(ctx: CanvasRenderingContext2D, cam: TableCamera): void {
+  /**
+   * Draws into the emissive layer, which is additively composited later.
+   *
+   * `ringAspect` is how flat a ring lies: a ring on the raked table is an
+   * ellipse, and one rising off the flat music stage is a circle.
+   */
+  draw(ctx: CanvasRenderingContext2D, cam: Projector, ringAspect = 0.62): void {
     const pt = { x: 0, y: 0 };
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < this.live; i++) {
@@ -224,7 +229,7 @@ export class Particles {
         ctx.strokeStyle = tone(p.hue, 95, 72);
         ctx.lineWidth = Math.max(1, 3.5 * t * scale);
         ctx.beginPath();
-        ctx.ellipse(pt.x, pt.y, r, r * 0.62, 0, 0, Math.PI * 2);
+        ctx.ellipse(pt.x, pt.y, r, r * ringAspect, 0, 0, Math.PI * 2);
         ctx.stroke();
         continue;
       }

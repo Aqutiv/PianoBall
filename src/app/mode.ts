@@ -41,6 +41,12 @@ export interface GameMode {
   draw(alpha: number, frameDt: number): void;
   /** Per-frame HUD refresh. */
   hud(): void;
+  /**
+   * Which camera the stage draws this mode through: pinball's raked table, or
+   * the flat stage above a docked keyboard. Read by the shell before `enter`.
+   * Absent means the table.
+   */
+  readonly projection?: 'table' | 'flat';
   /** Simulated time multiplier. Only pinball's slow-motion uses this. */
   readonly timeScale?: number;
   /** Extra lines for the F3 panel. */

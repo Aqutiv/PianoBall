@@ -1,4 +1,4 @@
-import type { TableCamera } from './project';
+import type { Projector } from './project';
 import type { Vec2 } from '../physics/vec2';
 import { TAU } from '../core/math';
 
@@ -6,7 +6,7 @@ const p = { x: 0, y: 0 };
 
 /** Build a screen-space path from table-space points at a given height. */
 export function tracePath(
-  ctx: CanvasRenderingContext2D, cam: TableCamera,
+  ctx: CanvasRenderingContext2D, cam: Projector,
   pts: readonly Vec2[], z: number, close = false,
 ): void {
   ctx.beginPath();
@@ -47,7 +47,7 @@ export function circlePoints(cx: number, cy: number, r: number, steps = 40): Vec
  * slice up-screen it reads as a genuine side wall.
  */
 export function extrudeStroke(
-  ctx: CanvasRenderingContext2D, cam: TableCamera,
+  ctx: CanvasRenderingContext2D, cam: Projector,
   pts: readonly Vec2[], z0: number, z1: number, width: number,
   colorAt: (t: number) => string, close = false, steps = 7,
 ): void {
@@ -91,7 +91,7 @@ function cross(o: ScreenPoint, a: ScreenPoint, b: ScreenPoint): number {
  * this runs once per key per frame.
  */
 export function silhouette(
-  ctx: CanvasRenderingContext2D, cam: TableCamera,
+  ctx: CanvasRenderingContext2D, cam: Projector,
   pts: readonly Vec2[], z0: number, z1: number,
 ): void {
   const n = Math.min(pts.length, 8);
@@ -136,7 +136,7 @@ export function silhouette(
 
 /** Fill a table-space polygon at a given height. */
 export function fillPoly(
-  ctx: CanvasRenderingContext2D, cam: TableCamera,
+  ctx: CanvasRenderingContext2D, cam: Projector,
   pts: readonly Vec2[], z: number, style: string | CanvasGradient,
 ): void {
   tracePath(ctx, cam, pts, z, true);
