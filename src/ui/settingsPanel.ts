@@ -14,6 +14,8 @@ import { CHORDS_ROLE, MELODY_ROLE, type TuneRole } from '../modes/playtune/role'
 import { THEMES } from '../render/theme';
 import { themeSettings } from '../render/themeSettings';
 import { TABLE_SIZE } from '../render/stage';
+import { dockSettings, readDockEnv, setDockSettings } from '../render/dockSettings';
+import type { KeySize } from '../game/dock';
 import type { GraphicsPreset, SoundPreset } from '../render/perfSettings';
 import { SETTINGS_CATEGORIES, SettingsNavigation, type SettingsCategory } from './settingsNavigation';
 
@@ -350,9 +352,17 @@ export class SettingsPanel {
       const summary = this.shell.qualitySummary;
       this.element('q-now').textContent = summary === 'full' ? 'Current performance: no effects reduced.' : `Currently reduced: ${summary}.`;
     });
+    // Asked when the page is built: the panel is rebuilt each time it opens.
+    const touch = readDockEnv(this.shell.input).touch;
     return `<div class="setting-section"><h3>Theme</h3><div class="theme-grid" aria-label="Theme">${cards}</div></div>`
-      + this.slider('q-size', 'Table size', () => stage.preferredQuality.tableSize, (v) => stage.setQuality({ tableSize: v }),
-        'Make the playfield larger while keeping the keyboard in view.', TABLE_SIZE.min, TABLE_SIZE.max, TABLE_SIZE.step)
+      + this.select('key-size', 'Key size', [['compact', 'Compact'], ['comfortable', 'Comfortable'], ['large', 'Large']],
+        () => dockSettings().keySize,
+        (v) => { setDockSettings({ keySize: v as KeySize }); this.shell.remapKeys(); },
+        touch
+          ? 'How wide the Freestyle and PlayTune keys are. Larger keys show fewer octaves at once.'
+          : 'For touch screens. With a mouse or a MIDI keyboard, the keys follow your keyboard’s range.')
+      + this.slider('q-size', 'Pinball table size', () => stage.preferredQuality.tableSize, (v) => stage.setQuality({ tableSize: v }),
+        'Make the pinball table larger while keeping its keyboard in view.', TABLE_SIZE.min, TABLE_SIZE.max, TABLE_SIZE.step)
       + this.select('q-preset', 'Graphics quality', [['auto', 'Auto'], ['high', 'High'], ['balanced', 'Balanced'], ['low', 'Low']],
         () => this.shell.graphicsPreset, (v) => this.shell.setGraphicsPreset(v as GraphicsPreset),
         'Auto adjusts effects to keep play smooth. Other presets stay at a fixed quality.')
@@ -367,7 +377,7 @@ export class SettingsPanel {
     return this.qualityToggle('q-motion', 'Reduced motion', 'reducedMotion', 'Reduce decorative movement and screen effects.')
       + this.qualityToggle('q-cb', 'Colour-blind palette', 'colorBlind', 'Use an alternative palette to distinguish notes more easily.')
       + this.qualityToggle('q-labels', 'Keyboard & table note labels', 'labels',
-        'Show octave markers on the keyboard and note names on bumpers, targets and falling balls.')
+        'Show note names on the keys, and on bumpers, targets and falling balls.')
       + '<p class="settings-note">For names on PlayTune’s falling notes, use Game modes → PlayTune.</p>';
   }
 

@@ -16,6 +16,7 @@ import { wireGlobalControls } from '../audio/controls';
 import { MusicState } from '../audio/musicState';
 import { resetFreestyleSettings } from '../modes/freestyle/settings';
 import { PointerKeys } from './pointerKeys';
+import { resetDockSettings } from '../render/dockSettings';
 import { resetRhythmSettings } from '../modes/freestyle/rhythmSettings';
 import { resetPlayTuneSettings } from '../modes/playtune/settings';
 import { resetPinballSettings } from '../modes/pinball/settings';
@@ -460,6 +461,7 @@ export class Shell {
     resetPlayTuneSettings();
     resetPinballSettings();
     resetThemeSettings();
+    resetDockSettings();
     this.setTheme(currentTheme());
     resetPerfSettings();
     this.stage.resetSettings();
