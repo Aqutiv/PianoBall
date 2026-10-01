@@ -138,6 +138,7 @@ export class Shell {
         this.overlay.show(s);
       },
       setResult: (r) => { this.lastResult = r; },
+      remapKeys: () => this.remapKeys(),
     };
 
     this.overlay = new Overlay(overlayRoot, this);

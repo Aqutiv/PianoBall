@@ -5,6 +5,8 @@ import { chordNotes, identifyChord, inScale } from '../../audio/music';
 import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { DockView } from '../../render/dockView';
+import { freestyleRows, type DockRowSpec } from '../../game/dock';
+import { dockSettings, readDockEnv, setDockSettings } from '../../render/dockSettings';
 import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
 import { RhythmBox } from '../../audio/rhythmBox';
 import { findPattern } from '../../audio/patterns';
@@ -17,6 +19,8 @@ import { ChordInput } from './chordInput';
 
 /** Width of the keyboard's own geometry, which stereo position is read from. */
 const TABLE_WIDTH = 1024;
+
+const rowsKey = (rows: readonly DockRowSpec[]) => rows.map((r) => `${r.low}-${r.high}`).join(',');
 
 /**
  * Playing for the sound of it.
@@ -40,6 +44,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
   private readonly chords: ChordInput;
   private entered = false;
   private mappingRevision = -1;
+  /** The rows the keyboard was last built for, to notice when they change. */
+  private rowsKey = '';
   /** Notes the player is holding, in the order they were pressed. */
   private held: number[] = [];
   /** The tempo the app was in before Freestyle borrowed it. */
@@ -70,10 +76,11 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.box.human = { rng: Math.random, jitter: 0.006, gain: 0.08 };
     this.panel = new FreestyleHud(
       ctx.hud, ctx.music, ctx.audio, this.box, {
-        bed: ctx.bed, mapping: ctx.input.mapping,
+        bed: ctx.bed,
+        range: () => this.range(),
         change: () => this.applyBed(),
         stop: () => this.chords.stop(),
-        shift: (dir) => { ctx.input.mapping.shiftOctave(dir); this.remap(); },
+        shift: (dir) => this.shift(dir),
         openSound: () => ctx.openScreen('sound-settings'),
       },
     );
@@ -82,17 +89,66 @@ export class FreestyleMode extends ModeBase implements GameMode {
 
   get keyLayoutRevision(): number { return this.dock.revision; }
 
-  remap(): void {
-    const m = this.ctx.input.mapping.settings;
-    this.dock.setRows([{ low: m.baseNote, high: m.baseNote + m.count - 1 }]);
-    this.deck.build(m.baseNote, m.count);
+  remap(rows: DockRowSpec[] = this.rowsFor()): void {
+    const low = rows[0].low;
+    const count = rows[rows.length - 1].high - low + 1;
+    this.rowsKey = rowsKey(rows);
+    this.dock.setRows(rows);
+    this.deck.build(low, count);
     this.mappingRevision = this.ctx.input.mapping.revision;
     if (this.entered) {
-      this.chords.remap(m.baseNote, m.count);
+      this.chords.remap(low, count);
       this.applyBed();
       // Rebuilding the deck must not release a melody already under the hands.
       for (const note of this.held) this.deck.noteOn(note, 0.6);
+      this.followKeyboard();
     }
+  }
+
+  /**
+   * The rows the keyboard should hold right now.
+   *
+   * Sized for fingers on a touch screen and mirroring the controller anywhere
+   * else; Manual backing on a narrow screen stacks its chord octave above the
+   * melody. Cheap and pure, so it is asked every step and the keyboard is only
+   * rebuilt when the answer changes.
+   */
+  private rowsFor(): DockRowSpec[] {
+    const env = readDockEnv(this.ctx.input);
+    this.dock.setTouch(env.touch);
+    const s = freestyleSettings();
+    return freestyleRows(env, this.ctx.input.mapping, s.bed && s.bedMode === 'manual', this.ctx.stage.cssW);
+  }
+
+  /** The keys on screen, for the backing panel's range readout. */
+  private range(): { low: number; count: number; canDown: boolean; canUp: boolean } {
+    const { low, high } = this.deck.range;
+    if (this.dock.touch) {
+      const centre = dockSettings().touchCenter;
+      return { low, count: high - low + 1, canDown: centre > 36, canUp: centre < 96 };
+    }
+    const m = this.ctx.input.mapping;
+    return { low, count: high - low + 1, canDown: m.low > 0, canUp: m.low < 127 - m.settings.count };
+  }
+
+  /**
+   * Move the keyboard an octave. On a touch screen that moves the keys on
+   * screen; with a controller it moves the controller's window, which every
+   * mode follows.
+   */
+  shift(dir: number): void {
+    if (this.dock.touch) {
+      setDockSettings({ touchCenter: dockSettings().touchCenter + 12 * Math.sign(dir) });
+      this.remap();
+      return;
+    }
+    this.ctx.input.mapping.shiftOctave(dir);
+    if (this.ctx.remapKeys) this.ctx.remapKeys(); else this.remap();
+  }
+
+  /** Point the computer keyboard at the keys on screen when they are sized for fingers. */
+  private followKeyboard(): void {
+    this.ctx.input.keyboardBase = this.dock.touch ? () => this.deck.range.low : null;
   }
 
   /** Start or silence the bed to match what the player last chose. */
@@ -101,7 +157,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     // it would not silence them — it would only cut the note the player is
     // holding, which is not what switching off a backing track should do.
     const s = freestyleSettings();
-    const supported = this.ctx.input.mapping.settings.count >= 12;
+    const supported = this.deck.keys.length >= 12;
     this.ctx.bed.setControlMode(s.bedMode);
     this.ctx.bed.setEnabled(s.bed && (s.bedMode !== 'manual' || supported));
     this.chords.configure(s.bed && s.bedMode === 'manual' && supported, s.manualChordQuality, s.holdChord);
@@ -202,6 +258,7 @@ export class FreestyleMode extends ModeBase implements GameMode {
     this.field.reset();
     this.held.length = 0;
     this.dock.forget();
+    this.ctx.input.keyboardBase = null;
     this.ctx.hud.clearPanels();
   }
 
@@ -248,7 +305,8 @@ export class FreestyleMode extends ModeBase implements GameMode {
   }
 
   step(dt: number): void {
-    if (this.mappingRevision !== this.ctx.input.mapping.revision) this.remap();
+    const rows = this.rowsFor();
+    if (this.mappingRevision !== this.ctx.input.mapping.revision || rowsKey(rows) !== this.rowsKey) this.remap(rows);
     this.deck.update(dt);
     const { input, audio } = this.ctx;
     // The wheels drive the sound here, rather than the table.

@@ -22,6 +22,8 @@ export interface ModeContext {
   openScreen(screen: Screen): void;
   /** Hand the shell what the results screen should say about this run. */
   setResult(result: ModeResult): void;
+  /** Rebuild every mode's keys after the controller's window moved. */
+  remapKeys?(): void;
 }
 
 /**

@@ -30,10 +30,16 @@ export class InputHub {
   readonly monitor: RawMessage[] = [];
 
   private listeners: InputListener[] = [];
+  /**
+   * Where the computer keyboard's lowest key lands, when a mode has sized the
+   * keys on screen for fingers rather than for the controller. Null follows
+   * the mapping, which is where it played before there was a touch keyboard.
+   */
+  keyboardBase: (() => number) | null = null;
 
   constructor() {
     this.keyboard = new KeyboardFallback({
-      baseNote: () => this.mapping.settings.baseNote,
+      baseNote: () => this.keyboardBase?.() ?? this.mapping.settings.baseNote,
       emit: (e) => this.dispatch(e),
       shiftOctave: (d) => this.mapping.shiftOctave(d),
     });

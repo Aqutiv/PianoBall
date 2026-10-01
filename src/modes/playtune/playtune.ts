@@ -2,6 +2,8 @@ import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../.
 import type { KeyHit } from '../../app/pointerKeys';
 import { KeyDeck } from '../../game/keys';
 import { DockView } from '../../render/dockView';
+import { playtuneRows, type DockRowSpec } from '../../game/dock';
+import { readDockEnv } from '../../render/dockSettings';
 import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
 import { drawPops } from '../../render/pops';
 import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
@@ -85,6 +87,8 @@ function onsetVerdicts(targets: readonly Target[]): VerdictTone[] {
 /** Width of the keyboard's own geometry, which stereo position is read from. */
 const TABLE_WIDTH = 1024;
 
+const rowsKey = (rows: readonly DockRowSpec[]) => rows.map((r) => `${r.low}-${r.high}`).join(',');
+
 /**
  * Learning a piece from either side of it.
  *
@@ -116,6 +120,13 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private readonly auras: AuraStage;
   /** When each key was last pressed wrongly, for the brief ring on it. */
   private readonly wrongAt = new Map<number, number>();
+  /**
+   * The keys a run was laid out on, fixed from its count-in to its last bar:
+   * a key that moved mid-song would be a key the player has to find again.
+   */
+  private songRows: DockRowSpec[] | null = null;
+  /** The rows the keyboard was last built for, to notice when they change. */
+  private rowsKey = '';
   private readonly transport = new Transport();
   private readonly drums: TuneDrums;
   /** Last applied preference, so unrelated settings never replay queued hits. */
@@ -193,10 +204,22 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   get keyLayoutRevision(): number { return this.dock.revision; }
 
-  remap(): void {
-    const m = this.ctx.input.mapping.settings;
-    this.dock.setRows([{ low: m.baseNote, high: m.baseNote + m.count - 1 }]);
-    this.deck.build(m.baseNote, m.count);
+  remap(rows: DockRowSpec[] = this.rowsFor()): void {
+    const low = rows[0].low;
+    this.rowsKey = rowsKey(rows);
+    this.dock.setRows(rows);
+    this.deck.build(low, rows[rows.length - 1].high - low + 1);
+    this.ctx.input.keyboardBase = this.dock.touch ? () => this.deck.range.low : null;
+  }
+
+  /**
+   * The rows the keyboard should hold right now: the run's own, while there
+   * is one, and otherwise whatever this screen and this controller call for.
+   */
+  private rowsFor(): DockRowSpec[] {
+    const env = readDockEnv(this.ctx.input);
+    this.dock.setTouch(env.touch);
+    return this.songRows ?? playtuneRows(env, this.ctx.input.mapping, null, this.ctx.stage.cssW);
   }
 
   /**
@@ -250,8 +273,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.stopRun();
     this.deck.allOff();
     this.wrongAt.clear();
+    this.songRows = null;
     this.panel.setTune(null);
     this.dock.forget();
+    this.ctx.input.keyboardBase = null;
     this.ctx.hud.clearPanels();
   }
 
@@ -308,7 +333,30 @@ export class PlayTuneMode extends ModeBase implements GameMode {
    */
   fitFor(tune: Tune): number | null {
     const m = this.ctx.input.mapping;
-    return fitToRange(this.role.chart(tune), m.low, m.high);
+    const chart = this.role.chart(tune);
+    const fit = fitToRange(chart, m.low, m.high);
+    // Fingers on glass are not bound by a controller's width: any part that
+    // fits on a piano can be laid out on the screen.
+    if (fit === null && readDockEnv(this.ctx.input).touch) return fitToRange(chart, 21, 108);
+    return fit;
+  }
+
+  /**
+   * Fit the keys on screen to the part about to be played, once, for the
+   * whole run. On a touch screen that is the part itself, widened to whole
+   * white keys and an octave at least, so every key is as wide as the screen
+   * allows; with a controller it is the controller's window, so the lanes
+   * line up with the physical keys.
+   */
+  private layOut(tune: Tune, shift: number): void {
+    const notes = fitted(this.role.chart(tune), shift);
+    const env = readDockEnv(this.ctx.input);
+    const part = notes.length
+      ? { low: Math.min(...notes.map((n) => n.note)), high: Math.max(...notes.map((n) => n.note)) }
+      : null;
+    this.songRows = playtuneRows(env, this.ctx.input.mapping, part, this.ctx.stage.cssW);
+    this.dock.setTouch(env.touch);
+    this.remap(this.songRows);
   }
 
   start(id: string): boolean {
@@ -324,6 +372,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.tune = tune;
     this.shift = shift;
     this.ranWithAudio = false;
+    this.layOut(tune, shift);
     this.scoring.reset();
 
     const settings = playTuneSettings();
@@ -557,6 +606,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   // ------------------------------------------------------------------ loop ---
 
   step(dt: number): void {
+    const rows = this.rowsFor();
+    if (rowsKey(rows) !== this.rowsKey) this.remap(rows);
     this.deck.update(dt);
     this.strikePulse = Math.max(0, this.strikePulse - dt * 3.5);
     this.scoring.update(dt);

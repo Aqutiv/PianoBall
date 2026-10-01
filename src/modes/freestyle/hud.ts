@@ -2,7 +2,6 @@ import type { Hud } from '../../ui/hud';
 import type { MusicState } from '../../audio/musicState';
 import type { AudioEngine } from '../../audio/engine';
 import type { ChordBed, ManualChordQuality } from '../../audio/bed';
-import type { NoteMapping } from '../../midi/mapping';
 import type { RhythmBox } from '../../audio/rhythmBox';
 import { identifyChord, MODES } from '../../audio/music';
 import { MAX_BPM, MIN_BPM, RANDOM, toKeyChoice } from '../../audio/musicState';
@@ -17,7 +16,8 @@ import { rhythmSettings, setRhythmSettings } from './rhythmSettings';
 
 interface BackingControls {
   bed: ChordBed;
-  mapping: NoteMapping;
+  /** The keys on screen, and whether they can move an octave either way. */
+  range(): { low: number; count: number; canDown: boolean; canUp: boolean };
   change(): void;
   stop(): void;
   shift(dir: number): void;
@@ -432,13 +432,14 @@ export class FreestyleHud {
 
   private syncBacking(): void {
     const s = freestyleSettings();
-    const { bed, mapping } = this.backing;
+    const { bed } = this.backing;
+    const range = this.backing.range();
     const chord = bed.manualChord;
-    const supported = mapping.settings.count >= 12;
+    const supported = range.count >= 12;
     const manual = s.bedMode === 'manual';
     const muted = !this.engine.settings.bed;
     const key = JSON.stringify([s.bed, s.bedMode, s.manualChordQuality, s.holdChord, chord,
-      mapping.low, mapping.settings.count, muted]);
+      range.low, range.count, range.canDown, range.canUp, muted]);
     if (key === this.backingKey) return;
     this.backingKey = key;
     this.bedEl.classList.toggle('on', s.bed);
@@ -464,9 +465,9 @@ export class FreestyleHud {
     this.compactStopEl.disabled = !chord;
     this.compactEl.hidden = !manual || !s.bed || !supported;
     this.compactNameEl.textContent = 'Manual · ' + (muted ? 'Muted' : name || 'Ready');
-    this.rangeEl.textContent = noteLabel(mapping.low) + '–' + noteLabel(mapping.low + 11);
-    this.octaveDownEl.disabled = mapping.low <= 0;
-    this.octaveUpEl.disabled = mapping.low >= 127 - mapping.settings.count;
+    this.rangeEl.textContent = noteLabel(range.low) + '–' + noteLabel(range.low + 11);
+    this.octaveDownEl.disabled = !range.canDown;
+    this.octaveUpEl.disabled = !range.canUp;
     this.mutedEl.hidden = !muted;
   }
 

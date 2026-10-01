@@ -324,7 +324,9 @@ export function freestyleRows(env: DockEnv, mapping: MappedRange, manual: boolea
  * worked out once per run and kept, so a key never moves mid-song.
  */
 export function playtuneRows(env: DockEnv, mapping: MappedRange, part: DockRowSpec | null, width: number): DockRowSpec[] {
-  if (!env.touch || !part) return [{ low: mapping.low, high: mapping.high }];
+  if (!env.touch) return [{ low: mapping.low, high: mapping.high }];
+  // Between tunes, the same window Freestyle would show.
+  if (!part) return [touchWindow(env.center, touchOctaves(width, env.keySize))];
   let low = part.low;
   let high = part.high;
   if (isBlackKey(low)) low--;
