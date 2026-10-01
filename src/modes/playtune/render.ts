@@ -1,27 +1,23 @@
 import type { Stage } from '../../render/stage';
-import type { KeyDeck, KeyLit } from '../../game/keys';
+import type { DockKey, DockLayout } from '../../game/dock';
 import { noteNameInKey } from '../../audio/music';
-import { FIELD } from '../../render/field';
-import { tone } from '../../render/palette';
-import { tracePath, circlePoints, fillPoly } from '../../render/geom';
-import { clamp01, lerp } from '../../core/math';
+import { tone, withAlpha } from '../../render/palette';
+import { clamp, clamp01 } from '../../core/math';
 import type { Judge, Target } from './judge';
-
-/** Where an aura first appears, in table y. */
-const SPAWN_Y = FIELD.far - 40;
-
-/** Table radius of the rim a crotchet is drawn at. Everything else scales off it. */
-const RIM = 26;
 
 /** Shortest tail that still reads as a tail, in beats. */
 const MIN_TAIL = 0.4;
 
 export interface AuraView {
   target: Target;
-  key: KeyLit;
-  /** 0 at spawn, 1 as it lands on the key. */
+  /** The key the note lands on, and with it the lane it falls down. */
+  lane: DockKey;
+  /** 0 as it appears at the top of the lane, 1 as it lands. */
   progress: number;
+  /** Screen y of the head's centre. */
   y: number;
+  /** Head radius, in pixels. */
+  r: number;
   /** Beats of tail still owed. Counts down while the note is held. */
   tailBeats: number;
   /** True once the note has been struck and is being held. */
@@ -66,16 +62,30 @@ function isDotted(len: number): boolean {
   return false;
 }
 
+/** Where the lanes run on screen: from `top` down to the line along the keys. */
+export interface LaneFrame {
+  top: number;
+  /** The strike line, just above the keys. */
+  strike: number;
+}
+
+/** The lanes for a docked keyboard, starting at `top`. */
+export function laneFrame(layout: DockLayout, top: number): LaneFrame {
+  return { top, strike: layout.keysTop - 3 };
+}
+
 /**
- * Falling note auras.
+ * Falling notes.
  *
- * Because the camera is raked, an aura still at the top of the lane is small,
- * dim and high up the table, and one about to land is large and bright — the
- * approach reads as approach without anything having to fake a size curve.
+ * Each one falls straight down the lane of the key it is due on, at a steady
+ * speed, and lands on the line along the top of the keys at the moment it
+ * should be played — the way PianoBallDesktop draws them, and the way a
+ * keyboard player reads a falling-note score: where it is across the screen is
+ * which key, how far up it is is how long until.
  *
  * Length is carried by two things at once. The head's shape says which note
  * value it is, which is readable the moment it appears and survives colour-blind
- * mode where hue carries less; the tail behind it says exactly how far down the
+ * mode where hue carries less; the tail behind it says exactly how far up the
  * lane the note runs, and drains as the key is held.
  */
 export class AuraStage {
@@ -90,37 +100,86 @@ export class AuraStage {
    * one and pass the other, and no way for them to part company.
    */
   private laneBeats = 4;
+  private lanes: LaneFrame = { top: 0, strike: 1 };
 
-  constructor(private readonly stage: Stage, private readonly deck: KeyDeck) {}
+  constructor(private readonly stage: Stage) {}
 
-  /** Auras currently in flight, nearest last so they paint over the far ones. */
-  view(judge: Judge, now: number, leadSeconds: number, beatSeconds: number): AuraView[] {
+  /** Pixels of lane per beat of music. */
+  private get perBeat(): number {
+    return (this.lanes.strike - this.lanes.top) / Math.max(1e-6, this.laneBeats);
+  }
+
+  /** Auras currently in flight, highest first so the nearer ones paint over them. */
+  view(
+    judge: Judge, now: number, leadSeconds: number, beatSeconds: number,
+    layout: DockLayout, lanes: LaneFrame,
+  ): AuraView[] {
     this.laneBeats = leadSeconds / beatSeconds;
+    this.lanes = lanes;
+    const span = lanes.strike - lanes.top;
+    const approaching = judge.approaching(now, leadSeconds);
+    const sounding = judge.sounding(now);
+    const radius = this.radii(layout, [...approaching, ...sounding]);
+
     const out: AuraView[] = [];
-    for (const target of judge.approaching(now, leadSeconds)) {
-      const key = this.deck.byNote.get(target.note);
-      if (!key) continue;
+    for (const target of approaching) {
+      const lane = layout.byNote.get(target.note);
+      if (!lane) continue;
+      const r = radius.get(target) ?? 12;
       const progress = clamp01(1 - (target.time - now) / leadSeconds);
       out.push({
-        target, key, progress,
-        y: lerp(SPAWN_Y, key.geom.cy, progress),
+        target, lane, progress, r,
+        y: lanes.strike - r - (1 - progress) * Math.max(0, span - 2 * r),
         tailBeats: target.len,
         held: false,
       });
     }
-    // A note being held stays on screen with its tail shortening, so "how much
-    // longer" is a thing the player can see rather than count.
-    for (const target of judge.sounding(now)) {
-      const key = this.deck.byNote.get(target.note);
-      if (!key) continue;
+    // A note being held settles onto its key with its tail shortening above it,
+    // so "how much longer" is a thing the player can see rather than count.
+    for (const target of sounding) {
+      const lane = layout.byNote.get(target.note);
+      if (!lane) continue;
+      const r = radius.get(target) ?? 12;
       out.push({
-        target, key, progress: 1,
-        y: key.geom.cy,
+        target, lane, progress: 1, r,
+        y: lanes.strike + r * 0.9,
         tailBeats: Math.max(0, (target.end - now) / beatSeconds),
         held: true,
       });
     }
-    return out.sort((a, b) => b.y - a.y);
+    return out.sort((a, b) => a.y - b.y);
+  }
+
+  /**
+   * How big each head is.
+   *
+   * As wide as its key allows, up to a ceiling — but a chord puts heads on
+   * neighbouring lanes at once, a semitone apart, and two heads that overlap
+   * read as one. So a note landing together with another is shrunk until the
+   * two have room, as the desktop app does.
+   */
+  private radii(layout: DockLayout, targets: readonly Target[]): Map<Target, number> {
+    const out = new Map<Target, number>();
+    const byOnset = new Map<number, Target[]>();
+    for (const t of targets) {
+      const group = byOnset.get(t.time);
+      if (group) group.push(t); else byOnset.set(t.time, [t]);
+    }
+    for (const group of byOnset.values()) {
+      for (const t of group) {
+        const lane = layout.byNote.get(t.note);
+        if (!lane) continue;
+        const row = layout.rows[lane.row];
+        let r = clamp(row.whiteW * 0.43, 10.5, 25);
+        for (const other of group) {
+          if (other === t) continue;
+          const o = layout.byNote.get(other.note);
+          if (o) r = Math.min(r, Math.max(7, 0.46 * Math.abs(o.laneX - lane.laneX)));
+        }
+        out.set(t, r);
+      }
+    }
+    return out;
   }
 
   /** How lit a key should be from an aura heading for it, 0..1. */
@@ -134,40 +193,74 @@ export class AuraStage {
     return (note) => byNote.get(note) ?? 0;
   }
 
-  draw(em: CanvasRenderingContext2D, views: readonly AuraView[]): void {
-    const cam = this.stage.cam;
+  /** The notes of the next onset still to come: what to reach for. */
+  nextNotes(views: readonly AuraView[]): Set<number> {
+    let next = Infinity;
+    for (const v of views) if (!v.held && v.target.time < next) next = v.target.time;
+    const notes = new Set<number>();
+    for (const v of views) if (!v.held && v.target.time === next) notes.add(v.target.note);
+    return notes;
+  }
 
-    // Faint guides, only under the lanes something is actually coming down.
-    const lanes = new Set(views.map((v) => v.target.note));
+  /**
+   * Bar lines, falling with the notes, so the lane has a meter as well as a
+   * pitch. `bars` are the seconds until each bar line, already on the judging
+   * clock.
+   */
+  drawBars(ctx: CanvasRenderingContext2D, layout: DockLayout, bars: readonly number[], leadSeconds: number): void {
+    const span = this.lanes.strike - this.lanes.top;
+    ctx.save();
+    ctx.fillStyle = withAlpha(this.stage.palette.railTop, 0.16);
+    for (const until of bars) {
+      if (until < 0 || until > leadSeconds) continue;
+      const y = this.lanes.strike - (until / leadSeconds) * span;
+      ctx.fillRect(layout.left, Math.round(y), layout.right - layout.left, 1);
+    }
+    ctx.restore();
+  }
+
+  /** A brighter line up the lanes something is actually coming down. */
+  drawLanes(em: CanvasRenderingContext2D, views: readonly AuraView[]): void {
+    const lanes = new Map<number, DockKey>();
+    for (const v of views) lanes.set(v.target.note, v.lane);
     em.save();
     em.globalCompositeOperation = 'lighter';
     // Additive, so guides accumulate: a melody lights two or three lanes and a
     // chord chart can light a dozen, which at a fixed alpha stops being a hint
     // about where to look and becomes a wash over the whole board.
-    em.globalAlpha = lanes.size > 6 ? 0.09 * (6 / lanes.size) : 0.09;
-    em.lineWidth = 1.5;
-    for (const note of lanes) {
-      const key = this.deck.byNote.get(note);
-      if (!key) continue;
-      em.strokeStyle = tone(this.stage.hue(note), 80, 60);
-      tracePath(em, cam, [
-        { x: key.geom.cx, y: key.geom.cy + 20 },
-        { x: key.geom.cx, y: SPAWN_Y },
-      ], 3);
-      em.stroke();
+    em.globalAlpha = lanes.size > 6 ? 0.14 * (6 / lanes.size) : 0.14;
+    for (const [note, lane] of lanes) {
+      em.fillStyle = tone(this.stage.hue(note), 80, 60);
+      em.fillRect(lane.laneX - 1, this.lanes.top, 2, this.lanes.strike - this.lanes.top);
     }
     em.restore();
+  }
 
+  draw(em: CanvasRenderingContext2D, views: readonly AuraView[]): void {
     for (const v of views) {
-      const g = v.key.geom;
-      const hue = this.stage.hue(g.note);
-      const scale = cam.scaleAt(g.cx, v.y, 12);
-      // Fades in rather than popping into existence at the far end.
+      const hue = this.stage.hue(v.target.note);
+      // Fades in rather than popping into existence at the top of the lane.
       const alpha = auraAlpha(v);
-
-      this.drawTail(em, v, hue, alpha, scale);
-      this.drawHead(em, v, hue, alpha, scale);
+      this.drawTail(em, v, hue, alpha);
+      this.drawHead(em, v, hue, alpha);
     }
+  }
+
+  /** A ring around each head of the next onset: the notes to reach for now. */
+  drawFocus(ctx: CanvasRenderingContext2D, views: readonly AuraView[]): void {
+    const next = this.nextNotes(views);
+    if (!next.size) return;
+    ctx.save();
+    ctx.strokeStyle = withAlpha(this.stage.palette.ink, 0.85);
+    ctx.lineWidth = 2;
+    for (const v of views) {
+      if (v.held || !next.has(v.target.note)) continue;
+      ctx.globalAlpha = auraAlpha(v);
+      ctx.beginPath();
+      ctx.arc(v.lane.laneX, v.y, v.r + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /**
@@ -182,23 +275,17 @@ export class AuraStage {
    */
   drawLabels(ctx: CanvasRenderingContext2D, views: readonly AuraView[], tonic: number): void {
     for (const v of views) {
-      const g = v.key.geom;
-      this.stage.label(
-        ctx, g.cx, v.y, 12,
-        noteNameInKey(v.target.note, tonic), this.stage.palette.ink, auraAlpha(v), 30,
+      this.stage.labelAt(
+        ctx, v.lane.laneX, v.y,
+        noteNameInKey(v.target.note, tonic), this.stage.palette.ink, auraAlpha(v),
+        clamp(v.r * 1.05, 11, 22),
         {
           edge: this.stage.palette.void,
-          // The camera is nearly orthographic, so this size holds around 17 to
-          // 25px across the lane on any ordinary window and the floor never
-          // comes up. It is here for the short viewport — below about 500px of
-          // height the projection drops the name under the shared 10px default,
-          // which is not enough type to carry an outline.
-          minSize: 12,
+          minSize: 11,
           // The UI face, not the display face. Velvet's display is Cormorant
           // Garamond and `styles.css` only ships that family at 300 and 600, so
           // the 700 asked for here came back synthetically emboldened: a light
-          // serif, faked bold, over bloom. Every other theme's two faces are
-          // the same family, so this changes nothing but Velvet.
+          // serif, faked bold, over bloom.
           font: this.stage.theme.fonts.ui,
         },
       );
@@ -212,103 +299,100 @@ export class AuraStage {
    * and a semibreve with no tail were the same picture, which is exactly the
    * thing the player needed to be able to tell apart.
    */
-  private drawTail(
-    em: CanvasRenderingContext2D, v: AuraView,
-    hue: number, alpha: number, scale: number,
-  ): void {
+  private drawTail(em: CanvasRenderingContext2D, v: AuraView, hue: number, alpha: number): void {
     if (v.tailBeats <= 0) return;
-    const g = v.key.geom;
-    const perBeat = (SPAWN_Y - g.cy) / Math.max(1, this.laneBeats);
     const shown = v.held ? v.tailBeats : Math.max(v.tailBeats, MIN_TAIL);
-    const back = Math.min(SPAWN_Y, v.y + perBeat * shown);
-    if (back - v.y < 1) return;
+    const top = Math.max(this.lanes.top, v.y - this.perBeat * shown);
+    if (v.y - top < 1) return;
     em.save();
     em.globalCompositeOperation = 'lighter';
     // A tail being held is the one thing on screen that is running out, so it
     // burns brighter than one that is merely on its way.
-    em.globalAlpha = alpha * (v.held ? 0.42 : 0.28);
+    em.globalAlpha = alpha * (v.held ? 0.5 : 0.34);
     em.strokeStyle = tone(hue, 90, v.held ? 70 : 62);
-    em.lineWidth = Math.max(2, 16 * scale);
+    em.lineWidth = Math.max(3, v.r * 0.55);
     em.lineCap = 'round';
-    tracePath(em, this.stage.cam, [{ x: g.cx, y: v.y }, { x: g.cx, y: back }], 10);
+    em.beginPath();
+    em.moveTo(v.lane.laneX, v.y);
+    em.lineTo(v.lane.laneX, top);
     em.stroke();
     em.restore();
   }
 
   /**
-   * The aura itself: a soft disc, and a rim whose shape is the note value.
+   * The head: a glowing disc, and a rim whose shape is the note value.
    *
-   * A quaver is a small solid dot, a crotchet the plain ring this mode has
-   * always drawn, a minim gains an inner ring and a semibreve becomes a
-   * hexagon. A dot alongside marks the dotted values.
+   * A quaver is a small solid dot, a crotchet a plain ring, a minim gains an
+   * inner ring and a semibreve becomes a hexagon. A dot alongside marks the
+   * dotted values.
    */
-  private drawHead(
-    em: CanvasRenderingContext2D, v: AuraView,
-    hue: number, alpha: number, scale: number,
-  ): void {
-    const g = v.key.geom;
-    const c = this.stage.cam;
+  private drawHead(em: CanvasRenderingContext2D, v: AuraView, hue: number, alpha: number): void {
+    const x = v.lane.laneX;
     const shape = noteShape(v.target.len);
     const small = shape.kind === 'quaver';
+    const r = small ? v.r * 0.72 : v.r;
 
-    this.stage.halo(
-      em, g.cx, v.y, 12, hue,
-      (small ? 24 : 34) + v.progress * 16,
-      alpha * (0.4 + v.progress * 0.5),
-    );
+    this.stage.glowAt(em, x, v.y, r * (3 + v.progress), hue, alpha * (0.45 + v.progress * 0.45));
 
     em.save();
     em.globalCompositeOperation = 'lighter';
-    em.globalAlpha = alpha * (0.5 + v.progress * 0.5);
-    const light = tone(hue, 95, 64 + v.progress * 22);
+    em.globalAlpha = alpha * (0.55 + v.progress * 0.45);
+    const light = tone(hue, 95, 64 + v.progress * 18);
     em.strokeStyle = light;
-    em.lineWidth = Math.max(1.2, 3 * scale);
+    em.fillStyle = light;
+    em.lineWidth = Math.max(1.5, r * 0.16);
 
     if (small) {
       // Solid rather than open: the shortest note is the one with the least
       // room to draw anything inside it.
-      fillPoly(em, c, circlePoints(g.cx, v.y, RIM * 0.6, 20), 12, light);
+      em.beginPath();
+      em.arc(x, v.y, r, 0, Math.PI * 2);
+      em.fill();
     } else {
-      const rim = shape.kind === 'semibreve'
-        ? circlePoints(g.cx, v.y, RIM * 1.08, 6)
-        : circlePoints(g.cx, v.y, RIM, 24);
-      tracePath(em, c, rim, 12, true);
+      em.globalAlpha *= 0.35;
+      em.beginPath();
+      em.arc(x, v.y, r, 0, Math.PI * 2);
+      em.fill();
+      em.globalAlpha = alpha * (0.55 + v.progress * 0.45);
+      em.beginPath();
+      if (shape.kind === 'semibreve') {
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const px = x + Math.cos(a) * r * 1.08, py = v.y + Math.sin(a) * r * 1.08;
+          if (i === 0) em.moveTo(px, py); else em.lineTo(px, py);
+        }
+        em.closePath();
+      } else {
+        em.arc(x, v.y, r, 0, Math.PI * 2);
+      }
       em.stroke();
       if (shape.kind !== 'crotchet') {
-        tracePath(em, c, circlePoints(g.cx, v.y, RIM * 0.58, 18), 12, true);
+        em.beginPath();
+        em.arc(x, v.y, r * 0.58, 0, Math.PI * 2);
         em.stroke();
       }
     }
 
     if (shape.dotted) {
-      fillPoly(em, c, circlePoints(g.cx + RIM * 1.5, v.y, 5, 10), 12, light);
+      em.beginPath();
+      em.arc(x + r * 1.45, v.y, Math.max(2.5, r * 0.18), 0, Math.PI * 2);
+      em.fill();
     }
     em.restore();
   }
 
   /**
-   * The line the auras are aiming for, drawn just in front of the keys.
-   * Without it there is nothing to be on time *with*.
+   * The line the notes are aiming for, along the top of the keys. Without it
+   * there is nothing to be on time *with*.
    */
-  drawStrikeLine(em: CanvasRenderingContext2D, pulse: number): void {
-    const c = this.stage.cam;
-    const keys = this.deck.keys;
-    if (!keys.length) return;
-    const left = keys[0].geom;
-    const right = keys[keys.length - 1].geom;
+  drawStrikeLine(em: CanvasRenderingContext2D, layout: DockLayout, pulse: number): void {
     em.save();
     em.globalCompositeOperation = 'lighter';
-    em.globalAlpha = 0.18 + pulse * 0.3;
+    em.globalAlpha = 0.22 + pulse * 0.4;
     // Chrome rather than pitch: the line is the same whatever note is landing
     // on it, so it takes the theme's primary and goes brass under Velvet.
-    em.strokeStyle = this.stage.palette.neon;
-    em.lineWidth = 2.5;
-    em.lineCap = 'round';
-    tracePath(em, c, [
-      { x: left.cx - left.halfW, y: left.cy + 26 },
-      { x: right.cx + right.halfW, y: right.cy + 26 },
-    ], 8);
-    em.stroke();
+    em.fillStyle = this.stage.palette.neon;
+    em.fillRect(layout.left, this.lanes.strike - 1, layout.right - layout.left, 2.5);
     em.restore();
   }
 }
