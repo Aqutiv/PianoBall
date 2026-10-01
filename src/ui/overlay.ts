@@ -279,8 +279,9 @@ export class Overlay {
         It is more work than a folder of samples, and it is why no two notes come
         out quite the same.</p>
       <p><strong>One shell, three modes</strong> &mdash; the same canvas, the same
-        audio graph, the same thirty-two keys along the near edge of the same raked
-        table. What changes is what the keys are for.</p>
+        audio graph, the same keys: thirty-two paddles along the near edge of a
+        raked table in Pinball, a straight keyboard along the bottom of the screen
+        in Freestyle and PlayTune. What changes is what the keys are for.</p>
 
       <h2>This build</h2>
       <div class="row"><label>Build</label><span class="diag">${buildLine()}</span></div>

@@ -433,8 +433,6 @@ export class FreestyleMode extends ModeBase implements GameMode {
       // is that the keyboard does exactly what the player asks of it.
       audio.noteOn(e.note, force, this.pan(key.geom.cx));
       this.field.noteOn(e.note, this.dock.laneX(e.note) ?? stage.cssW / 2, force);
-      const r = this.deck.range;
-      stage.logNote(e.note, force, r.low, r.high);
       this.held.push(e.note);
       this.refreshChord();
       // Landing on the grid lights the whole field: playing in time is worth
@@ -445,7 +443,6 @@ export class FreestyleMode extends ModeBase implements GameMode {
       if (this.chords.noteOff(e.note) !== 'lead') return;
       audio.noteOff(e.note);
       this.field.noteOff(e.note);
-      stage.endNote(e.note);
       this.held = this.held.filter((n) => n !== e.note);
       this.refreshChord();
     }

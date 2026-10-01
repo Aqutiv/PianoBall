@@ -133,7 +133,7 @@ export class FreestyleHud {
         <select class="hud-select" id="fs-scale" aria-label="Scale">${scales}</select>
         <div class="fs-hint" id="fs-now"></div>
       </div>
-        <p class="fs-hint" id="fs-auto-hint">Colored keys match the scale. Brighter keys are the root.</p>
+        <p class="fs-hint" id="fs-auto-hint">Highlighted keys are in the scale. The root is marked with a dot.</p>
         <p class="fs-hint" id="fs-manual-hint" hidden>Manual needs at least 12 mapped keys.</p>
         <div class="fs-manual" id="fs-manual" hidden>
           <label class="fs-quality">Chord type
@@ -168,7 +168,7 @@ export class FreestyleHud {
               <p>Black or white keys both work. Near the split, use <strong>Chord type</strong> for one-finger chords. Release the gesture before choosing a new root.</p>
               <p><strong>Hold chord</strong> keeps pads sounding and repeats decaying sounds every two bars. Use <strong>Stop chord</strong> to silence the backing.</p>
               <p>Manual chords and melody notes follow the keys you play, independently of the Auto scale.</p>
-              <p>Controller octave buttons send new note pitches. Play an end key to update the visible range, or use <strong>−8 / +8</strong> in Backing.</p>
+              <p>Controller octave buttons send new note pitches. Play an end key to update the visible range, or use <strong>− / +</strong> above the keys or <strong>−8 / +8</strong> in Backing.</p>
             </div>
           </dialog>
         </div>

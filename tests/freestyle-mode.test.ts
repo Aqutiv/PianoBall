@@ -34,11 +34,12 @@ function rig() {
     hud: { clearPanels() {} }, openScreen() {}, setResult() {},
   } as unknown as ModeContext;
   const mode = new FreestyleMode(ctx);
+  const fieldOn = vi.spyOn((mode as unknown as { field: { noteOn(): void } }).field, 'noteOn');
   const on = vi.spyOn(audio, 'noteOn');
   const off = vi.spyOn(audio, 'noteOff');
   // The shell observes hardware notes before the mode receives them.
   input.on((e) => { if (e.type === 'noteon' && input.mapping.observe(e.note)) mode.remap(); });
-  return { input, audio, music, bed, stage, mode, on, off };
+  return { input, audio, music, bed, stage, mode, on, off, fieldOn };
 }
 
 beforeEach(() => {
@@ -71,7 +72,7 @@ describe('Freestyle mode integration', () => {
     r.input.press(60, 0.8);
     expect(r.on).toHaveBeenCalledTimes(1);
     expect(r.on.mock.calls[0][0]).toBe(60);
-    expect(r.stage.logNote).toHaveBeenCalledTimes(1);
+    expect(r.fieldOn).toHaveBeenCalledTimes(1);
     r.input.release(48);
     r.input.release(49);
     expect(r.off).not.toHaveBeenCalled();
