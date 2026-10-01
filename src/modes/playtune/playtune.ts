@@ -699,6 +699,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       rise: stage.quality.reducedMotion ? 0 : 70,
     });
     stage.drawGlass(layout.top);
+    this.drawRotateHint(layout.rows[0].whiteW, lanes.top);
     this.drawCountIn(layout.keysTop);
     stage.endFrame();
     this.dock.publish();
@@ -730,6 +731,23 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       if (until >= 0) out.push(until);
     }
     return out;
+  }
+
+  /**
+   * A part too wide for an upright phone still fits, on keys thinner than a
+   * finger likes. Say how to get them back.
+   */
+  private drawRotateHint(whiteW: number, y: number): void {
+    const stage = this.ctx.stage;
+    if (!this.dock.touch || whiteW >= 34 || stage.cssH <= stage.cssW) return;
+    const ctx = stage.ctx;
+    ctx.save();
+    ctx.font = `500 13px ${stage.theme.fonts.ui}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = stage.palette.dim;
+    ctx.fillText('Turn sideways for bigger keys', stage.cssW / 2, y + 18);
+    ctx.restore();
   }
 
   /** A visible count-in, so the first note is never a surprise. */

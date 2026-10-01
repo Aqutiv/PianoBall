@@ -1,3 +1,8 @@
+/** Whether the main pointer is a finger, for wording that says "tap" rather than "click". */
+function touchScreen(): boolean {
+  try { return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches; } catch { return false; }
+}
+
 /** Where a music mode's docked keyboard sits, in canvas CSS pixels. */
 export interface DockGeometry {
   /** Top of the dock's header strip: the stage ends here. */
@@ -6,6 +11,8 @@ export interface DockGeometry {
   bottom: number;
   left: number;
   right: number;
+  /** Laid out for fingers, with nothing under the keys but the edge of the screen. */
+  touch: boolean;
 }
 
 const DOCK_VARS = ['--dock-top', '--dock-keys', '--dock-end', '--dock-left', '--dock-right'] as const;
@@ -97,6 +104,7 @@ export class Hud {
   setDock(geom: DockGeometry | null): void {
     const host = (this.root.parentElement ?? this.root) as HTMLElement;
     this.root.classList.toggle('hud-dock', geom !== null);
+    this.root.classList.toggle('hud-dock-touch', geom?.touch ?? false);
     if (!geom) {
       for (const v of DOCK_VARS) host.style.removeProperty(v);
       return;
@@ -109,8 +117,10 @@ export class Hud {
     host.style.setProperty('--dock-right', px(geom.right));
   }
 
-  setFreestyle(on: boolean): void {
-    this.root.classList.toggle('hud-freestyle', on);
+  /** Which mode the HUD is dressed for. Styles key off `data-mode` and `hud-freestyle`. */
+  setMode(id: string): void {
+    this.root.dataset.mode = id;
+    this.root.classList.toggle('hud-freestyle', id === 'freestyle');
     this.setControlsOpen(false);
   }
 
@@ -126,9 +136,11 @@ export class Hud {
    * with no explanation reads as broken.
    */
   setSound(on: boolean): void {
-    this.soundEl.textContent = on ? 'Sound on' : 'Sound off — click anywhere';
+    this.soundEl.textContent = on ? 'Sound on' : `Sound off — ${touchScreen() ? 'tap a key' : 'click anywhere'}`;
     this.soundDotEl.className = `dot ${on ? 'ok' : 'warn'}`;
     this.soundEl.classList.toggle('nudge', !on);
+    // Under a docked touch keyboard the status line is hidden, except to say this.
+    this.root.classList.toggle('sound-off', !on);
   }
 
   setStatus(text: string, level: 'ok' | 'warn' | 'err' | 'idle' = 'idle'): void {

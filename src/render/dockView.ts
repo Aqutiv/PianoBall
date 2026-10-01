@@ -79,9 +79,10 @@ export class DockView {
    */
   publish(): void {
     const l = this.layout();
-    if (l.key === this.published) return;
-    this.published = l.key;
-    this.hud.setDock({ top: l.top, keysTop: l.keysTop, bottom: l.bottom, left: l.left, right: l.right });
+    const key = `${l.key}|${this.touch}`;
+    if (key === this.published) return;
+    this.published = key;
+    this.hud.setDock({ top: l.top, keysTop: l.keysTop, bottom: l.bottom, left: l.left, right: l.right, touch: this.touch });
   }
 
   /** Forget what was published. The HUD clears its copy when a mode hands over. */

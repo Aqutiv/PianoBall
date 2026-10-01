@@ -270,7 +270,18 @@ export class Shell {
     this.stage.setProjection(mode.projection ?? 'table');
     this.active = mode;
     this.modeId = id;
-    this.hud.setFreestyle(id === 'freestyle');
+    this.hud.setMode(id);
+    // A mode with a docked keyboard has the whole height of the screen: the
+    // keys are where the phone's status strip used to be. Resized now rather
+    // than on the observer's next frame, so the first frame is the right size.
+    const app = this.canvas.parentElement?.parentElement;
+    if (app) {
+      const docked = mode.projection === 'flat';
+      if (app.hasAttribute('data-dock') !== docked) {
+        app.toggleAttribute('data-dock', docked);
+        this.resize();
+      }
+    }
     this.suspended = false;
     save('lastMode', { id });
     mode.enter();
