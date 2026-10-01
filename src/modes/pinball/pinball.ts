@@ -1,4 +1,6 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
+import type { KeyHit } from '../../app/pointerKeys';
+import { KEY_TOP_Z } from '../../game/keyLayout';
 import { Game } from '../../game/game';
 import { AURORA } from '../../game/table/tables/aurora';
 import { PinballRenderer, nestOf, type DrawHints } from '../../render/renderer';
@@ -238,17 +240,15 @@ export class PinballMode extends ModeBase implements GameMode {
     if (this.game.active) this.audio.resume();
   }
 
-  pointerDown(x: number, y: number): number | null {
-    const key = this.game.keybed.pick(x, y);
-    if (!key) return null;
-    const g = key.geom;
-    const force = this.game.keybed.strikeForce(key, x, y);
-    this.ctx.input.press(g.note, force, 'pointer');
-    return g.note;
-  }
-
-  pointerUp(note: number): void {
-    this.ctx.input.release(note, 'pointer');
+  /**
+   * The paddle under a point on the canvas. Taps land on the white keys' tops,
+   * so the point is carried down onto the table at their height before the
+   * keybed is asked which key owns it.
+   */
+  keyAt(x: number, y: number): KeyHit | null {
+    const t = this.ctx.stage.cam.unproject(x, y, KEY_TOP_Z);
+    const key = this.game.keybed.pick(t.x, t.y);
+    return key ? { note: key.geom.note, force: this.game.keybed.strikeForce(key, t.x, t.y) } : null;
   }
 
   // ------------------------------------------------------------- wiring ---

@@ -37,6 +37,13 @@ export const DEFAULT_KEYBED: KeybedLayout = {
   blackZ: 50,
 };
 
+/**
+ * Height of the white keys' tops above the table. A tap is carried down onto
+ * the table at this height before asking which key owns it, so it lands on the
+ * key the player sees rather than on the floor behind it.
+ */
+export const KEY_TOP_Z = DEFAULT_KEYBED.whiteZ;
+
 export interface KeyGeom {
   lane: number;
   note: number;

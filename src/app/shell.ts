@@ -15,6 +15,7 @@ import { makeRng } from '../audio/shaping';
 import { wireGlobalControls } from '../audio/controls';
 import { MusicState } from '../audio/musicState';
 import { resetFreestyleSettings } from '../modes/freestyle/settings';
+import { PointerKeys } from './pointerKeys';
 import { resetRhythmSettings } from '../modes/freestyle/rhythmSettings';
 import { resetPlayTuneSettings } from '../modes/playtune/settings';
 import { resetPinballSettings } from '../modes/pinball/settings';
@@ -93,7 +94,16 @@ export class Shell {
   private readonly built = new Map<GameModeId, GameMode>();
   private readonly ctx: ModeContext;
   private readonly canvas: HTMLCanvasElement;
-  private readonly activePointers = new Map<number, number>();
+  /** Fingers on the on-screen keys. See `PointerKeys`. */
+  private readonly pointerKeys = new PointerKeys(
+    (note, force) => this.input.press(note, force, 'pointer'),
+    (note) => this.input.release(note, 'pointer'),
+  );
+  /**
+   * Where the canvas sits, read when a finger comes down. A slide reuses it
+   * rather than forcing a layout on every move while the HUD keeps it dirty.
+   */
+  private canvasRect: DOMRect | null = null;
   /** When to give something up, and when to take it back. See `adaptive.ts`. */
   private readonly adaptive = new Adaptive();
   /** Pending coalesced resize, if any. See `queueResize`. */
@@ -232,7 +242,9 @@ export class Shell {
     this.active?.exit();
     this.active = null;
 
-    // Whatever the last mode left behind stops here.
+    // Whatever the last mode left behind stops here: the fingers first, so a
+    // key still under one cannot be released twice.
+    this.pointerKeys.cancelAll();
     this.input.releaseAll();
     this.audio.allNotesOff();
     // Including a chord still in the air. `reset` only moves the progression
@@ -373,7 +385,9 @@ export class Shell {
   private hush(): void {
     // Through the hub first, so the modes see the keys come up and their decks
     // stop glowing; the engine's own sweep then catches whatever was sounding
-    // that no key is holding.
+    // that no key is holding. Fingers still on the glass are lifted with them,
+    // so the one that comes up behind the panel releases nothing.
+    this.pointerKeys.cancelAll();
     this.input.releaseAll();
     this.audio.hush();
     this.bed.stop();
@@ -760,9 +774,13 @@ ${this.active?.debugLines?.() ?? ''}`
 
     // Most controllers transpose silently when their octave buttons are used, so
     // a note arriving outside the mapped window re-latches it. That is a fact
-    // about the hardware rather than about any one mode, so it lives here.
+    // about the hardware rather than about any one mode, so it lives here — and
+    // only for hardware. A touch window is sized for fingers rather than for the
+    // controller, and the computer keyboard always plays inside the mapping, so
+    // neither may drag the controller's window around.
     this.input.on((e) => {
-      if (e.type === 'noteon' && this.input.mapping.observe(e.note)) this.remapKeys();
+      if (e.type !== 'noteon' || (e.source !== 'midi' && e.source !== 'debug')) return;
+      if (this.input.mapping.observe(e.note)) this.remapKeys();
     });
   }
 
@@ -801,24 +819,31 @@ ${this.active?.debugLines?.() ?? ''}`
     canvas.addEventListener('contextmenu', preventNativeGesture);
 
     canvas.addEventListener('pointerdown', (e) => {
-      if (this.overlay.visible || !this.active?.pointerDown) return;
-      const rect = canvas.getBoundingClientRect();
-      const t = this.stage.cam.unproject(e.clientX - rect.left, e.clientY - rect.top, 26);
-      const note = this.active.pointerDown(t.x, t.y);
-      if (note === null) return;
+      const mode = this.active;
+      if (this.overlay.visible || !mode?.keyAt) return;
+      const rect = this.canvasRect = canvas.getBoundingClientRect();
+      const hit = mode.keyAt(e.clientX - rect.left, e.clientY - rect.top, false);
+      if (!this.pointerKeys.down(e.pointerId, hit, mode.keyLayoutRevision ?? 0)) return;
       canvas.setPointerCapture(e.pointerId);
-      this.activePointers.set(e.pointerId, note);
       e.preventDefault();
     });
 
-    const release = (e: PointerEvent) => {
-      const note = this.activePointers.get(e.pointerId);
-      if (note === undefined) return;
-      this.activePointers.delete(e.pointerId);
-      this.active?.pointerUp?.(note);
-    };
-    canvas.addEventListener('pointerup', release);
-    canvas.addEventListener('pointercancel', release);
+    // A finger sliding across the keys plays each one it crosses, in the modes
+    // that ask for it. Pinball's keys are paddles, and a paddle swept by a
+    // sliding finger would fire every flipper it crossed.
+    canvas.addEventListener('pointermove', (e) => {
+      const mode = this.active;
+      const rect = this.canvasRect;
+      if (!mode?.glide || !mode.keyAt || !rect || !this.pointerKeys.has(e.pointerId)) return;
+      const hit = mode.keyAt(e.clientX - rect.left, e.clientY - rect.top, true);
+      this.pointerKeys.move(e.pointerId, hit, mode.keyLayoutRevision ?? 0);
+    });
+
+    // One finger at a time: a cancelled or lost pointer lifts only itself.
+    const lift = (e: PointerEvent) => this.pointerKeys.up(e.pointerId);
+    canvas.addEventListener('pointerup', lift);
+    canvas.addEventListener('pointercancel', lift);
+    canvas.addEventListener('lostpointercapture', lift);
   }
 
   private wireKeys(): void {

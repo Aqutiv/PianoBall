@@ -1,5 +1,7 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
+import type { KeyHit } from '../../app/pointerKeys';
 import { KeyDeck } from '../../game/keys';
+import { KEY_TOP_Z } from '../../game/keyLayout';
 import { drawKeys } from '../../render/keys';
 import { FIELD, fieldOutline, bakeField } from '../../render/field';
 import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
@@ -679,17 +681,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       + (j ? `hit ${j.judged}/${j.total}  acc ${(j.accuracy * 100).toFixed(0)}%` : 'no tune');
   }
 
-  pointerDown(x: number, y: number): number | null {
-    const key = this.deck.pick(x, y);
-    if (!key) return null;
-    const g = key.geom;
-    const force = this.deck.strikeForce(key, x, y);
-    this.ctx.input.press(g.note, force, 'pointer');
-    return g.note;
-  }
-
-  pointerUp(note: number): void {
-    this.ctx.input.release(note, 'pointer');
+  keyAt(x: number, y: number): KeyHit | null {
+    const t = this.ctx.stage.cam.unproject(x, y, KEY_TOP_Z);
+    const key = this.deck.pick(t.x, t.y);
+    return key ? { note: key.geom.note, force: this.deck.strikeForce(key, t.x, t.y) } : null;
   }
 
   // --------------------------------------------------------------- playing ---

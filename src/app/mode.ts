@@ -6,6 +6,7 @@ import type { MusicState } from '../audio/musicState';
 import type { Hud } from '../ui/hud';
 import type { Screen } from '../ui/overlay';
 import type { ModeResult } from './shell';
+import type { KeyHit } from './pointerKeys';
 
 export type GameModeId = 'freestyle' | 'pinball' | 'playtune';
 
@@ -44,9 +45,20 @@ export interface GameMode {
   readonly timeScale?: number;
   /** Extra lines for the F3 panel. */
   debugLines?(): string;
-  /** Table-space pointer press. Returns the note taken, or null. */
-  pointerDown?(x: number, y: number): number | null;
-  pointerUp?(note: number): void;
+  /**
+   * The key under a point on the canvas, in CSS pixels, and how hard a tap
+   * there strikes it. `moving` is true for a finger already sliding across the
+   * keys, which may reach a little further than a fresh tap. The shell owns the
+   * fingers themselves (see `PointerKeys`); a mode only says what is where.
+   */
+  keyAt?(x: number, y: number, moving: boolean): KeyHit | null;
+  /** Whether a finger sliding across the keys plays each one it crosses. */
+  readonly glide?: boolean;
+  /**
+   * Bumped whenever the keys move on screen. A finger that came down before
+   * the move keeps its note but stops sliding.
+   */
+  readonly keyLayoutRevision?: number;
   /** Escape was pressed, or the mode is being suspended behind a menu. */
   pause?(): void;
   resume?(): void;
