@@ -58,12 +58,24 @@ export function withAlpha(hex: string, alpha: number): string {
   return hex;
 }
 
+/**
+ * `a` taken `t` of the way to `b`.
+ *
+ * Either end can be any colour the app writes: a theme's hex, the `hsl()` that
+ * `tone` returns, or an `rgb()` this returned, so a mix can be mixed again. It
+ * used to read hex alone and quietly mixed anything else towards black — every
+ * key lit towards its pitch went dark grey instead.
+ *
+ * Alpha is carried as well, for the theme colours written as `rgba()`. Opaque
+ * ends still give exactly the `rgb()` they always did, so no ramp moves.
+ */
 export function mix(a: string, b: string, t: number): string {
-  const pa = parseHex(a), pb = parseHex(b);
+  const pa = parseColor(a), pb = parseColor(b);
   const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
   const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
   const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
-  return `rgb(${r}, ${g}, ${bl})`;
+  const al = pa[3] + (pb[3] - pa[3]) * t;
+  return al >= 1 ? `rgb(${r}, ${g}, ${bl})` : `rgba(${r}, ${g}, ${bl}, ${Math.round(al * 1000) / 1000})`;
 }
 
 /**
@@ -96,18 +108,51 @@ export function ramp(a: string, b: string, steps: number): readonly string[] {
  * Themes name a few dozen colours between them and `mix` was pulling every one
  * of them apart again on every call — a string replace, sometimes a split and
  * a join, and a parseInt, a few hundred times a frame.
+ *
+ * Capped, because not every colour is a theme's: `tone` writes a new string
+ * for every frame of a flash fading out, and mixes of mixes hardly repeat.
  */
-const PARSED = new Map<string, [number, number, number]>();
+type Rgba = [number, number, number, number];
+const PARSED = new Map<string, Rgba>();
 
-function parseHex(hex: string): [number, number, number] {
-  const hit = PARSED.get(hex);
+function parseColor(color: string): Rgba {
+  const hit = PARSED.get(color);
   if (hit) return hit;
+  let rgba: Rgba;
+  if (color.startsWith('#')) {
+    rgba = parseHex(color);
+  } else {
+    // `rgb(r, g, b)`, `rgba(r, g, b, a)`, `hsl(h s% l%)` and `hsl(h s% l% / a)`
+    // all list their numbers in the same order.
+    const n = (color.match(NUMBER) ?? []).map(Number);
+    const [r, g, b] = color.startsWith('hsl')
+      ? hslToRgb(n[0] ?? 0, (n[1] ?? 0) / 100, (n[2] ?? 0) / 100)
+      : [n[0] ?? 0, n[1] ?? 0, n[2] ?? 0];
+    rgba = [r, g, b, Math.min(1, Math.max(0, n[3] ?? 1))];
+  }
+  if (PARSED.size >= 4096) PARSED.clear();
+  PARSED.set(color, rgba);
+  return rgba;
+}
+
+/** A number as JavaScript prints one, exponent included. */
+const NUMBER = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+
+function parseHex(hex: string): Rgba {
   const h = hex.replace('#', '');
   const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
   const n = parseInt(full, 16);
-  const rgb: [number, number, number] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  PARSED.set(hex, rgb);
-  return rgb;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
+}
+
+function hslToRgb(hue: number, s: number, l: number): [number, number, number] {
+  const h = ((hue % 360) + 360) % 360;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
 /** Direction the virtual key light comes from, in table space. */
