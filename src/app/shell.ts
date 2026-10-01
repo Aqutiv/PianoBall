@@ -790,6 +790,16 @@ ${this.active?.debugLines?.() ?? ''}`
   private wirePointer(): void {
     const canvas = this.canvas;
 
+    // Cancel native long-press gestures even when a finger misses a key.
+    // Safari can start its magnifier from touch events despite the CSS guards;
+    // notes still use pointer events, and menus keep their native touch behavior.
+    const preventNativeGesture = (e: Event) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    canvas.addEventListener('touchstart', preventNativeGesture, { passive: false });
+    canvas.addEventListener('selectstart', preventNativeGesture);
+    canvas.addEventListener('contextmenu', preventNativeGesture);
+
     canvas.addEventListener('pointerdown', (e) => {
       if (this.overlay.visible || !this.active?.pointerDown) return;
       const rect = canvas.getBoundingClientRect();
