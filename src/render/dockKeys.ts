@@ -2,7 +2,7 @@ import { clamp01 } from '../core/math';
 import type { DockKey, DockLayout } from '../game/dock';
 import type { KeyDeck, KeyLit } from '../game/keys';
 import { noteLabel } from '../midi/notes';
-import { blend, tone, withAlpha } from './palette';
+import { mix, tone, withAlpha } from './palette';
 import type { Stage } from './stage';
 
 /** What is baked into a docked keyboard: it changes with the music, not the frame. */
@@ -76,21 +76,21 @@ interface Finish {
 function finish(stage: Stage): Finish {
   const km = stage.theme.keys;
   const pal = stage.palette;
-  const steel = blend(blend(km.whiteFaceLo, km.whiteSide, 0.45), pal.neon, 0.28);
+  const steel = mix(mix(km.whiteFaceLo, km.whiteSide, 0.45), pal.neon, 0.28);
   return {
-    bed: blend(pal.void, pal.floorDeep, 0.6),
-    whiteTop: blend(km.whiteFaceHi, km.whiteFaceLo, 0.35),
+    bed: mix(pal.void, pal.floorDeep, 0.6),
+    whiteTop: mix(km.whiteFaceHi, km.whiteFaceLo, 0.35),
     whiteFace: km.whiteFaceHi,
-    whiteLip: blend(km.whiteFaceLo, km.whiteSide, 0.3),
-    whiteInk: blend(km.whiteFaceLo, km.whiteSide, 0.55),
-    steelTop: blend(steel, km.whiteSide, 0.25),
+    whiteLip: mix(km.whiteFaceLo, km.whiteSide, 0.3),
+    whiteInk: mix(km.whiteFaceLo, km.whiteSide, 0.55),
+    steelTop: mix(steel, km.whiteSide, 0.25),
     steelFace: steel,
-    steelLip: blend(steel, km.whiteSide, 0.45),
+    steelLip: mix(steel, km.whiteSide, 0.45),
     steelInk: pal.ink,
     blackTop: km.blackFaceLo,
     blackFace: km.blackFaceHi,
-    blackLip: blend(km.blackTop, km.blackFaceHi, 0.5),
-    blackSteel: blend(km.blackFaceLo, pal.neon, 0.14),
+    blackLip: mix(km.blackTop, km.blackFaceHi, 0.5),
+    blackSteel: mix(km.blackFaceLo, pal.neon, 0.14),
     guide: pal.neon,
   };
 }
@@ -117,8 +117,8 @@ function drawWhite(
   const kx = x + 1, kw = w - 2, ky = y + dy, kh = h - dy;
   const r = Math.min(7, kw * 0.2);
   const lit = tone(hue, 72, 58);
-  const top = blend(steel ? f.steelTop : f.whiteTop, tone(hue, 70, 48), tint);
-  const face = blend(steel ? f.steelFace : f.whiteFace, lit, tint);
+  const top = mix(steel ? f.steelTop : f.whiteTop, tone(hue, 70, 48), tint);
+  const face = mix(steel ? f.steelFace : f.whiteFace, lit, tint);
   const g = ctx.createLinearGradient(0, ky, 0, ky + kh);
   g.addColorStop(0, top);
   g.addColorStop(0.18, face);
@@ -129,7 +129,7 @@ function drawWhite(
 
   const lip = Math.min(5.5, kw * 0.18) * (1 - 0.35 * press);
   roundedBottom(ctx, kx, ky + kh - lip, kw, lip, r);
-  ctx.fillStyle = blend(steel ? f.steelLip : f.whiteLip, tone(hue, 70, 38), tint);
+  ctx.fillStyle = mix(steel ? f.steelLip : f.whiteLip, tone(hue, 70, 38), tint);
   ctx.fill();
 
   const outline = stage.theme.outline;
@@ -177,14 +177,14 @@ function drawBlack(
   }
   const r = Math.min(6, w * 0.2);
   const g = ctx.createLinearGradient(0, y + dy, 0, y + h);
-  g.addColorStop(0, blend(f.blackTop, tone(hue, 70, 30), tint));
-  g.addColorStop(1, blend(steel ? f.blackSteel : f.blackFace, tone(hue, 70, 46), tint));
+  g.addColorStop(0, mix(f.blackTop, tone(hue, 70, 30), tint));
+  g.addColorStop(1, mix(steel ? f.blackSteel : f.blackFace, tone(hue, 70, 46), tint));
   roundedBottom(ctx, x, y + dy, w, h - dy, r);
   ctx.fillStyle = g;
   ctx.fill();
 
   const lip = Math.min(4.5, w * 0.18) * (1 - 0.35 * press);
-  ctx.fillStyle = blend(f.blackLip, tone(hue, 75, 64), tint);
+  ctx.fillStyle = mix(f.blackLip, tone(hue, 75, 64), tint);
   ctx.fillRect(x + 2, y + h - lip - 3, w - 4, lip);
 
   const outline = stage.theme.outline;
@@ -223,7 +223,7 @@ export function bakeDock(ctx: CanvasRenderingContext2D, stage: Stage, layout: Do
   // The stage: a floor that falls away into the dark at the top of the screen,
   // lit faintly from the keyboard.
   const floor = ctx.createLinearGradient(0, top, 0, 0);
-  floor.addColorStop(0, blend(pal.floorFar, pal.floorNear, 0.35));
+  floor.addColorStop(0, mix(pal.floorFar, pal.floorNear, 0.35));
   floor.addColorStop(0.55, pal.floorFar);
   floor.addColorStop(1, pal.floorDeep);
   ctx.fillStyle = floor;
@@ -257,7 +257,7 @@ export function bakeDock(ctx: CanvasRenderingContext2D, stage: Stage, layout: Do
 
   if (look.lanesTop !== undefined) {
     // One faint line up from every key: where its notes will fall.
-    const lane = blend(pal.rail, pal.railTop, 0.3);
+    const lane = mix(pal.rail, pal.railTop, 0.3);
     for (const k of layout.keys) {
       ctx.globalAlpha = k.black ? 0.1 : 0.25;
       ctx.fillStyle = lane;
