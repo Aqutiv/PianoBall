@@ -640,7 +640,7 @@ export class PinballRenderer {
         // music never reads as one the player is holding the note of.
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.5, 0.5, withAlpha(pal.neon, 0.10 + pulse * 0.25 + env * 0.12));
         this.stage.fillDisc(ctx, el.x, el.y, el.r * 1.22, 1, withAlpha(pal.void, 0.55));
-        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, mat.bumperLo, mix(mat.bumperHi, pitchColor(el.note ?? 60, 70, 46), 0.55));
+        this.stage.column(ctx, el.x, el.y, el.r, 0, el.z * squash, mat.bumperLo, mix(mat.bumperHi, tone(hue, 70, 46), 0.55));
 
         const p = { x: 0, y: 0 };
         this.cam.project(el.x, el.y, el.z * squash, p);
