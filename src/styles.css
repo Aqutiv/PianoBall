@@ -638,7 +638,8 @@ kbd {
 .fs-compact { display: none; pointer-events: auto; align-items: center; gap: 8px; color: var(--ink); background: var(--floor-deep); border: 1px solid var(--stroke); border-radius: 8px; padding: 0 0 0 10px; font-size: 12px; }
 .fs-compact button { min-height: 44px; min-width: 48px; }
 @media (min-width: 701px) {
-  .hud-freestyle :is(.hud-left, .hud-right) { max-height: calc(100dvh - 190px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 2px 6px 6px; }
+  /* Clear of the docked keyboard, whose top the mode publishes as --dock-top. */
+  .hud-freestyle :is(.hud-left, .hud-right) { max-height: calc(var(--dock-top, calc(100dvh - 106px)) - 84px); overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; padding: 2px 6px 6px; }
   .hud-freestyle :is(.hud-left, .hud-right) > * { flex-shrink: 0; }
   .hud-freestyle :is(.hud-left, .hud-right) .voice-list { position: static; width: 100%; }
 }
@@ -1930,11 +1931,82 @@ kbd {
 [data-theme="toybox"] .hist span { background: linear-gradient(180deg, var(--neon2), rgba(160, 92, 255, 0.3)); }
 
 
+/* The header strip of a docked keyboard: an octave down, the whole piano in
+   miniature with the keys on screen lit on it, and an octave up. Placed from
+   the geometry the keyboard publishes, on the right of its header so the
+   canvas captions keep the left. */
+.dock-bar {
+  /* No z-index: in page order it is above the keys and under the menus. */
+  position: absolute; pointer-events: auto;
+  top: calc(var(--dock-top, 70vh) + 4px);
+  height: max(24px, calc(var(--dock-keys, 70vh) - var(--dock-top, 70vh) - 14px));
+  right: calc(100% - var(--dock-right, 100%));
+  width: min(300px, 56%);
+  display: flex; align-items: stretch; gap: 6px;
+}
+.dock-bar[hidden] { display: none; }
+.dock-oct {
+  min-width: 40px; padding: 0; font-size: 18px; line-height: 1;
+  background: var(--floor-deep); color: var(--ink); border-color: var(--stroke);
+}
+.dock-strip {
+  position: relative; flex: 1; display: flex; padding: 3px 2px; gap: 1px;
+  border-radius: 7px; background: var(--floor-deep); border: 1px solid var(--stroke);
+  touch-action: none; cursor: grab; overflow: hidden;
+}
+.dock-strip:active { cursor: grabbing; }
+.dock-strip:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
+.dock-strip i { flex: 1; border-radius: 1px; background: rgba(255, 255, 255, 0.16); }
+.dock-strip i.c { background: rgba(255, 255, 255, 0.34); }
+.dock-window {
+  position: absolute; top: 0; bottom: 0; border-radius: 6px;
+  border: 1.5px solid var(--neon); background: color-mix(in srgb, var(--neon) 20%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  transition: left 90ms ease-out, width 90ms ease-out;
+}
+.dock-window span {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; text-shadow: 0 0 4px var(--void);
+}
+[data-reduced-motion] .dock-window { transition: none; }
+
+/* Under a docked keyboard the status line has the strip below the keys on a
+   desktop; under a touch keyboard there is no strip, so it shows only to say
+   that sound is off, as a chip above the keys. */
+.hud-dock .hud-bottom { position: absolute; left: var(--dock-left, 16px); bottom: 7px; }
+.hud-dock-touch .hud-bottom { display: none; }
+.hud-dock-touch.sound-off .hud-bottom {
+  display: flex; bottom: auto; top: calc(var(--dock-top, 60vh) - 40px); left: 12px;
+  padding: 6px 10px; border-radius: 8px; background: var(--floor-deep); border: 1px solid var(--stroke);
+}
+.hud-dock-touch.sound-off .hud-bottom #hud-dot,
+.hud-dock-touch.sound-off .hud-bottom #hud-status,
+.hud-dock-touch.sound-off .hud-bottom .sep { display: none; }
+
 /* Phone controls are opened on demand, leaving the keys and field visible.
    Include landscape phones, where width alone would select the desktop HUD. */
 @media (max-width: 700px), (pointer: coarse) and (max-height: 600px) {
   /* The footer gets its own space; it must not sit over landscape piano keys. */
   #playfield { bottom: 44px; }
+  /* A docked keyboard is the bottom of the screen itself. */
+  #app[data-dock] #playfield { bottom: 0; }
+
+  /* PlayTune's panels fold into one line beside Menu, so the lanes start near
+     the top of a short screen: every pixel of lane is reading time. */
+  .hud[data-mode="playtune"] .hud-top {
+    position: absolute; top: 10px; left: 84px; right: 10px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px;
+  }
+  .hud[data-mode="playtune"] .hud-left { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; flex: 1 1 auto; }
+  .hud[data-mode="playtune"] .hud-left .score-block { flex-direction: row; align-items: center; gap: 8px; min-width: 0; }
+  .hud[data-mode="playtune"] .tune-title { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
+  .hud[data-mode="playtune"] :is(#pt-sub, #pt-next, .tally) { display: none; }
+  .hud[data-mode="playtune"] .tune-bar { width: 72px; margin-top: 0; flex-shrink: 0; }
+  .hud[data-mode="playtune"] .tune-harmony { margin-top: 0; }
+  .hud[data-mode="playtune"] .tune-harmony .chord { font-size: 15px; }
+  .hud[data-mode="playtune"] .tune-rhythm { min-height: 36px; margin-top: 0; padding: 0 10px; align-self: center; }
+  .hud[data-mode="playtune"] .hud-right { flex-direction: row; align-items: center; gap: 8px; }
+  .hud[data-mode="playtune"] .accuracy { font-size: 18px; }
   .hud { padding: 10px; }
   .hud-freestyle #hud-controls { display: block; }
   .hud-freestyle:not(.controls-open) .fs-compact:not([hidden]) { display: flex; }
@@ -1947,7 +2019,8 @@ kbd {
     grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
     align-items: start;
     gap: 10px;
-    max-height: min(52dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 144px));
+    /* Never over the keys: the sheet ends where the docked keyboard begins. */
+    max-height: calc(var(--dock-top, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 74px)) - 70px);
     overflow: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;

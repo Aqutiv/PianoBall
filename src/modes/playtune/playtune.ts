@@ -1,10 +1,14 @@
 import { ModeBase, type GameMode, type GameModeId, type ModeContext } from '../../app/mode';
+import type { KeyHit } from '../../app/pointerKeys';
 import { KeyDeck } from '../../game/keys';
-import { drawKeys } from '../../render/keys';
-import { FIELD, fieldOutline, bakeField } from '../../render/field';
+import { DockView } from '../../render/dockView';
+import { playtuneRows, type DockRowSpec } from '../../game/dock';
+import { readDockEnv } from '../../render/dockSettings';
+import { bakeDock, dockBakeKey, drawDockKeys, type DockLook } from '../../render/dockKeys';
+import { drawPops } from '../../render/pops';
 import { SCALES, chordLabel, degreeToNote } from '../../audio/music';
 import { DEFAULT_BED_VOICE, DEFAULT_LEAD_VOICE } from '../../audio/voices';
-import { clamp01 } from '../../core/math';
+import { clamp, clamp01 } from '../../core/math';
 import type { InputEvent } from '../../midi/types';
 import { Scoring } from '../../game/scoring';
 import type { ChartChord, Tune } from './chart';
@@ -13,7 +17,7 @@ import { mergedChords } from './chords';
 import { HOLD_FLOOR, Judge, grade, type Target, type TargetSpec, type Verdict } from './judge';
 import { Transport } from './transport';
 import { TuneDrums } from './rhythm';
-import { AuraStage } from './render';
+import { AuraStage, laneFrame } from './render';
 import { TuneHud } from './hud';
 import { findTune } from './library';
 import { loadProgress, recordRun, type Progress } from './progress';
@@ -80,6 +84,11 @@ function onsetVerdicts(targets: readonly Target[]): VerdictTone[] {
   return out;
 }
 
+/** Width of the keyboard's own geometry, which stereo position is read from. */
+const TABLE_WIDTH = 1024;
+
+const rowsKey = (rows: readonly DockRowSpec[]) => rows.map((r) => `${r.low}-${r.high}`).join(',');
+
 /**
  * Learning a piece from either side of it.
  *
@@ -97,6 +106,8 @@ function onsetVerdicts(targets: readonly Target[]): VerdictTone[] {
  */
 export class PlayTuneMode extends ModeBase implements GameMode {
   readonly id: GameModeId = 'playtune';
+  readonly projection = 'flat' as const;
+  readonly glide = true;
 
   progress: Progress;
   tune: Tune | null = null;
@@ -104,7 +115,23 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   private roleId: RoleId;
 
   private readonly deck = new KeyDeck();
+  /** The keyboard along the bottom of the screen, which the notes fall onto. */
+  private readonly dock: DockView;
   private readonly auras: AuraStage;
+  /** When each key was last pressed wrongly, for the brief ring on it. */
+  private readonly wrongAt = new Map<number, number>();
+  /**
+   * The keys a run was laid out on, fixed from its count-in to its last bar:
+   * a key that moved mid-song would be a key the player has to find again.
+   */
+  private songRows: DockRowSpec[] | null = null;
+  /** The rows the keyboard was last built for, to notice when they change. */
+  private rowsKey = '';
+  /**
+   * Whether the mode is on screen. The shell remaps every mode it has built,
+   * and one that is not showing must not point the computer keyboard at its keys.
+   */
+  private entered = false;
   private readonly transport = new Transport();
   private readonly drums: TuneDrums;
   /** Last applied preference, so unrelated settings never replay queued hits. */
@@ -146,7 +173,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     super();
     this.ctx = ctx;
     this.drums = new TuneDrums(ctx.audio);
-    this.auras = new AuraStage(ctx.stage, this.deck);
+    this.dock = new DockView(ctx.stage, ctx.hud, { touch: 6, desk: 12 });
+    this.auras = new AuraStage(ctx.stage);
     this.panel = new TuneHud(ctx.hud, () => {
       setPlayTuneSettings({ rhythmEnabled: !playTuneSettings().rhythmEnabled });
       this.applySettings();
@@ -179,9 +207,24 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.panel.setTune(null);
   }
 
-  remap(): void {
-    const m = this.ctx.input.mapping.settings;
-    this.deck.build(m.baseNote, m.count);
+  get keyLayoutRevision(): number { return this.dock.revision; }
+
+  remap(rows: DockRowSpec[] = this.rowsFor()): void {
+    const low = rows[0].low;
+    this.rowsKey = rowsKey(rows);
+    this.dock.setRows(rows);
+    this.deck.build(low, rows[rows.length - 1].high - low + 1);
+    if (this.entered) this.ctx.input.keyboardBase = this.dock.touch ? () => this.deck.range.low : null;
+  }
+
+  /**
+   * The rows the keyboard should hold right now: the run's own, while there
+   * is one, and otherwise whatever this screen and this controller call for.
+   */
+  private rowsFor(): DockRowSpec[] {
+    const env = readDockEnv(this.ctx.input);
+    this.dock.setTouch(env.touch);
+    return this.songRows ?? playtuneRows(env, this.ctx.input.mapping, null, this.ctx.stage.cssW);
   }
 
   /**
@@ -212,9 +255,9 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   // -------------------------------------------------------------- lifecycle ---
 
   enter(): void {
-    const { stage, input } = this.ctx;
-    stage.cam.configure({ width: FIELD.width, height: FIELD.height });
-    stage.resize(stage.cssW, stage.cssH, stage.dpr);
+    this.entered = true;
+    const { input } = this.ctx;
+    this.dock.forget();
 
     this.remap();
     // Before the role is read and after the panel exists: `setRole` clears the
@@ -231,11 +274,16 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   }
 
   exit(): void {
+    this.entered = false;
     this.release();
     this.pending = null;
     this.stopRun();
     this.deck.allOff();
+    this.wrongAt.clear();
+    this.songRows = null;
     this.panel.setTune(null);
+    this.dock.forget();
+    this.ctx.input.keyboardBase = null;
     this.ctx.hud.clearPanels();
   }
 
@@ -283,10 +331,39 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   get tunes(): readonly Tune[] { return this.role.tunes; }
 
-  /** Whether this chart can be reached on the keyboard that is plugged in. */
+  /**
+   * Whether this chart can be reached on the keyboard that is plugged in.
+   *
+   * Against the controller's window rather than the keys on screen: the screen
+   * is sized to the part once it has been fitted, so asking it would be asking
+   * the answer.
+   */
   fitFor(tune: Tune): number | null {
-    const r = this.deck.range;
-    return fitToRange(this.role.chart(tune), r.low, r.high);
+    const m = this.ctx.input.mapping;
+    const chart = this.role.chart(tune);
+    const fit = fitToRange(chart, m.low, m.high);
+    // Fingers on glass are not bound by a controller's width: any part that
+    // fits on a piano can be laid out on the screen.
+    if (fit === null && readDockEnv(this.ctx.input).touch) return fitToRange(chart, 21, 108);
+    return fit;
+  }
+
+  /**
+   * Fit the keys on screen to the part about to be played, once, for the
+   * whole run. On a touch screen that is the part itself, widened to whole
+   * white keys and an octave at least, so every key is as wide as the screen
+   * allows; with a controller it is the controller's window, so the lanes
+   * line up with the physical keys.
+   */
+  private layOut(tune: Tune, shift: number): void {
+    const notes = fitted(this.role.chart(tune), shift);
+    const env = readDockEnv(this.ctx.input);
+    const part = notes.length
+      ? { low: Math.min(...notes.map((n) => n.note)), high: Math.max(...notes.map((n) => n.note)) }
+      : null;
+    this.songRows = playtuneRows(env, this.ctx.input.mapping, part, this.ctx.stage.cssW);
+    this.dock.setTouch(env.touch);
+    this.remap(this.songRows);
   }
 
   start(id: string): boolean {
@@ -302,6 +379,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.tune = tune;
     this.shift = shift;
     this.ranWithAudio = false;
+    this.layOut(tune, shift);
     this.scoring.reset();
 
     const settings = playTuneSettings();
@@ -535,6 +613,8 @@ export class PlayTuneMode extends ModeBase implements GameMode {
   // ------------------------------------------------------------------ loop ---
 
   step(dt: number): void {
+    const rows = this.rowsFor();
+    if (rowsKey(rows) !== this.rowsKey) this.remap(rows);
     this.deck.update(dt);
     this.strikePulse = Math.max(0, this.strikePulse - dt * 3.5);
     this.scoring.update(dt);
@@ -559,12 +639,7 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     const judge = this.judge;
     if (!judge) return;
     const at = this.transport.judgeTime(now);
-    // One kick per chord that went by, not one per note of it.
-    let lastMiss = -1;
-    for (const missed of judge.expire(at)) {
-      this.onMiss(missed, missed.time !== lastMiss);
-      lastMiss = missed.time;
-    }
+    for (const missed of judge.expire(at)) this.onMiss(missed);
     for (const done of judge.settleHolds(at)) this.onHoldSettled(done);
 
     if (now >= this.endsAt) this.finish();
@@ -572,12 +647,19 @@ export class PlayTuneMode extends ModeBase implements GameMode {
 
   draw(_alpha: number, frameDt: number): void {
     const stage = this.ctx.stage;
-    if (stage.needsBake('playtune')) {
+    const layout = this.dock.layout();
+    const lanes = laneFrame(layout, this.lanesTop());
+    // Effects are sized in the table units they were tuned in; world height
+    // zero is the line the notes land on.
+    stage.flat.floor = lanes.strike;
+    stage.flat.unit = clamp(layout.rows[0].whiteW / 110, 0.4, 0.9);
+
+    const look: DockLook = { lanesTop: lanes.top };
+    if (stage.needsBake(`playtune|${dockBakeKey(stage, layout, look)}`)) {
       const ctx = stage.baked.ctx;
       ctx.setTransform(stage.dpr, 0, 0, stage.dpr, 0, 0);
       ctx.clearRect(0, 0, stage.cssW, stage.cssH);
-      stage.measureBounds(fieldOutline());
-      bakeField(ctx, stage);
+      bakeDock(ctx, stage, layout, look);
     }
 
     stage.beginFrame(frameDt);
@@ -588,34 +670,95 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     // mid-run lands on the next frame. The approach is the transport's to work
     // out and not `leadBeats * beatSeconds`: past a point, a quicker tune stops
     // being allowed to charge for the same four beats in less time.
-    const views = this.judge && this.ctx.audio.running
-      ? this.auras.view(
-        this.judge,
-        this.transport.judgeTime(this.ctx.audio.now),
-        this.transport.approachSeconds(settings.leadBeats),
-        this.transport.beatSeconds,
-      )
+    const running = this.judge !== null && this.ctx.audio.running;
+    const now = this.transport.judgeTime(this.ctx.audio.now);
+    const lead = this.transport.approachSeconds(settings.leadBeats);
+    const views = running
+      ? this.auras.view(this.judge!, now, lead, this.transport.beatSeconds, layout, lanes)
       : [];
 
-    this.auras.drawStrikeLine(em, this.strikePulse);
+    if (running) this.auras.drawBars(stage.ctx, layout, this.barsAhead(now, lead), lead);
+    this.auras.drawStrikeLine(em, layout, this.strikePulse);
+    this.auras.drawLanes(em, views);
     this.auras.draw(em, views);
 
-    const highlight = settings.assist ? this.auras.highlightFor(views) : undefined;
-    drawKeys(stage.ctx, em, stage, this.deck, highlight ? { highlight } : {});
-    stage.particles.draw(em, stage.cam);
+    const assist = settings.assist;
+    const next = assist ? this.auras.nextNotes(views) : null;
+    const clock = this.ctx.audio.now;
+    drawDockKeys(stage.ctx, em, stage, layout, this.deck, look, {
+      highlight: assist ? this.auras.highlightFor(views) : undefined,
+      focus: next ? (n) => next.has(n) : undefined,
+      wrong: (n) => {
+        const at = this.wrongAt.get(n);
+        return at === undefined ? 0 : clamp01(1 - (clock - at) / 0.25);
+      },
+    });
+    stage.particles.draw(em, stage.proj, 1);
 
     stage.composite();
+    if (assist) this.auras.drawFocus(stage.ctx, views);
     if (settings.noteNames && this.tune) {
       this.auras.drawLabels(stage.ctx, views, this.tune.root + this.shift);
     }
-    stage.drawRoll();
-    stage.drawGlass();
-    this.drawCountIn();
+    const verdicts = stage.palette.verdict as Record<string, string>;
+    drawPops(stage.ctx, stage.proj, this.scoring.pops, this.scoring.time, {
+      color: (pop) => (pop.style ? verdicts[pop.style] ?? null : null),
+      rise: stage.quality.reducedMotion ? 0 : 70,
+    });
+    stage.drawGlass(layout.top);
+    this.drawRotateHint(layout.rows[0].whiteW, lanes.top);
+    this.drawCountIn(layout.keysTop);
     stage.endFrame();
+    this.dock.publish();
+  }
+
+  /**
+   * Where the lanes begin: under the HUD's title block on a desktop, and much
+   * nearer the top of a short phone screen, where every pixel of lane is
+   * reading time.
+   */
+  private lanesTop(): number {
+    const h = this.ctx.stage.cssH;
+    return h < 520 ? 56 : clamp(h * 0.12, 64, 132);
+  }
+
+  /** Seconds until each bar line inside the approach, on the judging clock. */
+  private barsAhead(now: number, lead: number): number[] {
+    const tune = this.tune;
+    if (!tune) return [];
+    const t = this.transport;
+    const pickup = tune.pickup ?? 0;
+    const per = tune.beatsPerBar;
+    const nowBeat = t.beatAt(now);
+    const out: number[] = [];
+    let k = Math.ceil((nowBeat - pickup) / per);
+    for (let guard = 0; guard < 64; guard++, k++) {
+      const until = t.timeOf(pickup + k * per) - now;
+      if (until > lead) break;
+      if (until >= 0) out.push(until);
+    }
+    return out;
+  }
+
+  /**
+   * A part too wide for an upright phone still fits, on keys thinner than a
+   * finger likes. Say how to get them back.
+   */
+  private drawRotateHint(whiteW: number, y: number): void {
+    const stage = this.ctx.stage;
+    if (!this.dock.touch || whiteW >= 34 || stage.cssH <= stage.cssW) return;
+    const ctx = stage.ctx;
+    ctx.save();
+    ctx.font = `500 13px ${stage.theme.fonts.ui}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = stage.palette.dim;
+    ctx.fillText('Turn sideways for bigger keys', stage.cssW / 2, y + 18);
+    ctx.restore();
   }
 
   /** A visible count-in, so the first note is never a surprise. */
-  private drawCountIn(): void {
+  private drawCountIn(stageBottom: number): void {
     if (this.phase !== 'countin' || !this.ctx.audio.running) return;
     const beat = this.transport.beatAt(this.ctx.audio.now);
     const left = Math.ceil(-beat);
@@ -626,10 +769,11 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     ctx.save();
     ctx.globalAlpha = 0.25 + frac * 0.6;
     ctx.fillStyle = stage.palette.ink;
-    ctx.font = `700 ${Math.round(stage.cssH * 0.16)}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.font = `700 ${Math.round(Math.min(stage.cssH * 0.16, stageBottom * 0.5))}px ui-sans-serif, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(left), stage.cssW / 2, stage.cssH * 0.38);
+    // In the stage, never over the keys the player is about to need.
+    ctx.fillText(String(left), stage.cssW / 2, stageBottom * 0.45);
     ctx.restore();
   }
 
@@ -679,23 +823,14 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       + (j ? `hit ${j.judged}/${j.total}  acc ${(j.accuracy * 100).toFixed(0)}%` : 'no tune');
   }
 
-  pointerDown(x: number, y: number): number | null {
-    const key = this.deck.pick(x, y);
-    if (!key) return null;
-    const g = key.geom;
-    const force = this.deck.strikeForce(key, x, y);
-    this.ctx.input.press(g.note, force, 'pointer');
-    return g.note;
-  }
-
-  pointerUp(note: number): void {
-    this.ctx.input.release(note, 'pointer');
+  keyAt(x: number, y: number, moving: boolean): KeyHit | null {
+    return this.dock.keyAt(x, y, moving);
   }
 
   // --------------------------------------------------------------- playing ---
 
   private onInput(e: InputEvent): void {
-    const { audio, input, stage } = this.ctx;
+    const { audio, input } = this.ctx;
     if (e.type === 'noteon') {
       const force = input.force(e.raw);
       const key = this.deck.noteOn(e.note, force);
@@ -703,13 +838,10 @@ export class PlayTuneMode extends ModeBase implements GameMode {
       // Never snapped: the chart is the authority on what the note should be,
       // and quietly correcting the player would defeat the whole mode.
       audio.noteOn(e.note, force, this.pan(key.geom.cx));
-      const r = this.deck.range;
-      stage.logNote(e.note, force, r.low, r.high);
       if (this.phase === 'playing' || this.phase === 'countin') this.grade(e.note, force);
     } else if (e.type === 'noteoff') {
       this.deck.noteOff(e.note);
       audio.noteOff(e.note);
-      stage.endNote(e.note);
       const settled = this.judge?.release(e.note, this.transport.judgeTime(audio.now));
       if (settled) this.onHoldSettled(settled);
     }
@@ -720,15 +852,16 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     if (!judge || !this.ctx.audio.running) return;
     const at = this.transport.judgeTime(this.ctx.audio.now);
     const result = judge.press(note, at);
-    const key = this.deck.byNote.get(note);
-    if (!key) return;
-    const g = key.geom;
+    const x = this.dock.laneX(note);
+    if (x === null) return;
     const p = this.ctx.stage.particles;
     const hue = this.ctx.stage.hue(note);
 
     if (result.verdict === 'wrong') {
-      // A quiet, colourless nudge: exploring the keyboard is allowed.
-      p.spawn('spark', g.cx, g.cy + 12, 14, { vz: 90, maxLife: 0.22, size: 12, hue: 0 });
+      // A quiet, colourless nudge, and a ring on the key: exploring the
+      // keyboard is allowed, but the player should see which key it was.
+      p.spawn('spark', x, 4, 14, { vz: 90, maxLife: 0.22, size: 12, hue: 0 });
+      this.wrongAt.set(note, this.ctx.audio.now);
       return;
     }
 
@@ -740,58 +873,67 @@ export class PlayTuneMode extends ModeBase implements GameMode {
     this.lastStruck = onset;
 
     this.strikePulse = 1;
-    p.ring(g.cx, g.cy + 16, 14, hue, 60 + force * 60, 0.45);
-    p.burst(g.cx, g.cy + 10, 0, 1, 320 + force * 700, hue, 10 + Math.round(force * 10));
+    const u = this.ctx.stage.flat.unit;
+    p.ring(x, 6, 14, hue, 60 + force * 60, 0.45);
+    p.burst(x, 4, 0, 1, (320 + force * 700) * u, hue, 10 + Math.round(force * 10));
     if (result.verdict === 'perfect') {
-      // A second, tighter ring is the only thing that separates perfect from
-      // good on screen, and it should be earned rather than shouted about.
-      p.ring(g.cx, g.cy + 16, 20, hue, 30, 0.3);
-      if (lead) this.ctx.stage.kick(1.2);
+      // A second, tighter ring separates perfect from good on the board.
+      // Nothing shakes: the keys are under the player's fingers, and a key
+      // that jumps as it is struck is a key that is harder to strike again.
+      p.ring(x, 6, 20, hue, 30, 0.3);
     }
 
     // A note with a tail is only part paid for on the way in; the rest arrives
     // when the hold settles, so dropping it at once genuinely costs points.
     const share = result.target?.holdJudged ? HOLD_FLOOR : 1;
     const worth = WORTH[result.verdict] * comboMultiplier(result.combo, this.perOnset) * share;
-    this.scoring.add(worth, g.cx, g.cy + 60, {
-      flat: true, quiet: result.verdict !== 'perfect',
-      label: lead && result.verdict === 'perfect' ? 'PERFECT' : '',
+    // One word per chord, over the first of its notes to land.
+    const said = lead && (result.verdict === 'perfect' || result.verdict === 'good');
+    this.scoring.add(worth, x, 0, {
+      flat: true, quiet: !said,
+      label: said ? result.verdict.toUpperCase() : '',
       tone: hue / 360,
+      style: result.verdict,
     });
   }
 
   /** The rest of a held note's worth, paid out when its tail resolves. */
   private onHoldSettled(target: Target): void {
     if (!target.verdict || target.hold === null) return;
-    const key = this.deck.byNote.get(target.note);
-    if (!key) return;
-    const g = key.geom;
+    const x = this.dock.laneX(target.note);
+    if (x === null) return;
     // The note's own multiplier, not whatever the combo has become since. A
     // tail settles a frame or a bar after the onset that priced it, and by
     // then the next note may have raised the combo or a wrong key sent it to
     // zero — neither of which is anything this note did.
     const worth = WORTH[target.verdict] * (1 - HOLD_FLOOR) * target.hold
       * comboMultiplier(target.combo, this.perOnset);
-    if (worth > 0) this.scoring.add(worth, g.cx, g.cy + 60, { flat: true, quiet: true });
+    if (worth > 0) this.scoring.add(worth, x, 0, { flat: true, quiet: true });
     if (target.hold < 0.6) {
       // The same colourless nudge a wrong note gets. The tune did not stop, but
       // the note did, and the player should be able to see which one.
-      this.ctx.stage.particles.spawn('spark', g.cx, g.cy + 12, 10,
+      this.ctx.stage.particles.spawn('spark', x, 4, 10,
         { vz: 70, maxLife: 0.24, size: 10, hue: 0 });
     }
   }
 
-  private onMiss(target: Target, lead: boolean): void {
-    const key = this.deck.byNote.get(target.note);
-    if (!key) return;
-    const g = key.geom;
-    // The aura shatters where it would have landed, in grey rather than in its
-    // own colour: a miss should read as the note going out, not going off.
-    this.ctx.stage.particles.shatter(g.cx, g.cy + 30, 16, this.ctx.stage.hue(target.note), 11);
-    if (lead) this.ctx.stage.kick(0.8);
+  private onMiss(target: Target): void {
+    const x = this.dock.laneX(target.note);
+    if (x === null) return;
+    // The note shatters where it would have landed, each note of a missed
+    // chord in its own lane, but nothing shakes: the keys are under the
+    // player's fingers.
+    const stage = this.ctx.stage;
+    const count = stage.quality.reducedMotion ? 3 : 11;
+    stage.particles.shatter(x, 14, 16, stage.hue(target.note), count, 260 * stage.flat.unit);
   }
 
+  /**
+   * Stereo position from where the key sits on the keyboard. Read from the
+   * deck's own geometry rather than from the screen, so turning a phone round
+   * does not move the sound.
+   */
   private pan(x: number): number {
-    return clamp01(x / FIELD.width) * 1.5 - 0.75;
+    return clamp01(x / TABLE_WIDTH) * 1.5 - 0.75;
   }
 }

@@ -2,7 +2,6 @@ import type { Hud } from '../../ui/hud';
 import type { MusicState } from '../../audio/musicState';
 import type { AudioEngine } from '../../audio/engine';
 import type { ChordBed, ManualChordQuality } from '../../audio/bed';
-import type { NoteMapping } from '../../midi/mapping';
 import type { RhythmBox } from '../../audio/rhythmBox';
 import { identifyChord, MODES } from '../../audio/music';
 import { MAX_BPM, MIN_BPM, RANDOM, toKeyChoice } from '../../audio/musicState';
@@ -13,11 +12,15 @@ import {
 import { NOTE_NAMES, noteName, noteLabel } from '../../midi/notes';
 import { VoicePicker } from '../../ui/voicePicker';
 import { freestyleSettings, setFreestyleSettings } from './settings';
+import { DockBar } from '../../ui/dockBar';
 import { rhythmSettings, setRhythmSettings } from './rhythmSettings';
 
 interface BackingControls {
   bed: ChordBed;
-  mapping: NoteMapping;
+  /** The keys on screen, and whether they can move an octave either way. */
+  range(): { low: number; high: number; count: number; canDown: boolean; canUp: boolean };
+  /** Bring the keys as near a note as whole octaves allow, from the range strip. */
+  centreOn(note: number): void;
   change(): void;
   stop(): void;
   shift(dir: number): void;
@@ -74,6 +77,9 @@ export class FreestyleHud {
   private helpDialog!: HTMLDialogElement;
   private helpButton!: HTMLButtonElement;
 
+  /** The octave buttons and range strip above the keys. */
+  private dockBar: DockBar | null = null;
+
   constructor(
     private readonly hud: Hud,
     private readonly music: MusicState,
@@ -83,6 +89,12 @@ export class FreestyleHud {
   ) {}
 
   mount(): void {
+    this.dockBar?.destroy();
+    this.dockBar = new DockBar(this.hud.dock, {
+      range: () => this.backing.range(),
+      shift: (dir) => { this.backing.shift(dir); this.syncBacking(); },
+      centreOn: (note) => { this.backing.centreOn(note); this.syncBacking(); },
+    });
     // Bare `?` rather than the panel's spelled-out label: there is no room in
     // the card head, and the die beside it says what it means.
     const keys = `<option value="${RANDOM}">?</option>`
@@ -121,7 +133,7 @@ export class FreestyleHud {
         <select class="hud-select" id="fs-scale" aria-label="Scale">${scales}</select>
         <div class="fs-hint" id="fs-now"></div>
       </div>
-        <p class="fs-hint" id="fs-auto-hint">Colored keys match the scale. Brighter keys are the root.</p>
+        <p class="fs-hint" id="fs-auto-hint">Highlighted keys are in the scale. The root is marked with a dot.</p>
         <p class="fs-hint" id="fs-manual-hint" hidden>Manual needs at least 12 mapped keys.</p>
         <div class="fs-manual" id="fs-manual" hidden>
           <label class="fs-quality">Chord type
@@ -156,7 +168,7 @@ export class FreestyleHud {
               <p>Black or white keys both work. Near the split, use <strong>Chord type</strong> for one-finger chords. Release the gesture before choosing a new root.</p>
               <p><strong>Hold chord</strong> keeps pads sounding and repeats decaying sounds every two bars. Use <strong>Stop chord</strong> to silence the backing.</p>
               <p>Manual chords and melody notes follow the keys you play, independently of the Auto scale.</p>
-              <p>Controller octave buttons send new note pitches. Play an end key to update the visible range, or use <strong>−8 / +8</strong> in Backing.</p>
+              <p>Controller octave buttons send new note pitches. Play an end key to update the visible range, or use <strong>− / +</strong> above the keys or <strong>−8 / +8</strong> in Backing.</p>
             </div>
           </dialog>
         </div>
@@ -367,6 +379,8 @@ export class FreestyleHud {
     this.closeHelp();
     this.voiceEl?.destroy();
     this.bedVoiceEl?.destroy();
+    this.dockBar?.destroy();
+    this.dockBar = null;
   }
 
   closeHelp(): void {
@@ -405,6 +419,7 @@ export class FreestyleHud {
 
   update(leadChord: string | null, bend: number, mod: number): void {
     this.syncBacking();
+    this.dockBar?.sync();
     const s = freestyleSettings();
     // Backing owns this readout whenever it is on. An empty Manual chord
     // stays blank; Auto follows the progression's current voiced chord.
@@ -432,13 +447,14 @@ export class FreestyleHud {
 
   private syncBacking(): void {
     const s = freestyleSettings();
-    const { bed, mapping } = this.backing;
+    const { bed } = this.backing;
+    const range = this.backing.range();
     const chord = bed.manualChord;
-    const supported = mapping.settings.count >= 12;
+    const supported = range.count >= 12;
     const manual = s.bedMode === 'manual';
     const muted = !this.engine.settings.bed;
     const key = JSON.stringify([s.bed, s.bedMode, s.manualChordQuality, s.holdChord, chord,
-      mapping.low, mapping.settings.count, muted]);
+      range.low, range.count, range.canDown, range.canUp, muted]);
     if (key === this.backingKey) return;
     this.backingKey = key;
     this.bedEl.classList.toggle('on', s.bed);
@@ -464,9 +480,9 @@ export class FreestyleHud {
     this.compactStopEl.disabled = !chord;
     this.compactEl.hidden = !manual || !s.bed || !supported;
     this.compactNameEl.textContent = 'Manual · ' + (muted ? 'Muted' : name || 'Ready');
-    this.rangeEl.textContent = noteLabel(mapping.low) + '–' + noteLabel(mapping.low + 11);
-    this.octaveDownEl.disabled = mapping.low <= 0;
-    this.octaveUpEl.disabled = mapping.low >= 127 - mapping.settings.count;
+    this.rangeEl.textContent = noteLabel(range.low) + '–' + noteLabel(range.low + 11);
+    this.octaveDownEl.disabled = !range.canDown;
+    this.octaveUpEl.disabled = !range.canUp;
     this.mutedEl.hidden = !muted;
   }
 

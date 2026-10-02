@@ -25,6 +25,8 @@ export interface ScorePop {
   at: number;
   /** 0..1 hue-ish tint index used by the renderer. */
   tone: number;
+  /** A named look for the pop, such as a PlayTune verdict. Empty for the default. */
+  style?: string;
 }
 
 export interface ScoreOptions {
@@ -34,6 +36,8 @@ export interface ScoreOptions {
   quiet?: boolean;
   /** Bypass multipliers, for bonuses that are already final. */
   flat?: boolean;
+  /** Carried onto the pop for the renderer: a named look, such as a verdict. */
+  style?: string;
 }
 
 /**
@@ -122,6 +126,7 @@ export class Scoring {
         label: opts.label ?? '',
         at: this.time,
         tone: opts.tone ?? 0,
+        style: opts.style,
       });
       if (this.pops.length > 48) this.pops.shift();
     }

@@ -1,3 +1,22 @@
+/** Whether the main pointer is a finger, for wording that says "tap" rather than "click". */
+function touchScreen(): boolean {
+  try { return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches; } catch { return false; }
+}
+
+/** Where a music mode's docked keyboard sits, in canvas CSS pixels. */
+export interface DockGeometry {
+  /** Top of the dock's header strip: the stage ends here. */
+  top: number;
+  keysTop: number;
+  bottom: number;
+  left: number;
+  right: number;
+  /** Laid out for fingers, with nothing under the keys but the edge of the screen. */
+  touch: boolean;
+}
+
+const DOCK_VARS = ['--dock-top', '--dock-keys', '--dock-end', '--dock-left', '--dock-right'] as const;
+
 /**
  * DOM heads-up display. Kept out of the canvas so text stays crisp at any DPR
  * and so it can be read by assistive tech.
@@ -11,6 +30,8 @@ export class Hud {
   /** Mode-owned panels, top left and top right. */
   readonly left: HTMLElement;
   readonly right: HTMLElement;
+  /** A mode-owned strip in the header of a docked keyboard. */
+  readonly dock: HTMLElement;
 
   private readonly controlsEl: HTMLButtonElement;
 
@@ -44,12 +65,14 @@ export class Hud {
           <span class="dot" id="hud-sound-dot"></span><span id="hud-sound">Sound off</span>
         </div>
       </div>
+      <div class="dock-bar" id="hud-dock" hidden></div>
       <div class="banner" id="hud-banner"></div>
       <div class="fps" id="hud-fps" style="display:none"></div>
     `;
     const q = (sel: string) => root.querySelector(sel) as HTMLElement;
     this.left = q('#hud-left');
     this.right = q('#hud-right');
+    this.dock = q('#hud-dock');
     this.controlsEl = q('#hud-controls') as HTMLButtonElement;
     q('#hud-menu').addEventListener('click', () => {
       this.setControlsOpen(false);
@@ -73,10 +96,37 @@ export class Hud {
     this.setControlsOpen(false);
     this.left.innerHTML = '';
     this.right.innerHTML = '';
+    this.dock.innerHTML = '';
+    this.dock.hidden = true;
+    this.setDock(null);
   }
 
-  setFreestyle(on: boolean): void {
-    this.root.classList.toggle('hud-freestyle', on);
+  /**
+   * Where the keyboard is docked, or null when the mode on screen has none.
+   *
+   * Published as custom properties on the app, so the panels above can keep
+   * clear of the keys with plain CSS rather than with a measurement each.
+   */
+  setDock(geom: DockGeometry | null): void {
+    const host = (this.root.parentElement ?? this.root) as HTMLElement;
+    this.root.classList.toggle('hud-dock', geom !== null);
+    this.root.classList.toggle('hud-dock-touch', geom?.touch ?? false);
+    if (!geom) {
+      for (const v of DOCK_VARS) host.style.removeProperty(v);
+      return;
+    }
+    const px = (n: number) => `${Math.round(n)}px`;
+    host.style.setProperty('--dock-top', px(geom.top));
+    host.style.setProperty('--dock-keys', px(geom.keysTop));
+    host.style.setProperty('--dock-end', px(geom.bottom));
+    host.style.setProperty('--dock-left', px(geom.left));
+    host.style.setProperty('--dock-right', px(geom.right));
+  }
+
+  /** Which mode the HUD is dressed for. Styles key off `data-mode` and `hud-freestyle`. */
+  setMode(id: string): void {
+    this.root.dataset.mode = id;
+    this.root.classList.toggle('hud-freestyle', id === 'freestyle');
     this.setControlsOpen(false);
   }
 
@@ -92,9 +142,11 @@ export class Hud {
    * with no explanation reads as broken.
    */
   setSound(on: boolean): void {
-    this.soundEl.textContent = on ? 'Sound on' : 'Sound off — click anywhere';
+    this.soundEl.textContent = on ? 'Sound on' : `Sound off — ${touchScreen() ? 'tap a key' : 'click anywhere'}`;
     this.soundDotEl.className = `dot ${on ? 'ok' : 'warn'}`;
     this.soundEl.classList.toggle('nudge', !on);
+    // Under a docked touch keyboard the status line is hidden, except to say this.
+    this.root.classList.toggle('sound-off', !on);
   }
 
   setStatus(text: string, level: 'ok' | 'warn' | 'err' | 'idle' = 'idle'): void {

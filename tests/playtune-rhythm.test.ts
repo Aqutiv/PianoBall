@@ -265,6 +265,7 @@ function modeRig() {
   const stage = {
     cam: { configure: vi.fn() }, resize: vi.fn(), cssW: 800, cssH: 600, dpr: 1,
     particles: { shatter: vi.fn() }, kick: vi.fn(), hue: () => 0,
+    quality: { reducedMotion: false }, flat: { floor: 0, unit: 1 },
   } as unknown as Stage;
   const ctx: ModeContext = {
     stage, input: new InputHub(), audio: engine, bed,

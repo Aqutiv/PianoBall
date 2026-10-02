@@ -1,4 +1,4 @@
-import { TableCamera } from './project';
+import { FlatCamera, TableCamera, type Projector } from './project';
 import { Particles } from './particles';
 import { ramp, withAlpha, pitchHue, pitchHueSafe, tone, LIGHT } from './palette';
 import { shadowSprite, glowSprite, poolSprite } from './sprites';
@@ -170,7 +170,10 @@ function makeLayer(w: number, h: number): Layer {
  * the same machine as the pinball table without a second renderer.
  */
 export class Stage {
+  /** Pinball's raked camera. Only pinball, and the table's own layout, use it. */
   readonly cam = new TableCamera();
+  /** The music modes' camera, over the stage above their docked keyboard. */
+  readonly flat = new FlatCamera();
   readonly particles = new Particles();
   readonly ctx: CanvasRenderingContext2D;
   /** What is being drawn right now, after any adaptive shedding. */
@@ -224,6 +227,8 @@ export class Stage {
    * is a matter of moving this back rather than of remembering what was taken.
    */
   private shedRung = 0;
+  /** Which camera the shared primitives draw through. See `setProjection`. */
+  private projection: 'table' | 'flat' = 'table';
   private shake = 0;
   private shakeX = 0;
   private shakeY = 0;
@@ -386,6 +391,22 @@ export class Stage {
     this.shake = Math.min(26, this.shake + amount);
   }
 
+  /**
+   * The camera every primitive here draws through: pinball's raked table, or
+   * the flat stage the music modes use. The shell sets it from the mode before
+   * the mode enters, so a mode never has to reach for the table's camera — and
+   * so nothing a music mode does can leave the table's camera changed.
+   */
+  get proj(): Projector { return this.projection === 'flat' ? this.flat : this.cam; }
+
+  get projectionKind(): 'table' | 'flat' { return this.projection; }
+
+  setProjection(kind: 'table' | 'flat'): void {
+    if (kind === this.projection) return;
+    this.projection = kind;
+    this.invalidate();
+  }
+
   /** Hue for a pitch, honouring the colour-blind palette setting. */
   hue(note: number): number {
     return this.quality.colorBlind ? pitchHueSafe(note) : pitchHue(note);
@@ -393,6 +414,7 @@ export class Stage {
 
   /** Drop every transient. Called when switching modes. */
   reset(): void {
+    this.projection = 'table';
     this.particles.clear();
     this.roll.length = 0;
     this.shake = 0;
@@ -518,7 +540,7 @@ export class Stage {
    * move an edge by less than it can be drawn.
    */
   discPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, z: number): void {
-    const cam = this.cam;
+    const cam = this.proj;
     cam.project(x, y - r, z, POLE_A);
     cam.project(x, y + r, z, POLE_B);
     const cy = (POLE_A.y + POLE_B.y) / 2;
@@ -559,7 +581,7 @@ export class Stage {
     // ellipse fill is exactly the mismatch Toybox's whole read would show up.
     this.discPath(ctx, x, y, r, z);
     ctx.strokeStyle = o.color;
-    ctx.lineWidth = Math.max(1, o.width * this.cam.scaleAt(x, y, z));
+    ctx.lineWidth = Math.max(1, o.width * this.proj.scaleAt(x, y, z));
     ctx.lineJoin = 'round';
     ctx.stroke();
   }
@@ -579,8 +601,8 @@ export class Stage {
     const cfg = this.theme.pool;
     if (!cfg || !this.quality.pools || strength <= 0.004) return;
     const p = { x: 0, y: 0 };
-    this.cam.project(x, y, 0, p);
-    const size = r * cfg.radius * 2 * this.cam.scaleAt(x, y);
+    this.proj.project(x, y, 0, p);
+    const size = r * cfg.radius * 2 * this.proj.scaleAt(x, y);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = clamp01(strength * cfg.strength);
@@ -601,8 +623,8 @@ export class Stage {
     if (!this.quality.shadows) return;
     const p = { x: 0, y: 0 };
     const sx = x + LIGHT.x * z * 0.8, sy = y - LIGHT.y * z * 0.5;
-    this.cam.project(sx, sy, 0, p);
-    const scale = this.cam.scaleAt(sx, sy);
+    this.proj.project(sx, sy, 0, p);
+    const scale = this.proj.scaleAt(sx, sy);
     const size = r * (2.55 + z * 0.018) * scale;
     ctx.globalAlpha = (0.66 / (1 + z / 60)) * strength;
     ctx.drawImage(shadowSprite(), p.x - size / 2, p.y - size * 0.34, size, size * 0.68);
@@ -612,12 +634,16 @@ export class Stage {
   halo(em: CanvasRenderingContext2D, x: number, y: number, z: number, hue: number, radius: number, strength: number): void {
     if (strength <= 0.001) return;
     const p = { x: 0, y: 0 };
-    this.cam.project(x, y, z, p);
-    const scale = this.cam.scaleAt(x, y, z);
-    const size = radius * 2 * scale;
+    this.proj.project(x, y, z, p);
+    this.glowAt(em, p.x, p.y, radius * 2 * this.proj.scaleAt(x, y, z), hue, strength);
+  }
+
+  /** A soft glow of `size` pixels centred on a screen point. */
+  glowAt(em: CanvasRenderingContext2D, sx: number, sy: number, size: number, hue: number, strength: number): void {
+    if (strength <= 0.001 || size <= 0) return;
     em.globalCompositeOperation = 'lighter';
     em.globalAlpha = clamp01(strength);
-    em.drawImage(glowSprite(hue, 96), p.x - size / 2, p.y - size / 2, size, size);
+    em.drawImage(glowSprite(hue, 96), sx - size / 2, sy - size / 2, size, size);
     em.globalAlpha = 1;
     em.globalCompositeOperation = 'source-over';
   }
@@ -627,13 +653,20 @@ export class Stage {
     text: string, color: string, alpha: number, size = 21, style: LabelStyle = {},
   ): void {
     const p = { x: 0, y: 0 };
-    this.cam.project(x, y, z, p);
-    const scale = this.cam.scaleAt(x, y, z);
-    // Rounded, because `scale` is a continuous float that changes with the
-    // label's position every frame. An unrounded size means a font string no
-    // two frames share, which misses the parsed-font cache, then misses the
+    this.proj.project(x, y, z, p);
+    this.labelAt(ctx, p.x, p.y, text, color, alpha, size * this.proj.scaleAt(x, y, z), style);
+  }
+
+  /** `label`, at a screen point and a size already in pixels. */
+  labelAt(
+    ctx: CanvasRenderingContext2D, sx: number, sy: number,
+    text: string, color: string, alpha: number, size: number, style: LabelStyle = {},
+  ): void {
+    // Rounded, because a projected size is a continuous float that changes with
+    // the label's position every frame. An unrounded size means a font string
+    // no two frames share, which misses the parsed-font cache, then misses the
     // glyph raster cache, and re-shapes the text from scratch every time.
-    const px = Math.round(Math.max(style.minSize ?? 10, size * scale));
+    const px = Math.round(Math.max(style.minSize ?? 10, size));
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
@@ -656,13 +689,13 @@ export class Stage {
       // covers its inward half: half the width shows outside the letter and
       // none of it eats the stem. Reversed, a 700-weight glyph is thinned into
       // a hairline by its own outline.
-      ctx.strokeText(text, p.x, p.y);
+      ctx.strokeText(text, sx, sy);
       // Otherwise the fill lays a second shadow over the outline just drawn.
       ctx.shadowBlur = 0;
     } else {
       ctx.shadowBlur = 6;
     }
-    ctx.fillText(text, p.x, p.y);
+    ctx.fillText(text, sx, sy);
     ctx.restore();
   }
 
@@ -714,8 +747,15 @@ export class Stage {
     this.rollGuideGrad = guide;
   }
 
-  /** Sheen and vignette: the pane of glass the whole thing lives under. */
-  drawGlass(): void {
+  /**
+   * Sheen and vignette: the pane of glass the whole thing lives under.
+   *
+   * `stageBottom`, when given, keeps the vignette and the grade above it. The
+   * music modes' keys sit along the bottom edge, exactly where a vignette is
+   * darkest, and a key the player is aiming at must not be dimmed or tinted for
+   * the sake of atmosphere.
+   */
+  drawGlass(stageBottom?: number): void {
     const ctx = this.ctx;
     const w = this.cssW, h = this.cssH;
     this.ensureGradients();
@@ -725,10 +765,17 @@ export class Stage {
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
 
+    const clipped = stageBottom !== undefined && stageBottom < h;
+    if (clipped) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, w, Math.max(0, stageBottom));
+      ctx.clip();
+    }
     ctx.fillStyle = this.vignetteGrad!;
     ctx.fillRect(0, 0, w, h);
-
     this.drawGrade();
+    if (clipped) ctx.restore();
   }
 
   /**

@@ -13,8 +13,10 @@ Then open http://localhost:5173 in **Chrome or Edge** (Safari has no Web MIDI).
 No hardware? The computer keyboard and touch both work — see *Controls*.
 
 Everything shares one machine: the same synth, the same eight scales, the same
-raked 2.5D table, the same thirty-two keys along its near edge. What changes is
-what the keys are *for*.
+keys. Pinball plays them as thirty-two paddles along the near edge of a raked
+2.5D table; Freestyle and PlayTune dock a straight, full-width keyboard along
+the bottom of the screen, sized for fingers on a phone. What changes is what the
+keys are *for*.
 
 ---
 
@@ -23,7 +25,7 @@ what the keys are *for*.
 Play for the sound of it. No ball, no score, nothing to lose.
 
 The playfield is given over to what your hands are doing. A note throws a bloom
-off its key and a ribbon up the table, sized by how hard you hit it and coloured
+off its key and a ribbon up the screen, sized by how hard you hit it and coloured
 by its pitch. Hold a key and a column of light stands over it, breathing at the
 tempo. **A chord draws itself**: a polygon whose corners are its pitch classes,
 turned to where its root sits on the circle of fifths, with every interval in
@@ -83,9 +85,12 @@ and selected rhythm's meter even with drums off. Turn Hold off to release with
 the last finger, or use **Stop chord** to clear the backing. A compact Stop
 remains visible when phone controls are closed.
 
-The chord area follows the visible range. **−8 / +8** move the keyboard and
-transpose a latched chord immediately; hardware octave buttons are detected by
-the existing end-note auto-latch. A range change finishes the old gesture, so
+The chord area follows the visible range. **−8 / +8**, or the **− / +** and the
+range strip above the keys, move the keyboard and transpose a latched chord
+immediately; hardware octave buttons are detected by the existing end-note
+auto-latch. On a phone held upright, Manual gives the chord octave its own row
+above the melody, holding the same notes as the single row a phone held
+sideways shows, so turning the phone keeps the chord. A range change finishes the old gesture, so
 lift and press again to choose another chord. Pause and restart clear the
 manual chord. Switching Backing off restores the whole keyboard to melody.
 
@@ -191,11 +196,12 @@ a good run is also a piece of music.
 
 Learn a melody. The game plays the chords; you owe it the tune on top.
 
-Auras fall down the lane belonging to the key they are due on. Each writes its
-pitch name across its head; its hue is its pitch class on the circle of fifths,
-and its head shape is its note value. Press the key as one arrives: on time it
-bursts into light, late or early it still counts for less, and one you never
-reach **shatters**. There is no failing — a tune always plays to its last bar,
+Notes fall straight down the lane of the key they are due on and land on a line
+along the top of the keys. Each writes its pitch name across its head; its hue
+is its pitch class on the circle of fifths, and its head shape is its note
+value. Press the key as one arrives: on time it bursts into light and says
+PERFECT or GOOD, late or early it still counts for less, and one you never reach
+**shatters**. There is no failing — a tune always plays to its last bar,
 because the point is to have played it.
 
 Twenty-two melody tracks and twenty-two backing tracks, each in its own course.
@@ -275,7 +281,9 @@ The classics are public-domain melodies; the three originals sit where a new
 mechanic has to be introduced on something you have no expectations about.
 Player charts are **transposed by whole octaves onto the connected keyboard**.
 A tune too wide for the controller says so on its card. Automatic parts retain
-their authored register.
+their authored register. On a touch screen the keys are fitted to the part
+instead, once per run and kept until its last bar: every part in both roles
+fits a phone held sideways with white keys at least 50 px wide.
 
 **Each tune brings its own instruments**, and its card names them. The classical
 arrangements use matching struck-piano sounds for both hands, with written
@@ -341,11 +349,11 @@ belongs and no black key does.
 
 | | MIDI | Computer keyboard | Touch |
 |---|---|---|---|
-| Play a key | any key, velocity sensitive | `Z`–`M`, `Q`–`P` (`Shift` harder, `Alt` softer) | tap a key; nearer its front lip hits harder |
+| Play a key | any key, velocity sensitive | `Z`–`M`, `Q`–`P` (`Shift` harder, `Alt` softer) | tap a key, or slide across them in Freestyle and PlayTune; nearer a key's front hits harder |
 | Bend | pitch bend | `←` `→` | — |
 | Modulate | mod wheel (CC 1) | `↑` `↓` | — |
 | Slow time (Pinball) | sustain pedal | `Space` | — |
-| Shift an octave | your controller's octave buttons | `[` `]` | Settings |
+| Shift an octave | your controller's octave buttons | `-` (down) | **− / +** above Freestyle's keys; Settings |
 
 Pinball also lends you the slow-motion meter automatically when a ball is coming
 down fast, and burns it slower than the pedal does, so holding sustain always
@@ -421,14 +429,17 @@ keybed exactly — which is what lets the table name one key for a falling ball.
 The pinball keybed stops short of the slingshots at either end, because a key
 roofed by one has nowhere to throw. `KeyDeck` is that piano on its own; the pinball `Keybed` extends
 it and adds the paddle each key drives, which is why Freestyle and PlayTune get
-a real keyboard without a physics world behind it.
+a real keyboard without a physics world behind it. Those two lay their keys out
+with `game/dock.ts` instead: a straight row in screen pixels, ported from
+PianoBallDesktop, sized for fingers on a touch screen and mirroring the
+controller anywhere else.
 
 **Rendering is flat 2D lit as 2.5D.** The simulation never leaves the plane; a
 pinhole camera raked to 62° is the only place depth exists. `Stage` owns that
 camera, the layered canvases, the particle pool and the bloom — two cheap
-downscales rather than a real blur — so all three modes composite identically. A
-PlayTune aura four beats away is small and dim because it genuinely is further
-up the table.
+downscales rather than a real blur — so all three modes composite identically.
+The music modes draw through a second, flat camera over the stage above their
+docked keyboard, so the same halos, labels and particles serve both.
 
 **Audio is hand-built Web Audio**, scheduled straight against `currentTime` with
 no lookahead queue, so the gap between pressing a key and hearing it is as short
@@ -515,8 +526,10 @@ src/
   midi/      Web MIDI, note→lane mapping, velocity curves, keyboard fallback
   audio/     engine (graph + synthesis), instrument and drum banks, rhythm
              patterns and box, music theory, shared state, chord bed, stings
-  game/      pinball state, key deck, keybed, key layout, scoring, tilt, table
-  render/    stage, raked camera, keys, empty field, particles, bloom, theme
+  game/      pinball state, key deck, keybed, key layout, dock layout, scoring,
+             tilt, table
+  render/    stage, raked and flat cameras, table keys, docked keyboard,
+             particles, bloom, theme
   modes/     pinball/  freestyle/  playtune/ (+ its chart, judge, library)
   ui/        HUD chrome, overlay screens, end-of-run scoreboard
 tests/       sweep math, tunnelling, determinism, key layout, music,
@@ -538,8 +551,11 @@ npm run icons      # regenerate app icons
 
 - **Safari has no Web MIDI.** The keyboard and touch paths are load-bearing, not
   a nicety, and the app says so up front.
-- The playfield is portrait. On a landscape display the margins become the
+- Pinball's table is portrait. On a landscape display the margins become the
   cabinet, with a piano roll of your own playing scrolling up both sides.
+- In Safari, a finger sliding off the edge of the docked keyboard can be taken
+  for the swipe that goes back a page. Adding the app to the home screen avoids
+  it.
 - PlayTune restarts a tune from the top rather than resuming mid-phrase. A tune
   picked up halfway through is not a tune you have played.
 

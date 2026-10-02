@@ -3,6 +3,7 @@ import { tracePath, arcPoints, circlePoints, extrudeStroke, fillPoly } from './g
 import { mix, withAlpha, pitchColor, tone } from './palette';
 import type { Stage, RenderQuality, LabelStyle } from './stage';
 import { drawKeys } from './keys';
+import { drawPops } from './pops';
 import type { Game } from '../game/game';
 import type { WallStyle } from '../game/table/schema';
 import type { TablePalette, Theme } from './theme';
@@ -915,30 +916,6 @@ export class PinballRenderer {
   }
 
   private drawPops(ctx: CanvasRenderingContext2D, game: Game): void {
-    const p = { x: 0, y: 0 };
-    for (const pop of game.scoring.pops) {
-      const age = clamp01((game.time - pop.at) / 1.2);
-      if (age >= 1) continue;
-      const rise = age * 70;
-      this.cam.project(pop.x, pop.y, 30 + rise, p);
-      const scale = this.cam.scaleAt(pop.x, pop.y);
-      ctx.save();
-      ctx.globalAlpha = 1 - age * age;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = tone(pop.tone * 360, 92, 78);
-      // Rounded for the same reason `Stage.label` rounds: a pop rises through
-      // a continuum of scales, and these are the calls that spike hardest —
-      // there can be dozens of them in a frame mid-combo.
-      ctx.font = `700 ${Math.round(Math.max(11, (pop.label ? 20 : 17) * scale))}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 8;
-      ctx.fillText(pop.label || pop.amount.toLocaleString(), p.x, p.y);
-      if (pop.label) {
-        ctx.font = `600 ${Math.round(Math.max(9, 13 * scale))}px ui-sans-serif, system-ui, sans-serif`;
-        ctx.fillText(pop.amount.toLocaleString(), p.x, p.y + 18 * scale);
-      }
-      ctx.restore();
-    }
+    drawPops(ctx, this.cam, game.scoring.pops, game.time);
   }
 }

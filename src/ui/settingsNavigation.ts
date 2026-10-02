@@ -3,7 +3,7 @@ import type { GameModeId } from '../app/mode';
 export const SETTINGS_CATEGORIES = [
   { id: 'sound', label: 'Sound & music', description: 'Volume, backing and musical key' },
   { id: 'controls', label: 'Controls', description: 'Connect and set up your keyboard' },
-  { id: 'appearance', label: 'Appearance', description: 'Theme, table size and graphics' },
+  { id: 'appearance', label: 'Appearance', description: 'Theme, key size, table and graphics' },
   { id: 'accessibility', label: 'Accessibility', description: 'Motion, colours and note labels' },
   { id: 'modes', label: 'Game modes', description: 'Pinball, Freestyle and PlayTune' },
   { id: 'data', label: 'Data & reset', description: 'Defaults and earned progress' },

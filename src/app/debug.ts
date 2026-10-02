@@ -1,6 +1,7 @@
 import type { Shell } from './shell';
 import type { GameModeId } from './mode';
 import type { PinballMode } from '../modes/pinball/pinball';
+import { setDockOverride } from '../render/dockSettings';
 
 /**
  * Everything the app can be driven by, without hardware. This is how the whole
@@ -259,6 +260,14 @@ export function installDebugApi(shell: Shell): void {
       return res.json();
     },
     resizeTo: (w: number, h: number, dpr = 1) => shell.stage.resize(w, h, dpr),
+    /**
+     * Lay the music modes' keyboard out for fingers or for a controller, or
+     * null to follow the device. A desktop browser cannot otherwise show the
+     * touch keyboard, and the Browser pane only emulates touch below 768px.
+     */
+    dock: (policy: 'touch' | 'mapped' | null = 'touch') => { setDockOverride(policy); shell.remapKeys(); },
+    /** Where the music mode on screen has put its keys. */
+    dockLayout: () => (shell.active as unknown as { dock?: { layout(): unknown } } | null)?.dock?.layout() ?? null,
     /** What the last finished run had to say for itself. */
     report: () => shell.lastResult,
     /**
